@@ -4,14 +4,12 @@ import React, { useState } from "react";
 import { uxp, premierepro } from "./globals";
 import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
+import "./layout.scss";
 
 export const App = () => {
-  const [count, setCount] = useState(0);
   const [imsToken, setImsToken] = useState<string | null>(null);
   const [imsStatus, setImsStatus] = useState<string>('Not authenticated');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-
-  const increment = () => setCount((prev: number) => prev + 1);
 
   const hostName = (uxp.host.name as string).toLowerCase();
 
@@ -19,23 +17,6 @@ export const App = () => {
   if (hostName === "premierepro") {
     console.log("Hello from Premiere Pro", premierepro);
   }
-  
-  //* Or call the unified API object directly and the correct app function will be used
-  const helloWorld = () => {
-    api.notify("Hello World");
-  };
-  const hybridTest = async () => {
-    try {
-      let hybridModule: {
-        execSync: (cmd: string) => string;
-      } = await require("bolt-uxp-hybrid.uxpaddon");
-      let execSyncRes = hybridModule.execSync("echo test");
-      console.log(`execSyncRes = `, execSyncRes);
-      api.notify(`execSyncRes = ${execSyncRes}`);
-    } catch (err) {
-      console.log("Execute as execSync command failed", err);
-    }
-  };
 
   const testIMSAuthentication = async () => {
     setIsAuthenticating(true);
@@ -84,47 +65,121 @@ export const App = () => {
   };
 
   return (
-    <>
-      <main>
-        <div className="button-group">
-          {/* @ts-ignore */}
-          <sp-button onClick={increment}>count is {count}</sp-button>
-          {/* @ts-ignore */}
-          <sp-button onClick={helloWorld}>Hello World</sp-button>
-          {/* @ts-ignore */}
-          <sp-button onClick={hybridTest}>Hybrid</sp-button>
-          {/* @ts-ignore */}
-          <sp-button 
-            onClick={testIMSAuthentication} 
-            disabled={isAuthenticating}
-          >
-            {isAuthenticating ? 'Authenticating...' : 'Test IMS Auth'}
+    <div className="uxp-app">
+      {/* Header */}
+      <header className="uxp-header">
+        <h1 className="text-heading-medium">Adobe UXP Panel</h1>
+        <div className="text-detail">Premiere Pro</div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="uxp-main">
+        {/* Sidebar Navigation */}
+        <aside className="uxp-sidebar">
+          <div className="content-area">
+            <h2 className="text-heading-small mb-md">Tools</h2>
             {/* @ts-ignore */}
-          </sp-button>
-        </div>
-        
-        <div className="status-section" style={{ marginTop: '20px', padding: '10px', background: '#333', borderRadius: '4px' }}>
-          <h3>IMS Authentication Status:</h3>
-          <p style={{ color: imsToken ? '#4CAF50' : '#FFA726', margin: '5px 0' }}>
-            {imsStatus}
-          </p>
-          {imsToken && (
-            <details style={{ marginTop: '10px' }}>
-              <summary style={{ cursor: 'pointer', color: '#81C784' }}>Show Full Token</summary>
-              <pre style={{ 
-                background: '#1e1e1e', 
-                padding: '10px', 
-                borderRadius: '4px', 
-                fontSize: '12px',
-                wordBreak: 'break-all',
-                marginTop: '5px'
-              }}>
-                {imsToken}
-              </pre>
-            </details>
-          )}
-        </div>
+            <sp-divider size="small"></sp-divider>
+            <nav style={{ marginTop: '16px' }}>
+              <div className="text-body mb-sm text-active">• Authentication</div>
+              <div className="text-body mb-sm text-muted">• Media Export</div>
+              <div className="text-body mb-sm text-muted">• Timeline Tools</div>
+              <div className="text-body mb-sm text-muted">• Asset Manager</div>
+            </nav>
+          </div>
+        </aside>
+
+        {/* Primary Content */}
+        <section className="uxp-content">
+          <div className="content-area">
+            {/* Authentication Card */}
+            <article className="card">
+              <header className="card-header">
+                <h2 className="card-title">IMS Authentication</h2>
+                <div className="text-detail">Adobe Identity Management</div>
+              </header>
+              
+              <div className="card-body">
+                <p className="mb-md">Test your connection to Adobe's Identity Management System.</p>
+                
+                <div className="button-group mb-md">
+                  {/* @ts-ignore */}
+                  <sp-action-button 
+                    onClick={testIMSAuthentication} 
+                    disabled={isAuthenticating}
+                  >
+                    {/* @ts-ignore */}
+                    <sp-icon name="ui:CheckmarkMedium" size="s" slot="icon"></sp-icon>
+                    {isAuthenticating ? 'Authenticating...' : 'Authentication'}
+                     {/* @ts-ignore */}
+                     </sp-action-button>
+                </div>
+
+                {/* Status Section */}
+                <div className="status-section">
+                  <h3>Connection Status</h3>
+                  <p className={
+                    imsStatus.includes('✅') ? 'text-success' :
+                    imsStatus.includes('Error') ? 'text-error' :
+                    imsStatus.includes('Authenticating') ? 'text-warning' :
+                    'text-muted'
+                  }>
+                    {imsStatus}
+                  </p>
+                  
+                  {imsToken && (
+                    <div style={{ marginTop: '16px' }}>
+                      <h4 className="text-heading-small mb-sm">Authentication Details</h4>
+                      <details style={{ cursor: 'pointer' }}>
+                        <summary className="text-detail" style={{ cursor: 'pointer', marginBottom: '8px' }}>
+                          Show Full Token
+                        </summary>
+                        <div className="text-code" style={{ 
+                          wordBreak: 'break-all',
+                          whiteSpace: 'pre-wrap',
+                          maxHeight: '200px',
+                          overflow: 'auto',
+                          marginTop: '8px'
+                        }}>
+                          {imsToken}
+                        </div>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </article>
+
+            {/* Panel Information Card */}
+            <article className="card">
+              <header className="card-header">
+                <h2 className="card-title">Panel Information</h2>
+              </header>
+              <div className="card-body">
+                <p className="mb-sm">This UXP panel is built with:</p>
+                <ul className="text-body" style={{ paddingLeft: '20px', margin: '8px 0' }}>
+                  <li>React 19.1.1</li>
+                  <li>TypeScript</li>
+                  <li>Spectrum Design System</li>
+                  <li>Adobe UXP APIs</li>
+                  <li>IMS Authentication</li>
+                </ul>
+                <div className="text-detail">
+                  Host: {hostName || 'Unknown'}
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
       </main>
-    </>
+
+      {/* Footer */}
+      <footer className="uxp-footer">
+        <div className="text-detail">UXP Panel v1.0.0</div>
+        <div className="text-detail">
+          {isAuthenticating ? 'Authenticating...' : imsToken ? 'Authenticated' : 'Ready'}
+        </div>
+      </footer>
+    </div>
   );
 };

@@ -91,7 +91,7 @@
 ## Environment Details
 
 ### IMS Configuration (Development)
-- **Client ID**: `f39e1cd1c58f4989908590855698236f`
+- **Client ID**: `f39e1cd1c58f498990859085569...`
 - **Scopes**: `openid,AdobeID,firefly_api,ff_apis,firefly_enterprise`
 - **Environment**: Development/Testing credentials
 

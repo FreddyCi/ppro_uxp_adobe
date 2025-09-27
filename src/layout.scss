@@ -1,0 +1,388 @@
+@use 'sass:color';
+@use './variables.scss' as *;
+
+/* =============================================================================
+   UXP Base Layout - Spectrum Design System Compliant
+   ============================================================================= */
+
+/* Reset and Base Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root, uxp-panel {
+  /* Typography - Adobe Clean fallbacks */
+  font-family: "Adobe Clean", "Source Sans Pro", -apple-system, BlinkMacSystemFont, 
+               "Segoe UI", Roboto, sans-serif;
+  font-size: $font-size-100; /* 14px base */
+  line-height: 1.5; /* Spectrum body line-height */
+  font-weight: 400;
+  color: $font;
+  background-color: $bg-base;
+  
+  /* Text rendering optimizations */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: $bg-base;
+}
+
+/* =============================================================================
+   Layout Structure (Flexbox-based)
+   ============================================================================= */
+
+.uxp-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: $bg-base;
+}
+
+.uxp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $space-200 $space-300;
+  background-color: $bg-layer-1;
+  border-bottom: $border-width solid $dark;
+  flex-shrink: 0;
+}
+
+.uxp-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.uxp-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  background-color: $bg-layer-1;
+  border-right: $border-width solid $dark;
+  flex-shrink: 0;
+}
+
+.uxp-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  background-color: $bg-layer-2;
+  overflow: auto;
+}
+
+.uxp-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $space-100 $space-300;
+  background-color: $bg-layer-1;
+  border-top: $border-width solid $dark;
+  flex-shrink: 0;
+  min-height: 40px;
+}
+
+/* =============================================================================
+   Typography Components (Spectrum Typography Scale)
+   ============================================================================= */
+
+.text-heading-large {
+  font-size: $font-size-400; /* 20px */
+  font-weight: 700;
+  line-height: 1.3;
+  color: $font;
+}
+
+.text-heading-medium {
+  font-size: $font-size-300; /* 18px */
+  font-weight: 600;
+  line-height: 1.3;
+  color: $font;
+}
+
+.text-heading-small {
+  font-size: $font-size-200; /* 16px */
+  font-weight: 600;
+  line-height: 1.3;
+  color: $font;
+}
+
+.text-body {
+  font-size: $font-size-100; /* 14px */
+  font-weight: 400;
+  line-height: 1.5;
+  color: $font;
+}
+
+.text-body-large {
+  font-size: $font-size-200; /* 16px */
+  font-weight: 400;
+  line-height: 1.5;
+  color: $font;
+}
+
+.text-detail {
+  font-size: $font-size-75; /* 12px */
+  font-weight: 400;
+  line-height: 1.3;
+  color: $highlight;
+}
+
+.text-code {
+  font-family: "Source Code Pro", "Monaco", "Menlo", monospace;
+  font-size: $font-size-75; /* 12px */
+  line-height: 1.5;
+  color: $font;
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+/* =============================================================================
+   Content Areas & Cards
+   ============================================================================= */
+
+.content-area {
+  padding: $space-300;
+  flex: 1;
+}
+
+.card {
+  background-color: $bg-layer-1;
+  border: $border-width solid $dark;
+  border-radius: $border-radius;
+  padding: $space-300;
+  margin-bottom: $space-300;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $space-200;
+  padding-bottom: $space-200;
+  border-bottom: $border-width solid rgba(255, 255, 255, 0.1);
+}
+
+.card-title {
+  @extend .text-heading-small;
+  margin: 0;
+}
+
+.card-body {
+  @extend .text-body;
+}
+
+/* =============================================================================
+   Interactive Elements
+   ============================================================================= */
+
+.button-group {
+  display: flex;
+  gap: $space-100;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* =============================================================================
+   UXP Component Customization
+   ============================================================================= */
+
+/* UXP components (sp-action-button, sp-button, etc.) have built-in styling */
+/* Custom overrides for UXP components to match our design system */
+
+sp-action-button {
+  /* Inherit theme colors from our design system */
+  --spectrum-actionbutton-background-color: #{$bg-layer-1};
+  --spectrum-actionbutton-border-color: #{$dark};
+  --spectrum-actionbutton-text-color: #{$font};
+  
+  /* Add padding for better spacing */
+  padding: $space-200 $space-300;
+  
+  &:hover {
+    --spectrum-actionbutton-background-color-hover: #{$bg-layer-2};
+    --spectrum-actionbutton-border-color-hover: #{$primary};
+  }
+  
+  &[disabled] {
+    opacity: 0.5;
+  }
+}
+
+sp-divider {
+  --spectrum-rule-color: #{$dark};
+  margin: $space-200 0;
+}
+
+sp-textfield {
+  --spectrum-textfield-background-color: #{$bg-layer-2};
+  --spectrum-textfield-border-color: #{$dark};
+  --spectrum-textfield-text-color: #{$font};
+  --spectrum-textfield-placeholder-color: #{$highlight};
+  
+  &:focus {
+    --spectrum-textfield-border-color-focus: #{$active};
+  }
+}
+
+sp-icon {
+  color: currentColor;
+  
+  // Specific styling for CheckmarkMedium icon
+  &[name="ui:CheckmarkMedium"] {
+    color: $changed !important; // Using the teal color #3caea3 with !important to override UXP defaults
+  }
+}
+
+// Also target the icon within sp-action-button specifically
+sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
+  color: $changed !important;
+}
+
+.status-section {
+  background-color: $bg-layer-1;
+  border: $border-width solid $dark;
+  border-radius: $border-radius;
+  padding: $space-300;
+  margin-top: $space-300;
+}
+
+.status-section h3 {
+  @extend .text-heading-small;
+  margin: 0 0 $space-200 0;
+}
+
+.status-section p {
+  @extend .text-body;
+  margin: $space-100 0;
+}
+
+/* =============================================================================
+   State Colors (following your palette)
+   ============================================================================= */
+
+.text-success {
+  color: $changed; /* #3caea3 */
+}
+
+.text-warning {
+  color: $warning; /* #f6d55c */
+}
+
+.text-error {
+  color: $error; /* #ed553b */
+}
+
+.text-active {
+  color: $active; /* #20639b */
+}
+
+.text-primary {
+  color: $primary; /* #88715a */
+}
+
+.text-muted {
+  color: $highlight; /* #aaaaaa */
+}
+
+/* =============================================================================
+   Layout Utilities
+   ============================================================================= */
+
+.flex {
+  display: flex;
+}
+
+.flex-column {
+  flex-direction: column;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-sm {
+  gap: $space-100;
+}
+
+.gap-md {
+  gap: $space-200;
+}
+
+.gap-lg {
+  gap: $space-300;
+}
+
+.p-sm {
+  padding: $space-200;
+}
+
+.p-md {
+  padding: $space-300;
+}
+
+.p-lg {
+  padding: $space-400;
+}
+
+.mb-sm {
+  margin-bottom: $space-200;
+}
+
+.mb-md {
+  margin-bottom: $space-300;
+}
+
+.mb-lg {
+  margin-bottom: $space-400;
+}
+
+/* =============================================================================
+   Responsive Adjustments (for different panel sizes)
+   ============================================================================= */
+
+@media (max-width: 320px) {
+  .uxp-header,
+  .uxp-footer {
+    padding: $space-100 $space-200;
+  }
+  
+  .content-area {
+    padding: $space-200;
+  }
+  
+  .uxp-sidebar {
+    width: 200px;
+  }
+}
+
+/* =============================================================================
+   Focus States (Spectrum 2px blue ring)
+   ============================================================================= */
+
+.focus-ring:focus,
+.focus-ring:focus-visible {
+  outline: 2px solid $active;
+  outline-offset: 2px;
+  border-radius: $border-radius;
+}

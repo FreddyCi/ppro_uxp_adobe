@@ -1,3 +1,4 @@
+// Base color palette for UXP panel (Spectrum-inspired)
 $darkest: #222222;
 $darker: #333333;
 $dark: #444444;
@@ -11,3 +12,32 @@ $active: #20639b;
 $changed: #3caea3;
 $warning: #f6d55c;
 $error: #ed553b;
+
+// Spectrum-based background layers (following Spectrum guidelines)
+$bg-base: #1d1d1d;        // background-base (darkest theme)
+$bg-layer-1: #262626;     // background-layer-1 (panels/headers)
+$bg-layer-2: #323232;     // background-layer-2 (content areas)
+
+// Typography scale (Spectrum font sizes)
+$font-size-50: 11px;      // smallest
+$font-size-75: 12px;      // detail text
+$font-size-100: 14px;     // base body text
+$font-size-200: 16px;     // large body
+$font-size-300: 18px;     // small headings
+$font-size-400: 20px;     // medium headings
+
+// Spacing scale (consistent spacing system)
+$space-50: 4px;
+$space-75: 6px;
+$space-100: 8px;
+$space-200: 12px;
+$space-300: 16px;
+$space-400: 20px;
+$space-500: 24px;
+$space-600: 32px;
+
+// Border radius (Spectrum standard)
+$border-radius: 4px;
+$border-radius-large: 8px;
+$border-width: 1px;
+$border-width-thick: 2px;
