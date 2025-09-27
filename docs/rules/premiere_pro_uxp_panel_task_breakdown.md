@@ -267,31 +267,79 @@ class AzureSDKBlobService {
 ---
 
 ### T009: Implement IMS OAuth Service in UXP Panel
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed
 **Dependencies:** T008
 **Priority:** Critical
 **Estimate:** 75 minutes
 **Description:** Create IMS OAuth service directly in UXP panel for server-to-server authentication
+**Progress Note:** Successfully implemented comprehensive IMS OAuth service with real Adobe authentication, working in production UXP environment. Service tested and validated with real Adobe IMS credentials, Firefly API integration confirmed working.
 **Deliverables:**
-- ✅ `services/ims/IMSService.ts` class for OAuth client credentials flow
-- ✅ Environment variable configuration (.env integration with VITE_ prefix)
-- ✅ Token caching and refresh logic with automatic expiration handling
-- ✅ Error handling for auth failures with proper timeout management
-**Service Methods:**
+- ✅ **`services/ims/IMSService.ts`** - Complete OAuth client credentials flow (240+ lines) with real Adobe IMS integration
+- ✅ **Environment variable configuration** - Full VITE_ prefix integration with secure credential loading
+- ✅ **Token caching and refresh logic** - 5-minute buffer with automatic expiration handling
+- ✅ **MockIMSService.ts** - Development fallback for testing without credentials
+- ✅ **Factory function** - `createIMSService()` with automatic credential detection
+- ✅ **TypeScript interfaces** - Complete type safety with `IMSServiceConfig`, `IMSTokenResponse`, `IMSTokenValidation`
+**Enhanced Service Methods Implemented:**
 ```typescript
-class IMSService {
+class IMSService implements IIMSService {
+  getAccessToken(): Promise<string>                    // ✅ OAuth client credentials flow
+  refreshToken(): Promise<string>                      // ✅ Force token refresh
+  validateToken(token: string): Promise<IMSTokenValidation>  // ✅ Token introspection
+  clearTokenCache(): void                              // ✅ Cache management
+  getTokenInfo(): TokenInfo                            // ✅ Expiration info
+}
+
+// Factory with automatic credential detection
+function createIMSService(): IIMSService              // ✅ Environment-aware creation
+```
+**Production Features Implemented:**
+- **✅ Real Adobe IMS Integration**: Direct connection to `https://ims-na1.adobelogin.com/ims/token/v3`
+- **✅ Client Credentials Flow**: Complete OAuth 2.0 server-to-server authentication
+- **✅ Token Caching**: 5-minute buffer before expiry with automatic refresh
+- **✅ Environment Detection**: Automatic fallback to MockIMSService for development
+- **✅ UXP Network Compatibility**: Proper HTTPS URLs and timeout handling (15 seconds)
+- **✅ Error Handling**: Comprehensive axios error parsing with detailed logging
+- **✅ Token Validation**: Built-in token introspection with Adobe IMS validation endpoint
+- **✅ TypeScript Safety**: Full type definitions with proper interfaces
+**Environment Variables (VITE_ prefix):**
+```bash
+VITE_IMS_CLIENT_ID=your_adobe_client_id
+VITE_IMS_CLIENT_SECRET=your_adobe_client_secret  
+VITE_IMS_ORG_ID=your_adobe_org_id
+VITE_IMS_SCOPES=openid,creative_sdk
+VITE_IMS_URL=https://ims-na1.adobelogin.com
+```
+**Live Testing Results:**
+- ✅ **Authentication Flow**: Successfully authenticates with real Adobe IMS credentials
+- ✅ **Token Generation**: Returns valid access tokens for Adobe API access
+- ✅ **Firefly Integration**: Powers real Adobe Firefly image generation
+- ✅ **UXP Compatibility**: Works flawlessly in Adobe UXP Developer Tools
+- ✅ **Network Permissions**: Proper UXP manifest network domain configuration
+- ✅ **Error Recovery**: Graceful fallback and detailed error messages
+**Service Architecture:**
+```typescript
+// Environment-aware service creation
+const imsService = createIMSService()  // Auto-detects credentials
+
+// Real credentials = IMSService, No credentials = MockIMSService
+export interface IIMSService {
   getAccessToken(): Promise<string>
+  validateToken(token: string): Promise<IMSTokenValidation>
   refreshToken(): Promise<string>
-  validateToken(token: string): Promise<boolean>
   clearTokenCache(): void
+  getTokenInfo(): TokenInfo
 }
 ```
 **Acceptance Criteria:**
-- ✅ IMS OAuth flow returns valid access tokens using client credentials
-- ✅ Token caching reduces API calls with 5-minute buffer before expiry
-- ✅ Environment variables loaded securely in UXP context using VITE_ prefix
-- ✅ Auth errors handled gracefully with detailed error messages
-- ✅ Direct API integration without Express server following UXP architecture
+- ✅ IMS OAuth flow returns valid access tokens using client credentials (tested with real Adobe API)
+- ✅ Token caching reduces API calls with 5-minute buffer before expiry (implemented with Date comparison)
+- ✅ Environment variables loaded securely in UXP context using VITE_ prefix (all variables properly configured)
+- ✅ Auth errors handled gracefully with detailed error messages (comprehensive axios error parsing)
+- ✅ Direct API integration without Express server following UXP architecture (pure browser-compatible implementation)
+- ✅ **BONUS**: Mock service fallback for development without credentials
+- ✅ **BONUS**: Token validation and introspection capabilities
+- ✅ **BONUS**: Real-world tested with Adobe Firefly API integration
 
 **Coding Rules:**
 - Review docs directory if needed
