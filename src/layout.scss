@@ -50,7 +50,7 @@ uxp-panel {
   --theme-button-bg: #{$bg-layer-1};
   --theme-button-bg-hover: #{$bg-layer-2};
   --theme-status-bg: #{$bg-layer-1};
-  --theme-tab-underline: rgba(255, 255, 255, 0.8);
+  --theme-tab-underline: #ffffff;
   
   /* Shadow effects */
   --theme-tab-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
@@ -76,7 +76,7 @@ uxp-panel {
   --theme-button-bg: #f8f8f8;
   --theme-button-bg-hover: #e8e8e8;
   --theme-status-bg: #f8f8f8;
-  --theme-tab-underline: #0066cc;
+  --theme-tab-underline: #007acc;
   
   /* Shadow effects */
   --theme-tab-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
@@ -177,6 +177,7 @@ svg {
   flex-direction: column;
   flex: 1;
   background-color: $bg-layer-2;
+  border-top: 1px solid var(--theme-border); /* Add border to connect with tabs */
   overflow-y: auto; /* Enable vertical scrolling */
   overflow-x: hidden; /* Hide horizontal overflow */
   /* Smooth scrolling */
@@ -547,11 +548,13 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
 .uxp-tabs {
   display: flex;
   background-color: var(--theme-bg-layer-1);
-  border-bottom: 1px solid var(--theme-border);
+  border-bottom: none; /* Remove bottom border so underline connects */
   padding: 0;
   margin: 0;
+  margin-bottom: -3px; /* Pull up to connect with content area */
   flex-shrink: 0;
   position: relative;
+  z-index: 1; /* Ensure tabs are above content area */
   
   /* Theme-aware top border */
   border-top: 1px solid var(--theme-border-subtle);
@@ -565,12 +568,11 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   font-size: $font-size-100; /* 14px */
   font-weight: 400;
   color: var(--theme-highlight); /* Inactive tab color */
-  background-color: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
+  border-bottom: 1px solid transparent;
   cursor: pointer;
   transition: all 0.15s ease;
   position: relative;
+  background-color: var(--theme-bg-base);
   min-height: 44px; /* Match UXP tab height */
   
   /* Hover state - applied to text only */
@@ -583,12 +585,10 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   &.active {
     color: var(--theme-font);
     background-color: var(--theme-bg-base);
-    border-bottom-color: var(--theme-tab-underline);
-    border-bottom-width: 3px;
+    border-bottom-color: var(--theme-tab-underline) !important;
+    border-bottom-width: 2px !important;
+    border-bottom-style: solid !important;
     font-weight: 500;
-    
-    /* Theme-aware subtle shadow */
-    box-shadow: var(--theme-tab-shadow);
   }
   
   /* Focus state for accessibility */
