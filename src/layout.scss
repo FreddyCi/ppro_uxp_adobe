@@ -32,23 +32,56 @@
 :root[data-theme="dark"], 
 :root:not([data-theme]),
 uxp-panel {
-  /* Use existing dark theme variables */
+  /* Background colors */
   --theme-bg-base: #{$bg-base};
   --theme-bg-layer-1: #{$bg-layer-1};
   --theme-bg-layer-2: #{$bg-layer-2};
+  
+  /* Text colors */
   --theme-font: #{$font};
   --theme-highlight: #{$highlight};
+  
+  /* Border colors */
+  --theme-border: #{$dark};
+  --theme-border-subtle: rgba(255, 255, 255, 0.1);
+  
+  /* Interactive colors */
+  --theme-accent: #{$active};
+  --theme-button-bg: #{$bg-layer-1};
+  --theme-button-bg-hover: #{$bg-layer-2};
+  --theme-status-bg: #{$bg-layer-1};
+  --theme-tab-underline: rgba(255, 255, 255, 0.8);
+  
+  /* Shadow effects */
+  --theme-tab-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 /* Light Mode Theme */
 :root[data-theme="light"] {
+  /* Background colors */
   --theme-bg-base: #f5f5f5;
   --theme-bg-layer-1: #ffffff;
   --theme-bg-layer-2: #fafafa;
+  
+  /* Text colors */
   --theme-font: #2c2c2c;
   --theme-highlight: #6b6b6b;
   
-  /* Override background and text colors for light mode */
+  /* Border colors */
+  --theme-border: #e1e1e1;
+  --theme-border-subtle: rgba(0, 0, 0, 0.1);
+  
+  /* Interactive colors */
+  --theme-accent: #0066cc;
+  --theme-button-bg: #f8f8f8;
+  --theme-button-bg-hover: #e8e8e8;
+  --theme-status-bg: #f8f8f8;
+  --theme-tab-underline: #0066cc;
+  
+  /* Shadow effects */
+  --theme-tab-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+  
+  /* Override global styles for light mode */
   background-color: var(--theme-bg-base);
   color: var(--theme-font);
   
@@ -60,7 +93,7 @@ uxp-panel {
   .uxp-header,
   .uxp-footer {
     background-color: var(--theme-bg-layer-1);
-    border-color: #e1e1e1;
+    border-color: var(--theme-border);
   }
   
   .uxp-content {
@@ -69,11 +102,16 @@ uxp-panel {
   
   .card {
     background-color: var(--theme-bg-layer-1);
-    border-color: #e1e1e1;
+    border-color: var(--theme-border);
   }
   
   .text-detail {
     color: var(--theme-highlight);
+  }
+  
+  .uxp-tabs {
+    background-color: var(--theme-bg-layer-1);
+    border-color: var(--theme-border);
   }
 }
 
@@ -81,6 +119,15 @@ body {
   margin: 0;
   min-height: 100vh;
   background-color: $bg-base;
+}
+
+/* Global SVG theme color inheritance */
+svg {
+  color: currentColor;
+  
+  path {
+    fill: currentColor !important;
+  }
 }
 
 /* =============================================================================
@@ -174,15 +221,17 @@ body {
   height: 32px !important;
   padding: $space-100 !important;
   
-  /* Override UXP button styling for footer */
+  /* Theme-aware button styling */
   --spectrum-actionbutton-background-color: transparent !important;
-  --spectrum-actionbutton-border-color: rgba(255, 255, 255, 0.2) !important;
-  --spectrum-actionbutton-text-color: #{$highlight} !important;
+  --spectrum-actionbutton-border-color: var(--theme-border-subtle) !important;
+  --spectrum-actionbutton-text-color: var(--theme-highlight) !important;
+  color: var(--theme-highlight) !important;
   
   &:hover {
-    --spectrum-actionbutton-background-color-hover: rgba(255, 255, 255, 0.1) !important;
-    --spectrum-actionbutton-border-color-hover: rgba(255, 255, 255, 0.4) !important;
-    --spectrum-actionbutton-text-color-hover: #{$font} !important;
+    --spectrum-actionbutton-background-color-hover: var(--theme-button-bg-hover) !important;
+    --spectrum-actionbutton-border-color-hover: var(--theme-border) !important;
+    --spectrum-actionbutton-text-color-hover: var(--theme-font) !important;
+    color: var(--theme-font) !important;
   }
   
   sp-icon {
@@ -190,8 +239,17 @@ body {
   }
   
   .theme-icon {
-    color: currentColor;
+    color: var(--theme-highlight) !important;
     transition: color 0.15s ease;
+    
+    /* Force SVG path to inherit color */
+    path {
+      fill: currentColor !important;
+    }
+  }
+  
+  &:hover .theme-icon {
+    color: var(--theme-font) !important;
   }
 }
 
@@ -309,17 +367,17 @@ body {
 /* Custom overrides for UXP components to match our design system */
 
 sp-action-button {
-  /* Inherit theme colors from our design system */
-  --spectrum-actionbutton-background-color: #{$bg-layer-1};
-  --spectrum-actionbutton-border-color: #{$dark};
-  --spectrum-actionbutton-text-color: #{$font};
+  /* Theme-aware action button colors */
+  --spectrum-actionbutton-background-color: var(--theme-button-bg);
+  --spectrum-actionbutton-border-color: var(--theme-border);
+  --spectrum-actionbutton-text-color: var(--theme-font);
   
   /* Add padding for better spacing */
   padding: $space-200 $space-300;
   
   &:hover {
-    --spectrum-actionbutton-background-color-hover: #{$bg-layer-2};
-    --spectrum-actionbutton-border-color-hover: #{$primary};
+    --spectrum-actionbutton-background-color-hover: var(--theme-button-bg-hover);
+    --spectrum-actionbutton-border-color-hover: var(--theme-accent);
   }
   
   &[disabled] {
@@ -358,8 +416,8 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
 }
 
 .status-section {
-  background-color: $bg-layer-1;
-  border: $border-width solid $dark;
+  background-color: var(--theme-status-bg);
+  border: $border-width solid var(--theme-border);
   border-radius: $border-radius;
   padding: $space-300;
   margin-top: $space-300;
@@ -488,15 +546,15 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
 
 .uxp-tabs {
   display: flex;
-  background-color: $bg-layer-1;
-  border-bottom: 1px solid $dark;
+  background-color: var(--theme-bg-layer-1);
+  border-bottom: 1px solid var(--theme-border);
   padding: 0;
   margin: 0;
   flex-shrink: 0;
   position: relative;
   
-  /* Add a subtle top border to match UXP design */
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  /* Theme-aware top border */
+  border-top: 1px solid var(--theme-border-subtle);
 }
 
 .uxp-tab {
@@ -506,7 +564,7 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   padding: 12px 24px;
   font-size: $font-size-100; /* 14px */
   font-weight: 400;
-  color: $highlight; /* Inactive tab color */
+  color: var(--theme-highlight); /* Inactive tab color */
   background-color: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -517,19 +575,20 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   
   /* Hover state - applied to text only */
   &:hover {
-    color: $font;
+    color: var(--theme-font);
     /* Remove background hover effect */
   }
   
   /* Active state */
   &.active {
-    color: $font;
-    /* Remove background color change for testing */
-    border-bottom-color: rgba(255, 255, 255, 0.8); /* More visible light underline */
-    border-bottom-width: 3px; /* Thicker underline for visibility */
-    font-weight: 500; /* Slightly bolder for active tab */
+    color: var(--theme-font);
+    background-color: var(--theme-bg-base);
+    border-bottom-color: var(--theme-tab-underline);
+    border-bottom-width: 3px;
+    font-weight: 500;
     
-    /* Remove background effects for cleaner look */
+    /* Theme-aware subtle shadow */
+    box-shadow: var(--theme-tab-shadow);
   }
   
   /* Focus state for accessibility */
@@ -538,7 +597,7 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
     outline-offset: -2px;
   }
   
-  /* Add a subtle separator between tabs */
+  /* Add a subtle separator between tabs - theme aware */
   &:not(:last-child)::after {
     content: '';
     position: absolute;
@@ -546,7 +605,7 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
     top: 25%;
     bottom: 25%;
     width: 1px;
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--theme-border-subtle);
   }
   
   /* Remove separator after active tab */
