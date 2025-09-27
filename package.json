@@ -26,18 +26,24 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@azure/storage-blob": "^12.28.0",
+    "@fal-ai/client": "^1.6.2",
+    "@spectrum-icons/workflow": "^4.2.24",
+    "axios": "^1.12.2",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "uuid": "^13.0.0",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@adobe/cc-ext-uxp-types": "https://github.com/justintaylor-dev/cc-ext-uxp-types.git",
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.5.2",
     "@types/node": "^24.5.2",
     "@types/react": "^19.1.14",
     "@types/react-dom": "^19.1.9",
     "@types/ws": "^8.5.8",
-    "@testing-library/jest-dom": "^6.8.0",
-    "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^14.5.2",
     "@vitejs/plugin-react": "^5.0.3",
     "cross-env": "^10.0.0",
     "dotenv": "^17.2.2",
