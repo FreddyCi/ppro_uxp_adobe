@@ -41,8 +41,10 @@ body {
 .uxp-app {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh; /* Fixed height instead of min-height */
   background-color: $bg-base;
+  overflow: hidden; /* Prevent body overflow */
+  position: relative; /* For footer positioning */
 }
 
 .uxp-header {
@@ -59,6 +61,8 @@ body {
   display: flex;
   flex: 1;
   overflow: hidden;
+  /* Add bottom padding to account for sticky footer */
+  padding-bottom: 50px; /* Space for footer */
 }
 
 .uxp-sidebar {
@@ -68,6 +72,8 @@ body {
   background-color: $bg-layer-1;
   border-right: $border-width solid $dark;
   flex-shrink: 0;
+  overflow-y: auto; /* Enable vertical scrolling */
+  overflow-x: hidden; /* Hide horizontal overflow */
 }
 
 .uxp-content {
@@ -75,7 +81,10 @@ body {
   flex-direction: column;
   flex: 1;
   background-color: $bg-layer-2;
-  overflow: auto;
+  overflow-y: auto; /* Enable vertical scrolling */
+  overflow-x: hidden; /* Hide horizontal overflow */
+  /* Smooth scrolling */
+  scroll-behavior: smooth;
 }
 
 .uxp-footer {
@@ -85,8 +94,23 @@ body {
   padding: $space-100 $space-300;
   background-color: $bg-layer-1;
   border-top: $border-width solid $dark;
-  flex-shrink: 0;
   min-height: 40px;
+  
+  /* Sticky footer with overlay */
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  
+  /* Add subtle shadow for overlay effect */
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
+  
+  /* Add backdrop blur for modern overlay effect */
+  backdrop-filter: blur(8px);
+  
+  /* Semi-transparent background for overlay effect */
+  background-color: rgba(38, 38, 38, 0.95); /* $bg-layer-1 with transparency */
 }
 
 /* =============================================================================
