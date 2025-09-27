@@ -1,15 +1,18 @@
 // @ts-ignore
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 import { uxp, premierepro } from "./globals";
 import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
+import { SunIcon, MoonIcon } from "./components";
 import "./layout.scss";
 
 export const App = () => {
   const [imsToken, setImsToken] = useState<string | null>(null);
   const [imsStatus, setImsStatus] = useState<string>('Not authenticated');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [activeTab, setActiveTab] = useState<'generate' | 'gallery'>('generate');
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(true); // Default to dark mode for UXP
 
   const hostName = (uxp.host.name as string).toLowerCase();
 
@@ -17,6 +20,17 @@ export const App = () => {
   if (hostName === "premierepro") {
     console.log("Hello from Premiere Pro", premierepro);
   }
+
+  const toggleTheme = () => {
+    setIsDarkMode(!isDarkMode);
+    // Apply theme to the root element
+    document.documentElement.setAttribute('data-theme', !isDarkMode ? 'dark' : 'light');
+  };
+
+  // Initialize theme on component mount
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
 
   const testIMSAuthentication = async () => {
     setIsAuthenticating(true);
@@ -74,83 +88,116 @@ export const App = () => {
 
       {/* Main Content Area */}
       <main className="uxp-main">
-        {/* Sidebar Navigation */}
-        <aside className="uxp-sidebar">
-          <div className="content-area">
-            <h2 className="text-heading-small mb-md">Tools</h2>
-            {/* @ts-ignore */}
-            <sp-divider size="small"></sp-divider>
-            <nav style={{ marginTop: '16px' }}>
-              <div className="text-body mb-sm text-active">• Authentication</div>
-              <div className="text-body mb-sm text-muted">• Media Export</div>
-              <div className="text-body mb-sm text-muted">• Timeline Tools</div>
-              <div className="text-body mb-sm text-muted">• Asset Manager</div>
-            </nav>
+        {/* Tab Navigation */}
+        <div className="uxp-tabs">
+          <div 
+            className={`uxp-tab ${activeTab === 'generate' ? 'active' : ''}`}
+            onClick={() => setActiveTab('generate')}
+          >
+            Generate
           </div>
-        </aside>
+          <div 
+            className={`uxp-tab ${activeTab === 'gallery' ? 'active' : ''}`}
+            onClick={() => setActiveTab('gallery')}
+          >
+            Gallery
+          </div>
+        </div>
 
         {/* Primary Content */}
         <section className="uxp-content">
           <div className="content-area">
-            {/* Authentication Card */}
-            <article className="card">
-              <header className="card-header">
-                <h2 className="card-title">IMS Authentication</h2>
-                <div className="text-detail">Adobe Identity Management</div>
-              </header>
-              
-              <div className="card-body">
-                <p className="mb-md">Test your connection to Adobe's Identity Management System.</p>
-                
-                <div className="button-group mb-md">
-                  {/* @ts-ignore */}
-                  <sp-action-button 
-                    onClick={testIMSAuthentication} 
-                    disabled={isAuthenticating}
-                  >
-                    {/* @ts-ignore */}
-                    <sp-icon name="ui:CheckmarkMedium" size="s" slot="icon"></sp-icon>
-                    {isAuthenticating ? 'Authenticating...' : 'Authentication'}
-                     {/* @ts-ignore */}
-                     </sp-action-button>
-                </div>
-
-                {/* Status Section */}
-                <div className="status-section">
-                  <h3>Connection Status</h3>
-                  <p className={
-                    imsStatus.includes('✅') ? 'text-success' :
-                    imsStatus.includes('Error') ? 'text-error' :
-                    imsStatus.includes('Authenticating') ? 'text-warning' :
-                    'text-muted'
-                  }>
-                    {imsStatus}
-                  </p>
+            {activeTab === 'generate' && (
+              <>
+                {/* Authentication Card */}
+                <article className="card">
+                  <header className="card-header">
+                    <h2 className="card-title">IMS Authentication</h2>
+                    <div className="text-detail">Adobe Identity Management</div>
+                  </header>
                   
-                  {imsToken && (
-                    <div style={{ marginTop: '16px' }}>
-                      <h4 className="text-heading-small mb-sm">Authentication Details</h4>
-                      <details style={{ cursor: 'pointer' }}>
-                        <summary className="text-detail" style={{ cursor: 'pointer', marginBottom: '8px' }}>
-                          Show Full Token
-                        </summary>
-                        <div className="text-code" style={{ 
-                          wordBreak: 'break-all',
-                          whiteSpace: 'pre-wrap',
-                          maxHeight: '200px',
-                          overflow: 'auto',
-                          marginTop: '8px'
-                        }}>
-                          {imsToken}
-                        </div>
-                      </details>
+                  <div className="card-body">
+                    <p className="mb-md">Test your connection to Adobe's Identity Management System.</p>
+                    
+                    <div className="button-group mb-md">
+                      {/* @ts-ignore */}
+                      <sp-action-button 
+                        onClick={testIMSAuthentication} 
+                        disabled={isAuthenticating}
+                      >
+                        {/* @ts-ignore */}
+                        <sp-icon name="ui:CheckmarkMedium" size="s" slot="icon"></sp-icon>
+                        {isAuthenticating ? 'Authenticating...' : 'Authentication'}
+                         {/* @ts-ignore */}
+                         </sp-action-button>
                     </div>
-                  )}
-                </div>
-              </div>
-            </article>
 
-            {/* Panel Information Card */}
+                    {/* Status Section */}
+                    <div className="status-section">
+                      <h3>Connection Status</h3>
+                      <p className={
+                        imsStatus.includes('✅') ? 'text-success' :
+                        imsStatus.includes('Error') ? 'text-error' :
+                        imsStatus.includes('Authenticating') ? 'text-warning' :
+                        'text-muted'
+                      }>
+                        {imsStatus}
+                      </p>
+                      
+                      {imsToken && (
+                        <div style={{ marginTop: '16px' }}>
+                          <h4 className="text-heading-small mb-sm">Authentication Details</h4>
+                          <details style={{ cursor: 'pointer' }}>
+                            <summary className="text-detail" style={{ cursor: 'pointer', marginBottom: '8px' }}>
+                              Show Full Token
+                            </summary>
+                            <div className="text-code" style={{ 
+                              wordBreak: 'break-all',
+                              whiteSpace: 'pre-wrap',
+                              maxHeight: '200px',
+                              overflow: 'auto',
+                              marginTop: '8px'
+                            }}>
+                              {imsToken}
+                            </div>
+                          </details>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </article>
+
+                {/* Image Generation Card */}
+                <article className="card">
+                  <header className="card-header">
+                    <h2 className="card-title">Image Generation</h2>
+                    <div className="text-detail">Adobe Firefly</div>
+                  </header>
+                  <div className="card-body">
+                    <p className="mb-md">Generate images using Adobe Firefly AI.</p>
+                    <div className="text-muted">Coming soon...</div>
+                  </div>
+                </article>
+              </>
+            )}
+
+            {activeTab === 'gallery' && (
+              <>
+                {/* Gallery Card */}
+                <article className="card">
+                  <header className="card-header">
+                    <h2 className="card-title">Image Gallery</h2>
+                    <div className="text-detail">Generated Images</div>
+                  </header>
+                  <div className="card-body">
+                    <p className="mb-md">View and manage your generated images.</p>
+                    <div className="text-muted">Coming soon...</div>
+                  </div>
+                </article>
+              </>
+            )}
+
+            {/* Panel Information Card - Always visible */}
             <article className="card">
               <header className="card-header">
                 <h2 className="card-title">Panel Information</h2>
@@ -165,7 +212,7 @@ export const App = () => {
                   <li>IMS Authentication</li>
                 </ul>
                 <div className="text-detail">
-                  Host: {hostName || 'Unknown'}
+                  Host: {hostName || 'Unknown'} | Active Tab: {activeTab}
                 </div>
               </div>
             </article>
@@ -176,8 +223,25 @@ export const App = () => {
       {/* Footer */}
       <footer className="uxp-footer">
         <div className="text-detail">UXP Panel v1.0.0</div>
-        <div className="text-detail">
-          {isAuthenticating ? 'Authenticating...' : imsToken ? 'Authenticated' : 'Ready'}
+        <div className="footer-controls">
+          <div className="text-detail">
+            {isAuthenticating ? 'Authenticating...' : imsToken ? 'Authenticated' : 'Ready'}
+          </div>
+          {/* Theme Toggle */}
+          {/* @ts-ignore */}
+          <sp-action-button 
+            quiet 
+            onClick={toggleTheme}
+            title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className="theme-toggle"
+          >
+            {isDarkMode ? (
+              <SunIcon size={16} className="theme-icon" />
+            ) : (
+              <MoonIcon size={16} className="theme-icon" />
+            )}
+          {/* @ts-ignore */}
+          </sp-action-button>
         </div>
       </footer>
     </div>

@@ -633,33 +633,6 @@ refreshTimer = setTimeout(() => {                     // ✅ Background token re
 - Do not over engineer
 ---
 
-### T012: Integrate Services with UI Components
-**Status:** ⏳ Not Started
-**Dependencies:** T011
-**Priority:** High
-**Estimate:** 45 minutes
-**Description:** Connect authentication and blob services to React components
-**Deliverables:**
-- ✅ Authentication status indicator in header with React Spectrum StatusLight
-- ✅ Connection status for Azure Blob service with loading states
-- ✅ Error handling with toast notifications using React Spectrum components
-- ✅ Loading states for service operations with ProgressCircle components
-**UI Integration:**
-- ✅ Login/logout button in header with ActionButton component
-- ✅ Service status indicators (connected/disconnected) with StatusLight variants
-- ✅ Error messages displayed via toast system with auto-dismiss and manual close
-- ✅ Loading spinners during authentication with proper accessibility labels
-**Acceptance Criteria:**
-- ✅ UI reflects authentication state accurately with real-time updates
-- ✅ Service errors display helpful messages through toast notifications
-- ✅ Loading states provide clear feedback with React Spectrum components
-- ✅ Manual refresh/retry functionality works via authentication store actions
-
-**Coding Rules:**
-- Review docs directory if needed
-- Do not over engineer
----
-
 ### T012.5: Live Testing with Adobe UXP Developer Tools
 **Status:** ⏳ Not Started
 **Dependencies:** T012

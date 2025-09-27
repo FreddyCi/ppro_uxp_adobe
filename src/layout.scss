@@ -28,6 +28,55 @@
   text-rendering: optimizeLegibility;
 }
 
+/* Theme Support - Dark Mode (default for UXP) */
+:root[data-theme="dark"], 
+:root:not([data-theme]),
+uxp-panel {
+  /* Use existing dark theme variables */
+  --theme-bg-base: #{$bg-base};
+  --theme-bg-layer-1: #{$bg-layer-1};
+  --theme-bg-layer-2: #{$bg-layer-2};
+  --theme-font: #{$font};
+  --theme-highlight: #{$highlight};
+}
+
+/* Light Mode Theme */
+:root[data-theme="light"] {
+  --theme-bg-base: #f5f5f5;
+  --theme-bg-layer-1: #ffffff;
+  --theme-bg-layer-2: #fafafa;
+  --theme-font: #2c2c2c;
+  --theme-highlight: #6b6b6b;
+  
+  /* Override background and text colors for light mode */
+  background-color: var(--theme-bg-base);
+  color: var(--theme-font);
+  
+  .uxp-app {
+    background-color: var(--theme-bg-base);
+    color: var(--theme-font);
+  }
+  
+  .uxp-header,
+  .uxp-footer {
+    background-color: var(--theme-bg-layer-1);
+    border-color: #e1e1e1;
+  }
+  
+  .uxp-content {
+    background-color: var(--theme-bg-layer-2);
+  }
+  
+  .card {
+    background-color: var(--theme-bg-layer-1);
+    border-color: #e1e1e1;
+  }
+  
+  .text-detail {
+    color: var(--theme-highlight);
+  }
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -111,6 +160,39 @@ body {
   
   /* Semi-transparent background for overlay effect */
   background-color: rgba(38, 38, 38, 0.95); /* $bg-layer-1 with transparency */
+}
+
+.footer-controls {
+  display: flex;
+  align-items: center;
+  gap: $space-200;
+}
+
+.theme-toggle {
+  /* Small compact theme toggle button */
+  min-width: 32px !important;
+  height: 32px !important;
+  padding: $space-100 !important;
+  
+  /* Override UXP button styling for footer */
+  --spectrum-actionbutton-background-color: transparent !important;
+  --spectrum-actionbutton-border-color: rgba(255, 255, 255, 0.2) !important;
+  --spectrum-actionbutton-text-color: #{$highlight} !important;
+  
+  &:hover {
+    --spectrum-actionbutton-background-color-hover: rgba(255, 255, 255, 0.1) !important;
+    --spectrum-actionbutton-border-color-hover: rgba(255, 255, 255, 0.4) !important;
+    --spectrum-actionbutton-text-color-hover: #{$font} !important;
+  }
+  
+  sp-icon {
+    color: currentColor !important;
+  }
+  
+  .theme-icon {
+    color: currentColor;
+    transition: color 0.15s ease;
+  }
 }
 
 /* =============================================================================
@@ -397,6 +479,84 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   
   .uxp-sidebar {
     width: 200px;
+  }
+}
+
+/* =============================================================================
+   UXP Tab Navigation (mimics native UXP tabs)
+   ============================================================================= */
+
+.uxp-tabs {
+  display: flex;
+  background-color: $bg-layer-1;
+  border-bottom: 1px solid $dark;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+  position: relative;
+  
+  /* Add a subtle top border to match UXP design */
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.uxp-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  font-size: $font-size-100; /* 14px */
+  font-weight: 400;
+  color: $highlight; /* Inactive tab color */
+  background-color: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  min-height: 44px; /* Match UXP tab height */
+  
+  /* Hover state - applied to text only */
+  &:hover {
+    color: $font;
+    /* Remove background hover effect */
+  }
+  
+  /* Active state */
+  &.active {
+    color: $font;
+    /* Remove background color change for testing */
+    border-bottom-color: rgba(255, 255, 255, 0.8); /* More visible light underline */
+    border-bottom-width: 3px; /* Thicker underline for visibility */
+    font-weight: 500; /* Slightly bolder for active tab */
+    
+    /* Remove background effects for cleaner look */
+  }
+  
+  /* Focus state for accessibility */
+  &:focus {
+    outline: 2px solid $active;
+    outline-offset: -2px;
+  }
+  
+  /* Add a subtle separator between tabs */
+  &:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 25%;
+    bottom: 25%;
+    width: 1px;
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Remove separator after active tab */
+  &.active::after {
+    display: none;
+  }
+  
+  /* Remove separator before active tab */
+  &.active + .uxp-tab::after {
+    display: none;
   }
 }
 
