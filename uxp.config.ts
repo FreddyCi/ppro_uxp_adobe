@@ -113,6 +113,10 @@ const manifest: UXP_Manifest = {
         "https://svelte.dev",
         "https://reactjs.org",
         "https://vuejs.org/",
+        "https://ims-na1.adobelogin.com", // Adobe IMS Authentication
+        "https://generativelanguage.googleapis.com", // Google Gemini API
+        "https://fal.run", // Fal.ai API
+        "https://uxppanelstorage.blob.core.windows.net", // Azure Blob Storage
         `ws://localhost:${extraPrefs.hotReloadPort}`, // Required for hot reload
       ],
     },
