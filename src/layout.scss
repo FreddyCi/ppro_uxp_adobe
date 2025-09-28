@@ -711,10 +711,12 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   /* Content type radio group */
   .content-type-group {
     display: flex;
+    justify-content: center;
     gap: $space-200;
     
     sp-radio {
       flex: 1;
+      height: 70px;
       padding: $space-200;
       border: 1px solid var(--theme-border-subtle);
       border-radius: $border-radius;
@@ -747,16 +749,20 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
 
   /* Aspect ratio radio group */
   .aspect-ratio-group {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    display: flex;
+    justify-content: center;
     gap: $space-200;
     
     sp-radio {
+      flex: 1;
+      height: 70px;
       border: 1px solid var(--theme-border-subtle);
       border-radius: $border-radius;
       background-color: var(--theme-bg-layer-1);
       transition: all 0.2s ease;
       cursor: pointer;
+      display: flex;
+      align-items: center;
       
       &:hover {
         background-color: var(--theme-bg-layer-2);
@@ -772,8 +778,11 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
     .aspect-option {
       display: flex;
       align-items: center;
+      justify-content: flex-start;
       padding: $space-200;
       gap: $space-200;
+      height: 100%;
+      width: 100%;
     }
     
     .aspect-visual {
@@ -825,6 +834,7 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
     
     sp-radio {
       flex: 1;
+      height: 70px;
       text-align: center;
       padding: $space-200 $space-100;
       border: 1px solid var(--theme-border-subtle);

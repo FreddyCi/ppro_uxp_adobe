@@ -252,7 +252,7 @@ const AppContent = () => {
                           {/* @ts-ignore */}
                           <sp-label className="form-label">Prompt *</sp-label>
                           {/* @ts-ignore */}
-                          <sp-textfield 
+                          <sp-textarea 
                             id="prompt-input"
                             placeholder="A majestic mountain landscape at sunset with purple clouds..."
                             className="prompt-input"
@@ -263,7 +263,7 @@ const AppContent = () => {
                             onInput={(e: any) => setPrompt(e.target.value)}
                           >
                           {/* @ts-ignore */}
-                          </sp-textfield>
+                          </sp-textarea>
                           <div className="character-counter text-detail">
                             {prompt.length}/1000 characters
                           </div>
@@ -338,51 +338,31 @@ const AppContent = () => {
                           {/* @ts-ignore */}
                           <sp-radio-group 
                             value={aspectRatio} 
-                            className="aspect-ratio-group"
+                            className="content-type-group"
                             onChange={(e: any) => setAspectRatio(e.target.value)}
                           >
                             {/* @ts-ignore */}
                             <sp-radio value="square">
-                              <div className="aspect-option">
-                                <div className="aspect-visual square"></div>
-                                <div className="aspect-info">
-                                  <span className="aspect-label">Square</span>
-                                  <div className="aspect-size text-detail">1024×1024</div>
-                                </div>
-                              </div>
+                              <span className="radio-label">Square</span>
+                              <div className="radio-description text-detail">1024×1024</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                             {/* @ts-ignore */}
                             <sp-radio value="landscape">
-                              <div className="aspect-option">
-                                <div className="aspect-visual landscape"></div>
-                                <div className="aspect-info">
-                                  <span className="aspect-label">Landscape</span>
-                                  <div className="aspect-size text-detail">1792×1024</div>
-                                </div>
-                              </div>
+                              <span className="radio-label">Landscape</span>
+                              <div className="radio-description text-detail">1792×1024</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                             {/* @ts-ignore */}
                             <sp-radio value="portrait">
-                              <div className="aspect-option">
-                                <div className="aspect-visual portrait"></div>
-                                <div className="aspect-info">
-                                  <span className="aspect-label">Portrait</span>
-                                  <div className="aspect-size text-detail">1024×1792</div>
-                                </div>
-                              </div>
+                              <span className="radio-label">Portrait</span>
+                              <div className="radio-description text-detail">1024×1792</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                             {/* @ts-ignore */}
                             <sp-radio value="ultrawide">
-                              <div className="aspect-option">
-                                <div className="aspect-visual ultrawide"></div>
-                                <div className="aspect-info">
-                                  <span className="aspect-label">Ultrawide</span>
-                                  <div className="aspect-size text-detail">2048×896</div>
-                                </div>
-                              </div>
+                              <span className="radio-label">Ultrawide</span>
+                              <div className="radio-description text-detail">2048×896</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                           {/* @ts-ignore */}
@@ -392,7 +372,7 @@ const AppContent = () => {
                         {/* Standard, Portrait, Ultrawide sizes */}
                         <div className="form-group">
                           {/* @ts-ignore */}
-                          <sp-radio-group className="size-presets" column>
+                          <sp-radio-group className="size-presets">
                             {/* @ts-ignore */}
                             <sp-radio value="standard">
                               <span>Standard</span>
