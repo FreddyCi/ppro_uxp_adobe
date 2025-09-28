@@ -27,11 +27,6 @@
   text-rendering: optimizeLegibility;
 }
 
-/* Apply line-height only to non-UXP elements to avoid interfering with widget styling */
-*:not([class*="sp-"]):not(sp-button):not(sp-action-button):not(sp-textfield):not(sp-divider):not(sp-icon) {
-  line-height: 1.5;
-}
-
 /* Theme Support - Dark Mode (default for UXP) */
 :root[data-theme="dark"], 
 :root:not([data-theme]),
@@ -82,8 +77,6 @@ uxp-panel {
   --theme-status-bg: #f8f8f8;
   --theme-tab-underline: #007acc;
   
-  /* Shadow effects */
-  --theme-tab-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
   
   /* Override global styles for light mode */
   background-color: var(--theme-bg-base);
