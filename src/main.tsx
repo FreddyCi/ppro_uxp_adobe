@@ -191,31 +191,30 @@ export const App = () => {
                   </header>
                   <div className="card-body">
                     <p className="mb-md">View and manage your generated images.</p>
-                    <div className="text-muted">Coming soon...</div>
+                    
+                    {/* Gallery Preview Grid */}
+                    <div className="gallery-preview">
+                      <div className="gallery-item"></div>
+                      <div className="gallery-item"></div>
+                      <div className="gallery-item"></div>
+                      <div className="gallery-item"></div>
+                      <div className="gallery-item"></div>
+                      <div className="gallery-item"></div>
+                      <div className="gallery-item"></div>
+                      <div className="gallery-item"></div>
+                      <div className="gallery-item"></div>
+                      <div className="gallery-item"></div>
+                      <div className="gallery-item"></div>
+                      <div className="gallery-item"></div>
+                    </div>
+                    
+                    <div className="text-muted" style={{ marginTop: '16px', textAlign: 'center' }}>
+                      Gallery functionality coming soon...
+                    </div>
                   </div>
                 </article>
               </>
             )}
-
-            {/* Panel Information Card - Always visible */}
-            <article className="card">
-              <header className="card-header">
-                <h2 className="card-title">Panel Information</h2>
-              </header>
-              <div className="card-body">
-                <p className="mb-sm">This UXP panel is built with:</p>
-                <ul className="text-body" style={{ paddingLeft: '20px', margin: '8px 0' }}>
-                  <li>React 19.1.1</li>
-                  <li>TypeScript</li>
-                  <li>Spectrum Design System</li>
-                  <li>Adobe UXP APIs</li>
-                  <li>IMS Authentication</li>
-                </ul>
-                <div className="text-detail">
-                  Host: {hostName || 'Unknown'} | Active Tab: {activeTab}
-                </div>
-              </div>
-            </article>
           </div>
         </section>
       </main>

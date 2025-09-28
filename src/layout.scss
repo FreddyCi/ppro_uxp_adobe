@@ -97,7 +97,7 @@ uxp-panel {
   }
   
   .uxp-content {
-    background-color: var(--theme-bg-layer-2);
+    background-color: var(--theme-bg-layer-1);
   }
   
   .card {
@@ -127,6 +127,37 @@ svg {
   
   path {
     fill: currentColor !important;
+  }
+}
+
+/* Gallery Preview Grid */
+.gallery-preview {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: $space-200;
+  padding: $space-200 0;
+}
+
+.gallery-item {
+  aspect-ratio: 1;
+  background-color: var(--theme-border-subtle);
+  border-radius: 5px;
+  border: 1px solid var(--theme-border);
+  transition: all 0.15s ease;
+  
+  &:hover {
+    background-color: var(--theme-button-bg-hover);
+    border-color: var(--theme-accent);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* Responsive gallery grid */
+@media (max-width: 320px) {
+  .gallery-preview {
+    grid-template-columns: repeat(3, 1fr);
+    gap: $space-100;
   }
 }
 
@@ -177,7 +208,7 @@ svg {
   flex-direction: column;
   flex: 1;
   background-color: $bg-layer-2;
-  border-top: 1px solid var(--theme-border); /* Add border to connect with tabs */
+  width: 100%;
   overflow-y: auto; /* Enable vertical scrolling */
   overflow-x: hidden; /* Hide horizontal overflow */
   /* Smooth scrolling */
@@ -315,8 +346,9 @@ svg {
    ============================================================================= */
 
 .content-area {
-  padding: $space-300;
+  padding: 0;
   flex: 1;
+  width: 100%;
 }
 
 .card {
@@ -324,6 +356,7 @@ svg {
   border: $border-width solid $dark;
   border-radius: $border-radius;
   padding: $space-300;
+  margin: $space-300;
   margin-bottom: $space-300;
 
   &:last-child {
@@ -533,7 +566,8 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   }
   
   .content-area {
-    padding: $space-200;
+    padding: 0;
+    width: 100%;
   }
   
   .uxp-sidebar {
