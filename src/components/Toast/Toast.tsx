@@ -1,6 +1,7 @@
 // @ts-ignore
 import React from 'react';
-import { Toast as ToastType } from './types';
+import { ToastVariant, Toast as ToastType } from './types';
+import { CheckmarkCircleIcon, InfoIcon, AlertIcon } from '../icons';
 import './Toast.scss';
 
 interface ToastProps {
@@ -9,35 +10,18 @@ interface ToastProps {
   onAction?: (id: string) => void;
 }
 
-const getToastIcon = (variant: ToastType['variant']) => {
-  switch (variant) {
-    case 'positive':
-      return '✓'; // Checkmark
-    case 'negative':
-      return '✗'; // X mark
-    case 'info':
-      return 'ℹ'; // Info
-    case 'notice':
-      return '⚠'; // Warning triangle
-    default:
-      return 'ℹ';
-  }
-};
-
-const getToastIconName = (variant: ToastType['variant']) => {
-  switch (variant) {
-    case 'positive':
-      return 'ui:CheckmarkMedium';
-    case 'negative':
-      return 'ui:CrossMedium';
-    case 'info':
-      return 'ui:InfoMedium';
-    case 'notice':
-      return 'ui:AlertMedium';
-    default:
-      return 'ui:InfoMedium';
-  }
-};
+  const getToastIcon = (variant: ToastVariant) => {
+    switch (variant) {
+      case 'positive':
+        return <CheckmarkCircleIcon className="toast-icon" />;
+      case 'negative':
+        return <AlertIcon className="toast-icon" />;
+      case 'info':
+        return <InfoIcon className="toast-icon" />;
+      case 'notice':
+        return <AlertIcon className="toast-icon" />;
+    }
+  };
 
 export const Toast = ({ toast, onClose, onAction }: ToastProps) => {
   const handleAction = () => {
@@ -58,8 +42,7 @@ export const Toast = ({ toast, onClose, onAction }: ToastProps) => {
       <div className="toast__content">
         {/* Icon */}
         <div className="toast__icon">
-          {/* @ts-ignore */}
-          <sp-icon name={getToastIconName(toast.variant)} size="s"></sp-icon>
+          {getToastIcon(toast.variant)}
         </div>
         
         {/* Text Content */}
