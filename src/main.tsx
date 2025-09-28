@@ -4,15 +4,18 @@ import React, { useState, useEffect } from "react";
 import { uxp, premierepro } from "./globals";
 import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
-import { SunIcon, MoonIcon } from "./components";
+import { SunIcon, MoonIcon, ToastProvider, useToastHelpers } from "./components";
 import "./layout.scss";
 
-export const App = () => {
+const AppContent = () => {
   const [imsToken, setImsToken] = useState<string | null>(null);
   const [imsStatus, setImsStatus] = useState<string>('Not authenticated');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [activeTab, setActiveTab] = useState<'generate' | 'gallery'>('generate');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true); // Default to dark mode for UXP
+  
+  // Get toast helpers
+  const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
 
   const hostName = (uxp.host.name as string).toLowerCase();
 
@@ -56,6 +59,9 @@ export const App = () => {
       setImsStatus(`✅ Authenticated! Token: ${accessToken.substring(0, 20)}...`);
       api.notify('🎉 IMS Authentication Successful!');
       
+      // Show success toast
+      showSuccess('Authentication Successful', 'Connected to Adobe Identity Management System');
+      
       // Optional: Try to validate the token (non-critical)
       try {
         const validation = await imsService.validateToken(accessToken);
@@ -63,6 +69,7 @@ export const App = () => {
         
         if (validation.valid) {
           setImsStatus(`✅ Valid token! User: ${validation.user_id || 'Unknown'}`);
+          showInfo('Token Validated', `User: ${validation.user_id || 'Unknown'}`);
         }
       } catch (validationError) {
         console.warn('⚠️ Token validation failed (non-critical):', validationError);
@@ -71,8 +78,12 @@ export const App = () => {
       
     } catch (error) {
       console.error('❌ IMS authentication failed:', error);
-      setImsStatus(`Error: ${error instanceof Error ? error.message : 'Authentication failed'}`);
-      api.notify(`IMS Error: ${error instanceof Error ? error.message : 'Authentication failed'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
+      setImsStatus(`Error: ${errorMessage}`);
+      api.notify(`IMS Error: ${errorMessage}`);
+      
+      // Show error toast
+      showError('Authentication Failed', errorMessage);
     } finally {
       setIsAuthenticating(false);
     }
@@ -211,6 +222,41 @@ export const App = () => {
                     <div className="text-muted" style={{ marginTop: '16px', textAlign: 'center' }}>
                       Gallery functionality coming soon...
                     </div>
+                    
+                    {/* Toast Demo Buttons */}
+                    <div style={{ marginTop: '24px' }}>
+                      <h4 style={{ marginBottom: '12px', color: 'var(--theme-font)' }}>Toast Notifications Demo</h4>
+                      <div className="button-group" style={{ gap: '8px', flexWrap: 'wrap' }}>
+                        {/* @ts-ignore */}
+                        <sp-button size="s" onClick={() => showSuccess('Success!', 'Operation completed successfully')}>
+                          Success Toast
+                        {/* @ts-ignore */}
+                        </sp-button>
+                        {/* @ts-ignore */}
+                        <sp-button size="s" onClick={() => showError('Error!', 'Something went wrong')}>
+                          Error Toast  
+                        {/* @ts-ignore */}
+                        </sp-button>
+                        {/* @ts-ignore */}
+                        <sp-button size="s" onClick={() => showInfo('Info', 'Here is some information')}>
+                          Info Toast
+                        {/* @ts-ignore */}
+                        </sp-button>
+                        {/* @ts-ignore */}
+                        <sp-button size="s" onClick={() => showWarning('Warning!', 'Please be careful')}>
+                          Warning Toast
+                        {/* @ts-ignore */}
+                        </sp-button>
+                        {/* @ts-ignore */}
+                        <sp-button size="s" onClick={() => showSuccess('With Action', 'Click the button!', { 
+                          actionLabel: 'View', 
+                          actionCallback: () => console.log('Action clicked!') 
+                        })}>
+                          Action Toast
+                        {/* @ts-ignore */}
+                        </sp-button>
+                      </div>
+                    </div>
                   </div>
                 </article>
               </>
@@ -244,5 +290,14 @@ export const App = () => {
         </div>
       </footer>
     </div>
+  );
+};
+
+// Main App component with ToastProvider
+export const App = () => {
+  return (
+    <ToastProvider maxToasts={5} defaultDuration={5000}>
+      <AppContent />
+    </ToastProvider>
   );
 };
