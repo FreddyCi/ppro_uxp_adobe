@@ -590,9 +590,9 @@ export class FireflyService {
           fileSize: output.image.size,
           userId: request.userId,
           sessionId: request.sessionId,
-          timestamp: new Date()
+          timestamp: Date.now()
         },
-        timestamp: new Date(),
+        timestamp: Date.now(),
         status: 'generated' as const
       }
 

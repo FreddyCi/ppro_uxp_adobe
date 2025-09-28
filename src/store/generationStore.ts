@@ -51,7 +51,7 @@ export interface GenerationStore {
   
   // UI and error state
   error: string | null
-  lastError: Date | null
+  lastError: number | null
   
   // Actions
   actions: {
@@ -316,10 +316,10 @@ export const useGenerationStore = create<GenerationStore>()(
             const duplicate: GenerationResult = {
               ...original,
               id: uuidv4(),
-              timestamp: new Date(),
+              timestamp: Date.now(),
               metadata: {
                 ...original.metadata,
-                timestamp: new Date()
+                timestamp: Date.now()
               }
             }
             
@@ -335,7 +335,7 @@ export const useGenerationStore = create<GenerationStore>()(
         setError(error: string | null): void {
           set({ 
             error, 
-            lastError: error ? new Date() : null,
+            lastError: error ? Date.now() : null,
             isGenerating: false 
           })
         },

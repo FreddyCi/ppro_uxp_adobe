@@ -169,7 +169,7 @@ export interface GenerationResult {
   downloadUrl?: string
   seed: number
   metadata: GenerationMetadata
-  timestamp: Date
+  timestamp: number
   
   // Application state
   status: 'generated' | 'downloaded' | 'stored' | 'corrected' | 'archived'
@@ -201,7 +201,7 @@ export interface GenerationMetadata {
   // User tracking
   userId?: string
   sessionId?: string
-  timestamp: Date
+  timestamp: number
 }
 
 // Service configuration

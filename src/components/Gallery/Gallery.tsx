@@ -1,5 +1,6 @@
 // @ts-ignore
 import React, { useState, useMemo } from 'react';
+import { useGenerationStore } from '../../store/generationStore';
 import './Gallery.scss';
 
 interface ImageData {
@@ -91,6 +92,9 @@ const mockImages: ImageData[] = [
 interface GalleryProps {}
 
 export const Gallery = () => {
+  // Get real images from generation store
+  const { generationHistory } = useGenerationStore();
+  
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [contentType, setContentType] = useState('All');
@@ -98,12 +102,28 @@ export const Gallery = () => {
   const [dateRange, setDateRange] = useState('All time');
   const [sortBy, setSortBy] = useState('Newest');
 
+  // Convert generation results to gallery format
+  const storeImages = useMemo(() => {
+    return generationHistory.map((result: any, index: number) => ({
+      id: index + 1,
+      url: result.imageUrl,
+      prompt: result.metadata.prompt,
+      contentType: result.metadata.contentClass || 'art',
+      aspectRatio: 'square', // Default since we're generating square images
+      createdAt: new Date(result.timestamp), // Ensure it's a Date object
+      tags: result.metadata.prompt.split(' ').slice(0, 3) // Simple tag extraction
+    }));
+  }, [generationHistory]);
+
+  // Use real images if available, fallback to mock images for demo
+  const imagesToUse = storeImages.length > 0 ? storeImages : mockImages;
+
   // Filter and sort images
   const filteredImages = useMemo(() => {
-    let filtered = mockImages.filter(image => {
+    let filtered = imagesToUse.filter((image: ImageData) => {
       // Search filter
       if (searchQuery && !image.prompt.toLowerCase().includes(searchQuery.toLowerCase()) && 
-          !image.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))) {
+          !image.tags.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase()))) {
         return false;
       }
 
@@ -120,7 +140,12 @@ export const Gallery = () => {
       // Date range filter (simplified)
       if (dateRange !== 'All time') {
         const now = new Date();
-        const daysDiff = (now.getTime() - image.createdAt.getTime()) / (1000 * 3600 * 24);
+        const imageDate = new Date(image.createdAt);
+        
+        // Skip filtering if date is invalid
+        if (isNaN(imageDate.getTime())) return true;
+        
+        const daysDiff = (now.getTime() - imageDate.getTime()) / (1000 * 3600 * 24);
         
         if (dateRange === '7 days' && daysDiff > 7) return false;
         if (dateRange === '30 days' && daysDiff > 30) return false;
@@ -132,9 +157,17 @@ export const Gallery = () => {
 
     // Sort images
     if (sortBy === 'Newest') {
-      filtered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      filtered.sort((a: ImageData, b: ImageData) => {
+        const dateA = new Date(a.createdAt).getTime();
+        const dateB = new Date(b.createdAt).getTime();
+        return dateB - dateA;
+      });
     } else if (sortBy === 'Oldest') {
-      filtered.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      filtered.sort((a: ImageData, b: ImageData) => {
+        const dateA = new Date(a.createdAt).getTime();
+        const dateB = new Date(b.createdAt).getTime();
+        return dateA - dateB;
+      });
     }
 
     return filtered;
@@ -302,7 +335,7 @@ export const Gallery = () => {
                 <div className="item-prompt">{image.prompt}</div>
                 <div className="item-meta">
                   <span className="item-type">{image.contentType}</span>
-                  <span className="item-date">{image.createdAt.toLocaleDateString()}</span>
+                  <span className="item-date">{new Date(image.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
             </div>
