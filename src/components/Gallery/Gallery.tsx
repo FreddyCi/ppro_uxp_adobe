@@ -1,6 +1,7 @@
 // @ts-ignore
 import React, { useState, useMemo } from 'react';
 import { useGenerationStore } from '../../store/generationStore';
+import { ImageDetailPopup } from './ImageDetailPopup';
 import './Gallery.scss';
 
 interface ImageData {
@@ -93,7 +94,7 @@ interface GalleryProps {}
 
 export const Gallery = () => {
   // Get real images from generation store
-  const { generationHistory } = useGenerationStore();
+  const { generationHistory, actions } = useGenerationStore();
   
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,6 +102,10 @@ export const Gallery = () => {
   const [aspectRatio, setAspectRatio] = useState('All');
   const [dateRange, setDateRange] = useState('All time');
   const [sortBy, setSortBy] = useState('Newest');
+  
+  // Popup states
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   // Convert generation results to gallery format
   const storeImages = useMemo(() => {
@@ -184,6 +189,47 @@ export const Gallery = () => {
     setAspectRatio('All');
     setDateRange('All time');
     setSortBy('Newest');
+  };
+
+  // Popup handlers
+  const handleImageClick = (imageId: number) => {
+    const imageIndex = filteredImages.findIndex((img: ImageData) => img.id === imageId);
+    if (imageIndex !== -1) {
+      setSelectedImageIndex(imageIndex);
+      setIsPopupOpen(true);
+    }
+  };
+
+  const handleClosePopup = () => {
+    setIsPopupOpen(false);
+  };
+
+  const handleNavigateImage = (direction: 'prev' | 'next') => {
+    setSelectedImageIndex((prev: number) => {
+      if (direction === 'prev') {
+        return Math.max(0, prev - 1);
+      } else {
+        return Math.min(filteredImages.length - 1, prev + 1);
+      }
+    });
+  };
+
+  const handleDeleteImage = (imageId: number) => {
+    // Find the original generation result ID
+    const imageToDelete = filteredImages.find((img: ImageData) => img.id === imageId);
+    if (imageToDelete) {
+      // Use the generation history to find the actual ID
+      const generationIndex = storeImages.findIndex((img: ImageData) => 
+        img.url === imageToDelete.url && img.prompt === imageToDelete.prompt
+      );
+      if (generationIndex !== -1) {
+        const generationResult = generationHistory[generationIndex];
+        actions.removeGeneration(generationResult.id);
+        
+        // Close popup if this was the selected image
+        handleClosePopup();
+      }
+    }
   };
 
   return (
@@ -320,7 +366,7 @@ export const Gallery = () => {
         <div className="gallery-grid">
           {filteredImages.map((image: ImageData) => (
             <div key={image.id} className="gallery-item">
-              <div className="item-image">
+              <div className="item-image" onClick={() => handleImageClick(image.id)}>
                 <img src={image.url} alt={image.prompt} />
                 <div className="item-overlay">
                   {/* @ts-ignore */}
@@ -351,6 +397,19 @@ export const Gallery = () => {
           </div>
         )}
       </main>
+
+      {/* Image Detail Popup */}
+      {filteredImages.length > 0 && (
+        <ImageDetailPopup
+          isOpen={isPopupOpen}
+          onClose={handleClosePopup}
+          imageData={filteredImages[selectedImageIndex] || null}
+          images={filteredImages}
+          currentIndex={selectedImageIndex}
+          onNavigate={handleNavigateImage}
+          onDelete={handleDeleteImage}
+        />
+      )}
     </div>
   );
 };
