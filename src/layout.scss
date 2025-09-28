@@ -127,20 +127,22 @@ svg {
   }
 }
 
-/* Gallery Preview Grid */
+/* Gallery Preview Flex */
 .gallery-preview {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: $space-200;
   padding: $space-200 0;
 }
 
 .gallery-item {
+  flex: 1 1 calc(25% - $space-200); /* 4 items per row with gap */
   aspect-ratio: 1;
   background-color: var(--theme-border-subtle);
   border-radius: 5px;
   border: 1px solid var(--theme-border);
   transition: all 0.15s ease;
+  min-width: 60px; /* Minimum width for very small screens */
   
   &:hover {
     background-color: var(--theme-button-bg-hover);
@@ -150,11 +152,14 @@ svg {
   }
 }
 
-/* Responsive gallery grid */
+/* Responsive gallery flex */
 @media (max-width: 320px) {
   .gallery-preview {
-    grid-template-columns: repeat(3, 1fr);
     gap: $space-100;
+  }
+  
+  .gallery-item {
+    flex: 1 1 calc(33.333% - $space-100); /* 3 items per row with smaller gap */
   }
 }
 
@@ -712,7 +717,7 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   .content-type-group {
     display: flex;
     justify-content: center;
-    gap: $space-200;
+    gap: $space-400;
     
     sp-radio {
       flex: 1;
@@ -748,10 +753,11 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   }
 
   /* Aspect ratio radio group */
+
   .aspect-ratio-group {
     display: flex;
     justify-content: center;
-    gap: $space-200;
+    gap: $space-400;
     
     sp-radio {
       flex: 1;
@@ -830,7 +836,8 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   /* Size presets */
   .size-presets {
     display: flex;
-    gap: $space-200;
+    justify-content: center;
+    gap: $space-400;
     
     sp-radio {
       flex: 1;
@@ -887,10 +894,7 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
 /* Responsive adjustments */
 @media (max-width: 400px) {
   .generation-form {
-    .aspect-ratio-group {
-      grid-template-columns: 1fr;
-    }
-    
+    .aspect-ratio-group,
     .content-type-group,
     .size-presets {
       flex-direction: column;
