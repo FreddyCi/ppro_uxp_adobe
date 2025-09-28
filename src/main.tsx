@@ -6,7 +6,7 @@ import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
 import { FireflyService } from "./services/firefly";
 import { useGenerationStore } from "./store/generationStore";
-import { SunIcon, MoonIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
+import { SunIcon, MoonIcon, LogoutIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
 import "./layout.scss";
 
 const AppContent = () => {
@@ -127,6 +127,23 @@ const AppContent = () => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
+  // Clear any lingering auth dialogs and reset state
+  const clearAuthState = () => {
+    console.log('🔄 Clearing authentication state and dialogs...');
+    setImsToken(null);
+    setImsStatus('Not authenticated');
+    setIsAuthenticating(false);
+    
+    // Clear any cached IMS data
+    try {
+      const imsService = createIMSService();
+      imsService.clearTokenCache();
+      showInfo('Auth Cleared', 'Authentication state has been reset');
+    } catch (error) {
+      console.warn('Failed to clear IMS cache:', error);
+    }
+  };
+
   const testIMSAuthentication = async () => {
     setIsAuthenticating(true);
     setImsStatus('Authenticating...');
@@ -149,7 +166,6 @@ const AppContent = () => {
       
       setImsToken(accessToken);
       setImsStatus(`✅ Authenticated! Token: ${accessToken.substring(0, 20)}...`);
-      api.notify('🎉 IMS Authentication Successful!');
       
       // Show success toast
       showSuccess('Authentication Successful', 'Connected to Adobe Identity Management System');
@@ -172,7 +188,6 @@ const AppContent = () => {
       console.error('❌ IMS authentication failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
       setImsStatus(`Error: ${errorMessage}`);
-      api.notify(`IMS Error: ${errorMessage}`);
       
       // Show error toast
       showError('Authentication Failed', errorMessage);
@@ -230,9 +245,22 @@ const AppContent = () => {
                       >
                         {/* @ts-ignore */}
                         <sp-icon name="ui:CheckmarkMedium" size="s" slot="icon"></sp-icon>
-                        <span>{isAuthenticating ? 'Authenticating...' : 'Authentication'}</span>
-                         {/* @ts-ignore */}
-                         </sp-action-button>
+                        <span>{isAuthenticating ? 'Authenticating...' : imsToken ? 'Refresh Token' : 'Login'}</span>
+                      {/* @ts-ignore */}
+                      </sp-action-button>
+                      
+                      {/* Clear Auth Button */}
+                      {/* @ts-ignore */}
+                      <sp-action-button 
+                        onClick={clearAuthState}
+                        variant="secondary"
+                        size="s"
+                      >
+                        {/* @ts-ignore */}
+                        <sp-icon name="ui:Close" size="s" slot="icon"></sp-icon>
+                        <span>Clear</span>
+                      {/* @ts-ignore */}
+                      </sp-action-button>
                     </div>
 
                     {/* Status Section */}
@@ -320,7 +348,7 @@ const AppContent = () => {
                           <sp-label className="form-label">Style Preset</sp-label>
                           <div className="text-detail mb-sm">Choose a visual style for your image</div>
                           {/* @ts-ignore */}
-                          <sp-dropdown 
+                          <sp-picker 
                             placeholder="No Style" 
                             className="style-dropdown"
                             value={stylePreset}
@@ -345,7 +373,7 @@ const AppContent = () => {
                             {/* @ts-ignore */}
                             </sp-menu>
                           {/* @ts-ignore */}
-                          </sp-dropdown>
+                          </sp-picker>
                         </div>
 
                         {/* Content Type */}
@@ -509,6 +537,20 @@ const AppContent = () => {
             )}
           {/* @ts-ignore */}
           </sp-action-button>
+
+          {/* Logout Button */}
+          {imsToken && (
+            /* @ts-ignore */
+            <sp-action-button 
+              quiet 
+              onClick={clearAuthState}
+              title="Logout"
+              className="logout-button"
+            >
+              <LogoutIcon size={16} className="theme-icon" />
+            {/* @ts-ignore */}
+            </sp-action-button>
+          )}
         </div>
       </footer>
     </div>

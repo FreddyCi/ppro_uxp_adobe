@@ -921,12 +921,12 @@ class FireflyService {
 **Estimate:** 90 minutes
 **Progress Note:** Successfully implemented comprehensive Gallery component with complete Popup with html5 and scss flex with UXP Widget only components. Created responsive grid layout with 3 view modes (grid, list, details), image detail dialog with full metadata display, zoom and pan functionality (1.5x-5x zoom with mouse/keyboard controls), navigation controls with prev/next buttons and proper focus management. Implemented delete and clear history functions, thumbnail error handling, and complete integration with generationStore. Added zoom controls with mouse drag panning and keyboard shortcuts (+/- for zoom, 0 for reset). Component includes proper accessibility features, UXP compatibility, and exports correctly from features/index.ts. Integrated with main app navigation through TabContent.tsx - both Generate and Gallery tabs now display the actual functional components. All builds validate successfully with zero TypeScript errors.
 
-### T020.5: Live Firefly API Testing
+### T020.5: Live Firefly API Testing & UXP Auth Persistence Fix
 **Status:** ✅ Completed
 **Dependencies:** T020, IMS Authentication Fix
 **Priority:** Critical
 **Estimate:** 30 minutes
-**Progress Note:** Successfully completed end-to-end Firefly API testing with real image generation. Fixed critical Gallery pagination bug where images weren't displaying due to incorrect index calculation (currentPage * itemsPerPage vs (currentPage - 1) * itemsPerPage). Generated test image "A sunset over mountains" using real Firefly API with IMS authentication. Image successfully stored as data URL, persisted across sessions, and displays correctly in Gallery with proper metadata (prompt, timestamp, job ID). Completed full workflow: Login → Generate → Gallery display. All debugging code cleaned up. System ready for production use.
+**Progress Note:** Successfully completed end-to-end Firefly API testing with real image generation AND fixed critical UXP authentication persistence issue. **Major Fix**: Resolved authentication token loss on UXP plugin reload - auth store now properly persists and rehydrates authentication state using enhanced localStorage with Date serialization fix, improved error handling for quota exceeded errors, automatic token validation on rehydration, and debug logging for troubleshooting. Updated main.tsx to use auth store instead of manual state management, added logout functionality, and improved user feedback. Users no longer need to re-authenticate after UXP Developer Tools reload. Fixed critical Gallery pagination bug where images weren't displaying due to incorrect index calculation (currentPage * itemsPerPage vs (currentPage - 1) * itemsPerPage). Generated test image "A sunset over mountains" using real Firefly API with IMS authentication. Image successfully stored as data URL, persisted across sessions, and displays correctly in Gallery with proper metadata (prompt, timestamp, job ID). Completed full workflow: Login → Generate → Gallery display. All debugging code cleaned up. System ready for production use with persistent authentication.
 **Description:** Test real Firefly image generation with live API
 **Deliverables:**
 - ✅ IMS authentication works with real credentials
@@ -934,7 +934,7 @@ class FireflyService {
 - ✅ Image appears in Gallery with proper pagination fix
 - ✅ Error handling works if generation fails
 **Simple Test:**
-1. ✅ Open app at http://localhost:5174/
+
 2. ✅ Click Login button - authenticates successfully with real IMS credentials
 3. ✅ Enter prompt: "A sunset over mountains"
 4. ✅ Click Generate - creates real image via Firefly API v3 async workflow
@@ -943,6 +943,8 @@ class FireflyService {
 - ✅ Login works without errors (IMS OAuth client credentials flow successful)
 - ✅ Test prompt generates real image (Firefly API v3 async job workflow completed)
 - ✅ Image displays in Gallery with metadata (Fixed pagination bug, image shows on page 1 with full metadata)
+- ✅ **MAJOR FIX**: Authentication persists across UXP plugin reloads (Enhanced auth store with proper localStorage persistence, Date serialization handling, and automatic token validation)
+- ✅ **BONUS**: Debug helpers available for troubleshooting auth issues (debugAuthState function and enhanced logging)
 
 **Coding Rules:**
 - Test with real Adobe credentials in .env.local

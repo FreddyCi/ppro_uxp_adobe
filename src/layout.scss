@@ -287,6 +287,45 @@ svg {
   }
 }
 
+.logout-button {
+  /* Small compact logout button - same style as theme toggle */
+  min-width: 32px !important;
+  height: 32px !important;
+  padding: $space-100 !important;
+  margin-left: $space-100 !important;
+  
+  /* Theme-aware button styling */
+  --spectrum-actionbutton-background-color: transparent !important;
+  --spectrum-actionbutton-border-color: var(--theme-border-subtle) !important;
+  --spectrum-actionbutton-text-color: var(--theme-highlight) !important;
+  color: var(--theme-highlight) !important;
+  
+  &:hover {
+    --spectrum-actionbutton-background-color-hover: var(--theme-button-bg-hover) !important;
+    --spectrum-actionbutton-border-color-hover: var(--theme-border) !important;
+    --spectrum-actionbutton-text-color-hover: var(--theme-font) !important;
+    color: var(--theme-font) !important;
+  }
+  
+  sp-icon {
+    color: currentColor !important;
+  }
+  
+  .theme-icon {
+    color: var(--theme-highlight) !important;
+    transition: color 0.15s ease;
+    
+    /* Force SVG path to inherit color */
+    path {
+      fill: currentColor !important;
+    }
+  }
+  
+  &:hover .theme-icon {
+    color: var(--theme-font) !important;
+  }
+}
+
 /* =============================================================================
    Typography Components (Spectrum Typography Scale)
    ============================================================================= */
