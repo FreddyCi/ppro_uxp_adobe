@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { uxp, premierepro } from "./globals";
 import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
-import { SunIcon, MoonIcon, ToastProvider, useToastHelpers } from "./components";
+import { SunIcon, MoonIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
 import "./layout.scss";
 
 const AppContent = () => {
@@ -436,73 +436,7 @@ const AppContent = () => {
             )}
 
             {activeTab === 'gallery' && (
-              <>
-                {/* Gallery Card */}
-                <article className="card">
-                  <header className="card-header">
-                    <h2 className="card-title">Image Gallery</h2>
-                    <div className="text-detail">Generated Images</div>
-                  </header>
-                  <div className="card-body">
-                    <p className="mb-md">View and manage your generated images.</p>
-                    
-                    {/* Gallery Preview Grid */}
-                    <div className="gallery-preview">
-                      <div className="gallery-item"></div>
-                      <div className="gallery-item"></div>
-                      <div className="gallery-item"></div>
-                      <div className="gallery-item"></div>
-                      <div className="gallery-item"></div>
-                      <div className="gallery-item"></div>
-                      <div className="gallery-item"></div>
-                      <div className="gallery-item"></div>
-                      <div className="gallery-item"></div>
-                      <div className="gallery-item"></div>
-                      <div className="gallery-item"></div>
-                      <div className="gallery-item"></div>
-                    </div>
-                    
-                    <div className="text-muted" style={{ marginTop: '16px', textAlign: 'center' }}>
-                      Gallery functionality coming soon...
-                    </div>
-                    
-                    {/* Toast Demo Buttons */}
-                    <div style={{ marginTop: '24px' }}>
-                      <h4 style={{ marginBottom: '12px', color: 'var(--theme-font)' }}>Toast Notifications Demo</h4>
-                      <div className="button-group" style={{ gap: '8px', flexWrap: 'wrap' }}>
-                        {/* @ts-ignore */}
-                        <sp-button size="s" onClick={() => showSuccess('Success!', 'Operation completed successfully')}>
-                          Success Toast
-                        {/* @ts-ignore */}
-                        </sp-button>
-                        {/* @ts-ignore */}
-                        <sp-button size="s" onClick={() => showError('Error!', 'Something went wrong')}>
-                          Error Toast  
-                        {/* @ts-ignore */}
-                        </sp-button>
-                        {/* @ts-ignore */}
-                        <sp-button size="s" onClick={() => showInfo('Info', 'Here is some information')}>
-                          Info Toast
-                        {/* @ts-ignore */}
-                        </sp-button>
-                        {/* @ts-ignore */}
-                        <sp-button size="s" onClick={() => showWarning('Warning!', 'Please be careful')}>
-                          Warning Toast
-                        {/* @ts-ignore */}
-                        </sp-button>
-                        {/* @ts-ignore */}
-                        <sp-button size="s" onClick={() => showSuccess('With Action', 'Click the button!', { 
-                          actionLabel: 'View', 
-                          actionCallback: () => console.log('Action clicked!') 
-                        })}>
-                          Action Toast
-                        {/* @ts-ignore */}
-                        </sp-button>
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              </>
+              <Gallery />
             )}
           </div>
         </section>

@@ -1,0 +1,344 @@
+/**
+ * Gallery Component Styles
+ * Using existing project theme variables and UXP component styling
+ */
+
+@use '../../variables.scss' as *;
+
+.gallery-container {
+  display: flex;
+  height: 100%;
+  background: var(--theme-bg-base);
+  color: var(--theme-font);
+  font-family: "Adobe Clean", "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+// Filters Sidebar
+.gallery-sidebar {
+  width: 240px;
+  background: var(--theme-bg-layer-1);
+  border-right: 1px solid var(--theme-border);
+  padding: $space-300;
+  overflow-y: auto;
+  flex-shrink: 0;
+
+  .sidebar-title {
+    font-size: $font-size-300; // 18px
+    font-weight: 600;
+    margin: 0 0 $space-400 0;
+    color: var(--theme-font);
+  }
+
+  .filter-group {
+    margin-bottom: $space-400; // 20px
+
+    .filter-label {
+      display: block;
+      font-size: $font-size-100; // 14px
+      font-weight: 500;
+      margin-bottom: $space-100; // 8px
+      color: var(--theme-font);
+    }
+
+    sp-textfield,
+    sp-picker {
+      width: 100%;
+    }
+  }
+
+  .filter-actions {
+    display: flex;
+    flex-direction: column;
+    gap: $space-100; // 8px
+    margin-top: $space-500; // 24px
+
+    sp-button {
+      width: 100%;
+    }
+  }
+}
+
+// Main Gallery Area
+.gallery-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--theme-bg-layer-2);
+  overflow: hidden;
+}
+
+// Gallery Header
+.gallery-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $space-300;
+  background: var(--theme-bg-layer-1);
+  border-bottom: 1px solid var(--theme-border-subtle);
+  flex-shrink: 0;
+
+  .gallery-title {
+    font-size: $font-size-400; // 20px
+    font-weight: 600;
+    margin: 0;
+    color: var(--theme-font);
+  }
+
+  .gallery-sort {
+    display: flex;
+    align-items: center;
+    gap: $space-100; // 8px
+
+    .sort-label {
+      font-size: $font-size-100; // 14px
+      color: var(--theme-highlight);
+    }
+
+    sp-picker {
+      min-width: 120px;
+    }
+  }
+}
+
+// Image Grid
+.gallery-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space-300; // 16px
+  padding: $space-300;
+  overflow-y: auto;
+  flex: 1;
+
+  .gallery-item {
+    flex: 1 1 280px; // flex-grow, flex-shrink, flex-basis
+    min-width: 280px;
+    max-width: 400px; // prevents items from getting too wide
+    background: var(--theme-bg-layer-1);
+    border: 1px solid var(--theme-border-subtle);
+    border-radius: $border-radius; // 4px
+    overflow: hidden;
+    transition: all 0.15s ease;
+    cursor: pointer;
+
+    &:hover {
+      border-color: var(--theme-accent);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+      .item-overlay {
+        opacity: 1;
+      }
+    }
+
+    .item-image {
+      position: relative;
+      aspect-ratio: 16/10;
+      overflow: hidden;
+
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .item-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+
+        sp-action-button {
+          --spectrum-actionbutton-background-color: rgba(255, 255, 255, 0.9);
+          --spectrum-actionbutton-border-color: transparent;
+          
+          sp-icon {
+            color: var(--theme-font);
+          }
+        }
+      }
+    }
+
+    .item-info {
+      padding: $space-200; // 12px
+
+      .item-prompt {
+        font-size: $font-size-100; // 14px
+        font-weight: 500;
+        color: var(--theme-font);
+        margin-bottom: $space-100; // 8px
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        overflow: hidden;
+      }
+
+      .item-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: $font-size-75; // 12px
+        color: var(--theme-highlight);
+
+        .item-type {
+          background: var(--theme-bg-layer-2);
+          border: 1px solid var(--theme-border-subtle);
+          border-radius: $border-radius-sm; // 2px
+          padding: $space-25 $space-75; // 2px 6px
+          text-transform: capitalize;
+        }
+
+        .item-date {
+          opacity: 0.8;
+        }
+      }
+    }
+  }
+}
+
+// Empty State
+.gallery-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: $space-600; // 32px
+  text-align: center;
+  color: var(--theme-highlight);
+  flex: 1;
+
+  sp-icon {
+    margin-bottom: $space-300; // 16px
+    opacity: 0.5;
+  }
+
+  h3 {
+    font-size: $font-size-300; // 18px
+    font-weight: 600;
+    margin: 0 0 $space-100 0;
+    color: var(--theme-highlight);
+  }
+
+  p {
+    font-size: $font-size-100; // 14px
+    margin: 0;
+    max-width: 300px;
+    color: var(--theme-font);
+  }
+}
+
+// Responsive Design
+@media (max-width: 768px) {
+  .gallery-container {
+    flex-direction: column;
+  }
+
+  .gallery-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--theme-border);
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .gallery-grid {
+    gap: $space-200; // 12px
+    padding: $space-200;
+
+    .gallery-item {
+      flex: 1 1 240px;
+      min-width: 240px;
+      max-width: 350px;
+    }
+  }
+
+  .gallery-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: $space-200;
+
+    .gallery-sort {
+      align-self: flex-end;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .gallery-grid {
+    gap: $space-200;
+
+    .gallery-item {
+      flex: 1 1 100%;
+      min-width: 100%;
+      max-width: 100%;
+    }
+  }
+
+  .gallery-sidebar {
+    padding: $space-200;
+
+    .filter-actions {
+      flex-direction: row;
+
+      sp-button {
+        flex: 1;
+      }
+    }
+  }
+}
+
+// UXP Component Overrides for consistent theming
+.gallery-container {
+  sp-textfield {
+    --spectrum-textfield-background-color: var(--theme-bg-layer-2);
+    --spectrum-textfield-border-color: var(--theme-border-subtle);
+    --spectrum-textfield-text-color: var(--theme-font);
+    --spectrum-textfield-placeholder-color: var(--theme-highlight);
+    
+    &:focus {
+      --spectrum-textfield-border-color-focus: var(--theme-accent);
+    }
+  }
+
+  sp-picker {
+    --spectrum-picker-background-color: var(--theme-bg-layer-2);
+    --spectrum-picker-border-color: var(--theme-border-subtle);
+    --spectrum-picker-text-color: var(--theme-font);
+    
+    &:focus {
+      --spectrum-picker-border-color-focus: var(--theme-accent);
+    }
+  }
+
+  sp-button {
+    &[variant="accent"] {
+      --spectrum-button-background-color: var(--theme-accent);
+      --spectrum-button-border-color: var(--theme-accent);
+      --spectrum-button-text-color: white;
+      
+      &:hover {
+        --spectrum-button-background-color-hover: var(--theme-accent);
+        opacity: 0.9;
+      }
+    }
+
+    &[variant="secondary"] {
+      --spectrum-button-background-color: var(--theme-bg-layer-2);
+      --spectrum-button-border-color: var(--theme-border-subtle);
+      --spectrum-button-text-color: var(--theme-font);
+      
+      &:hover {
+        --spectrum-button-background-color-hover: var(--theme-button-bg-hover);
+      }
+    }
+  }
+}
