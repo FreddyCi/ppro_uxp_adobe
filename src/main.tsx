@@ -127,7 +127,7 @@ export const App = () => {
                       >
                         {/* @ts-ignore */}
                         <sp-icon name="ui:CheckmarkMedium" size="s" slot="icon"></sp-icon>
-                        {isAuthenticating ? 'Authenticating...' : 'Authentication'}
+                        <span>{isAuthenticating ? 'Authenticating...' : 'Authentication'}</span>
                          {/* @ts-ignore */}
                          </sp-action-button>
                     </div>
