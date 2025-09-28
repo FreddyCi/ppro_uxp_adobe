@@ -6,7 +6,7 @@ import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
 import { FireflyService } from "./services/firefly";
 import { useGenerationStore } from "./store/generationStore";
-import { SunIcon, MoonIcon, LogoutIcon, RefreshIcon, CloseIcon, LinkIcon, AlertIcon, InfoIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
+import { SunIcon, MoonIcon, LogoutIcon, RefreshIcon, CloseIcon, LinkIcon, AlertIcon, InfoIcon, UserDeveloperIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
 import "./layout.scss";
 
 const AppContent = () => {
@@ -15,6 +15,7 @@ const AppContent = () => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [activeTab, setActiveTab] = useState<'generate' | 'gallery'>('generate');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true); // Default to dark mode for UXP
+  const [isDeveloperMode, setIsDeveloperMode] = useState<boolean>(true);
   
   // Image generation form state
   const [prompt, setPrompt] = useState<string>('');
@@ -41,6 +42,16 @@ const AppContent = () => {
     setIsDarkMode(!isDarkMode);
     // Apply theme to the root element
     document.documentElement.setAttribute('data-theme', !isDarkMode ? 'dark' : 'light');
+  };
+
+  const toggleDeveloperMode = () => {
+    const nextValue = !isDeveloperMode;
+    setIsDeveloperMode(nextValue);
+    if (nextValue) {
+      showInfo('Developer Tools Enabled', 'IMS authentication controls are visible.');
+    } else {
+      showInfo('Developer Tools Hidden', 'IMS authentication controls are hidden from the workspace.');
+    }
   };
 
   // Handle image generation
@@ -228,16 +239,17 @@ const AppContent = () => {
             {activeTab === 'generate' && (
               <>
                 {/* Authentication Card */}
-                <article className="card">
-                  <header className="card-header">
-                    <h2 className="card-title">IMS Authentication</h2>
-                    <div className="text-detail">Adobe Identity Management</div>
-                  </header>
-                  
-                  <div className="card-body">
-                    <p className="mb-md">Test your connection to Adobe's Identity Management System.</p>
+                {isDeveloperMode && (
+                  <article className="card">
+                    <header className="card-header">
+                      <h2 className="card-title">IMS Authentication</h2>
+                      <div className="text-detail">Adobe Identity Management</div>
+                    </header>
                     
-                    <div className="button-group mb-md">
+                    <div className="card-body">
+                      <p className="mb-md">Test your connection to Adobe's Identity Management System.</p>
+                      
+                      <div className="button-group mb-md">
                       {/* @ts-ignore */}
                       <sp-action-button 
                         onClick={testIMSAuthentication} 
@@ -383,9 +395,10 @@ const AppContent = () => {
                           </details>
                         </div>
                       )}
+                      </div>
                     </div>
-                  </div>
-                </article>
+                  </article>
+                )}
 
                 {/* Image Generation Card */}
                 <article className="card">
@@ -401,6 +414,18 @@ const AppContent = () => {
                         <div className="text-detail" style={{ marginLeft: '8px', color: 'var(--theme-warning)' }}>
                           Please authenticate to generate images
                         </div>
+                        {!isDeveloperMode && (
+                          /* @ts-ignore */
+                          <sp-button 
+                            variant="primary" 
+                            size="s" 
+                            onClick={() => setIsDeveloperMode(true)}
+                            style={{ marginLeft: '12px' }}
+                          >
+                            Show Dev Tools
+                          {/* @ts-ignore */}
+                          </sp-button>
+                        )}
                         {/* @ts-ignore */}
                         <sp-button variant="accent" size="s" onClick={testIMSAuthentication} style={{ marginLeft: '12px' }}>
                           Login
@@ -615,6 +640,20 @@ const AppContent = () => {
           <div className="text-detail">
             {isAuthenticating ? 'Authenticating...' : imsToken ? 'Authenticated' : 'Ready'}
           </div>
+          {/* Developer Tools Toggle */}
+          {/* @ts-ignore */}
+          <sp-action-button 
+            onClick={toggleDeveloperMode}
+            title={isDeveloperMode ? 'Hide IMS Controls' : 'Show IMS Controls'}
+            className={`developer-toggle ${isDeveloperMode ? 'active' : ''}`}
+            aria-pressed={isDeveloperMode}
+            variant="secondary"
+            size="s"
+          >
+            <UserDeveloperIcon size={14} className="theme-icon" />
+            <span>{isDeveloperMode ? 'Developer On' : 'Developer Off'}</span>
+          {/* @ts-ignore */}
+          </sp-action-button>
           {/* Theme Toggle */}
           {/* @ts-ignore */}
           <sp-action-button 

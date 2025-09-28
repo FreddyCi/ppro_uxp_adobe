@@ -7,3 +7,4 @@ export { LogoutIcon } from './LogoutIcon';
 export { RefreshIcon } from './RefreshIcon';
 export { CloseIcon } from './CloseIcon';
 export { LinkIcon } from './LinkIcon';
+export { UserDeveloperIcon } from './UserDeveloperIcon';

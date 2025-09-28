@@ -338,6 +338,53 @@ svg {
   }
 }
 
+.developer-toggle {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: $space-100 !important;
+  min-width: 120px !important;
+  height: 32px !important;
+  padding: $space-100 $space-200 !important;
+
+  --spectrum-actionbutton-background-color: transparent !important;
+  --spectrum-actionbutton-border-color: var(--theme-accent) !important;
+  --spectrum-actionbutton-text-color: var(--theme-accent) !important;
+  color: var(--theme-accent) !important;
+  border-radius: $border-radius !important;
+
+  &:hover {
+    --spectrum-actionbutton-background-color-hover: var(--theme-button-bg-hover) !important;
+    --spectrum-actionbutton-border-color-hover: var(--theme-accent) !important;
+    --spectrum-actionbutton-text-color-hover: var(--theme-font) !important;
+    color: var(--theme-font) !important;
+  }
+
+  &.active {
+    --spectrum-actionbutton-background-color: color.scale($active, $lightness: -10%) !important;
+    --spectrum-actionbutton-border-color: $active !important;
+    --spectrum-actionbutton-text-color: #ffffff !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 1px $active;
+  }
+
+
+  .theme-icon {
+    margin-right: $space-100;
+    color: inherit !important;
+
+    path {
+      fill: currentColor !important;
+    }
+  }
+
+  span {
+    font-size: $font-size-75;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+}
+
 /* =============================================================================
    Typography Components (Spectrum Typography Scale)
    ============================================================================= */
