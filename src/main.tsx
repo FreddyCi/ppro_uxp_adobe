@@ -14,6 +14,14 @@ const AppContent = () => {
   const [activeTab, setActiveTab] = useState<'generate' | 'gallery'>('generate');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true); // Default to dark mode for UXP
   
+  // Image generation form state
+  const [prompt, setPrompt] = useState<string>('');
+  const [stylePreset, setStylePreset] = useState<string>('art');
+  const [contentType, setContentType] = useState<'art' | 'photo'>('art');
+  const [aspectRatio, setAspectRatio] = useState<string>('square');
+  const [seedValue, setSeedValue] = useState<number>(0);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  
   // Get toast helpers
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
 
@@ -28,6 +36,45 @@ const AppContent = () => {
     setIsDarkMode(!isDarkMode);
     // Apply theme to the root element
     document.documentElement.setAttribute('data-theme', !isDarkMode ? 'dark' : 'light');
+  };
+
+  // Handle image generation
+  const handleGenerateImage = async () => {
+    if (!prompt.trim()) {
+      showWarning('Missing Prompt', 'Please enter a description for your image.');
+      return;
+    }
+
+    if (!imsToken) {
+      showError('Authentication Required', 'Please log in first to generate images.');
+      return;
+    }
+
+    setIsGenerating(true);
+
+    try {
+      showInfo('Generating Image', `Creating "${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}"`);
+      
+      // TODO: Implement actual Firefly API call
+      // const fireflyService = new FireflyService(imsToken);
+      // const result = await fireflyService.generateImage({
+      //   prompt,
+      //   stylePreset,
+      //   contentType,
+      //   aspectRatio,
+      //   seed: seedValue > 0 ? seedValue : undefined
+      // });
+      
+      // Simulate generation for now
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      showSuccess('Image Generated', 'Your image has been created successfully!');
+    } catch (error: any) {
+      console.error('Image generation failed:', error);
+      showError('Generation Failed', error.message || 'An unexpected error occurred.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   // Initialize theme on component mount
@@ -181,12 +228,228 @@ const AppContent = () => {
                 {/* Image Generation Card */}
                 <article className="card">
                   <header className="card-header">
-                    <h2 className="card-title">Image Generation</h2>
-                    <div className="text-detail">Adobe Firefly</div>
+                    <h2 className="card-title">Generate Images</h2>
+                    <div className="text-detail">Create images using Adobe Firefly AI</div>
                   </header>
                   <div className="card-body">
-                    <p className="mb-md">Generate images using Adobe Firefly AI.</p>
-                    <div className="text-muted">Coming soon...</div>
+                    {!imsToken ? (
+                      <div className="auth-required">
+                        {/* @ts-ignore */}
+                        <sp-icon name="ui:Alert" size="s" style={{ color: 'var(--theme-warning)' }}></sp-icon>
+                        <div className="text-detail" style={{ marginLeft: '8px', color: 'var(--theme-warning)' }}>
+                          Please authenticate to generate images
+                        </div>
+                        {/* @ts-ignore */}
+                        <sp-button variant="accent" size="s" onClick={testIMSAuthentication} style={{ marginLeft: '12px' }}>
+                          Login
+                        {/* @ts-ignore */}
+                        </sp-button>
+                      </div>
+                    ) : (
+                      <div className="generation-form">
+                        {/* Prompt Input */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Prompt *</sp-label>
+                          {/* @ts-ignore */}
+                          <sp-textfield 
+                            id="prompt-input"
+                            placeholder="A majestic mountain landscape at sunset with purple clouds..."
+                            className="prompt-input"
+                            multiline
+                            rows={3}
+                            maxlength={1000}
+                            value={prompt}
+                            onInput={(e: any) => setPrompt(e.target.value)}
+                          >
+                          {/* @ts-ignore */}
+                          </sp-textfield>
+                          <div className="character-counter text-detail">
+                            {prompt.length}/1000 characters
+                          </div>
+                        </div>
+
+                        {/* Style Preset */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Style Preset</sp-label>
+                          <div className="text-detail mb-sm">Choose a visual style for your image</div>
+                          {/* @ts-ignore */}
+                          <sp-dropdown 
+                            placeholder="No Style" 
+                            className="style-dropdown"
+                            value={stylePreset}
+                            onChange={(e: any) => setStylePreset(e.target.value)}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-menu slot="options">
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="">No Style</sp-menu-item>
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="photographic">Photographic</sp-menu-item>
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="digital-art">Digital Art</sp-menu-item>
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="graphic-design">Graphic Design</sp-menu-item>
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="3d">3D</sp-menu-item>
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="painting">Painting</sp-menu-item>
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="sketch">Sketch</sp-menu-item>
+                            {/* @ts-ignore */}
+                            </sp-menu>
+                          {/* @ts-ignore */}
+                          </sp-dropdown>
+                        </div>
+
+                        {/* Content Type */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Content Type</sp-label>
+                          <div className="text-detail mb-sm">Choose between artistic or photorealistic content</div>
+                          {/* @ts-ignore */}
+                          <sp-radio-group 
+                            value={contentType} 
+                            className="content-type-group"
+                            onChange={(e: any) => setContentType(e.target.value)}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-radio value="art">
+                              <span className="radio-label">Art</span>
+                              <div className="radio-description text-detail">Creative, artistic content</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="photo">
+                              <span className="radio-label">Photo</span>
+                              <div className="radio-description text-detail">Photorealistic content</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                          {/* @ts-ignore */}
+                          </sp-radio-group>
+                        </div>
+
+                        {/* Aspect Ratio */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Aspect Ratio</sp-label>
+                          <div className="text-detail mb-sm">Choose image dimensions</div>
+                          {/* @ts-ignore */}
+                          <sp-radio-group 
+                            value={aspectRatio} 
+                            className="aspect-ratio-group"
+                            onChange={(e: any) => setAspectRatio(e.target.value)}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-radio value="square">
+                              <div className="aspect-option">
+                                <div className="aspect-visual square"></div>
+                                <div className="aspect-info">
+                                  <span className="aspect-label">Square</span>
+                                  <div className="aspect-size text-detail">1024×1024</div>
+                                </div>
+                              </div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="landscape">
+                              <div className="aspect-option">
+                                <div className="aspect-visual landscape"></div>
+                                <div className="aspect-info">
+                                  <span className="aspect-label">Landscape</span>
+                                  <div className="aspect-size text-detail">1792×1024</div>
+                                </div>
+                              </div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="portrait">
+                              <div className="aspect-option">
+                                <div className="aspect-visual portrait"></div>
+                                <div className="aspect-info">
+                                  <span className="aspect-label">Portrait</span>
+                                  <div className="aspect-size text-detail">1024×1792</div>
+                                </div>
+                              </div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="ultrawide">
+                              <div className="aspect-option">
+                                <div className="aspect-visual ultrawide"></div>
+                                <div className="aspect-info">
+                                  <span className="aspect-label">Ultrawide</span>
+                                  <div className="aspect-size text-detail">2048×896</div>
+                                </div>
+                              </div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                          {/* @ts-ignore */}
+                          </sp-radio-group>
+                        </div>
+
+                        {/* Standard, Portrait, Ultrawide sizes */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-radio-group className="size-presets" column>
+                            {/* @ts-ignore */}
+                            <sp-radio value="standard">
+                              <span>Standard</span>
+                              <div className="text-detail">1408×1024</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="portrait">
+                              <span>Portrait</span>
+                              <div className="text-detail">1024×1408</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="ultrawide">
+                              <span>Ultrawide</span>
+                              <div className="text-detail">2048×896</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                          {/* @ts-ignore */}
+                          </sp-radio-group>
+                        </div>
+
+                        {/* Seed (Optional) */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Seed (Optional)</sp-label>
+                          {/* @ts-ignore */}
+                          <sp-slider 
+                            min={0} 
+                            max={999999} 
+                            value={seedValue}
+                            step={1}
+                            className="seed-slider"
+                            onInput={(e: any) => setSeedValue(parseInt(e.target.value) || 0)}
+                          >
+                          {/* @ts-ignore */}
+                          </sp-slider>
+                        </div>
+
+                        {/* Generate Button */}
+                        <div className="form-actions">
+                          {/* @ts-ignore */}
+                          <sp-button 
+                            variant="accent" 
+                            size="m"
+                            className="generate-button"
+                            onClick={handleGenerateImage}
+                            disabled={isGenerating || !prompt.trim()}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-icon name={isGenerating ? "ui:Clock" : "ui:Refresh"} size="s" slot="icon"></sp-icon>
+                            {isGenerating ? 'Generating...' : 'Generate'}
+                          {/* @ts-ignore */}
+                          </sp-button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </article>
               </>

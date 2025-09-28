@@ -660,3 +660,230 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   outline-offset: 2px;
   border-radius: $border-radius;
 }
+
+/* =============================================================================
+   Image Generation Form Styles
+   ============================================================================= */
+
+/* Authentication required notice */
+.auth-required {
+  display: flex;
+  align-items: center;
+  padding: $space-200;
+  background-color: var(--theme-bg-layer-1);
+  border: 1px solid var(--theme-warning);
+  border-radius: $border-radius;
+  margin-bottom: $space-300;
+}
+
+/* Generation form */
+.generation-form {
+  .form-group {
+    margin-bottom: $space-400; /* 24px */
+    
+    .form-label {
+      display: block;
+      margin-bottom: $space-100;
+      font-weight: 600;
+      color: var(--theme-font);
+    }
+  }
+
+  /* Prompt input styling */
+  .prompt-input {
+    width: 100%;
+    min-height: 80px;
+    resize: vertical;
+  }
+
+  .character-counter {
+    text-align: right;
+    margin-top: $space-75;
+    color: var(--theme-text-muted);
+    font-size: $font-size-75;
+  }
+
+  /* Style dropdown */
+  .style-dropdown {
+    width: 100%;
+  }
+
+  /* Content type radio group */
+  .content-type-group {
+    display: flex;
+    gap: $space-200;
+    
+    sp-radio {
+      flex: 1;
+      padding: $space-200;
+      border: 1px solid var(--theme-border-subtle);
+      border-radius: $border-radius;
+      background-color: var(--theme-bg-layer-1);
+      transition: all 0.2s ease;
+      cursor: pointer;
+      
+      &:hover {
+        background-color: var(--theme-bg-layer-2);
+        border-color: var(--theme-accent);
+      }
+      
+      &[checked] {
+        border-color: var(--theme-accent);
+        background-color: color.mix($active, transparent, 10%);
+      }
+      
+      .radio-label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: $space-50;
+      }
+      
+      .radio-description {
+        color: var(--theme-text-muted);
+        font-size: $font-size-75;
+      }
+    }
+  }
+
+  /* Aspect ratio radio group */
+  .aspect-ratio-group {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: $space-200;
+    
+    sp-radio {
+      border: 1px solid var(--theme-border-subtle);
+      border-radius: $border-radius;
+      background-color: var(--theme-bg-layer-1);
+      transition: all 0.2s ease;
+      cursor: pointer;
+      
+      &:hover {
+        background-color: var(--theme-bg-layer-2);
+        border-color: var(--theme-accent);
+      }
+      
+      &[checked] {
+        border-color: var(--theme-accent);
+        background-color: color.mix($active, transparent, 10%);
+      }
+    }
+    
+    .aspect-option {
+      display: flex;
+      align-items: center;
+      padding: $space-200;
+      gap: $space-200;
+    }
+    
+    .aspect-visual {
+      width: 32px;
+      height: 32px;
+      border: 2px solid var(--theme-border);
+      border-radius: $border-radius-sm;
+      flex-shrink: 0;
+      
+      &.square {
+        width: 24px;
+        height: 24px;
+      }
+      
+      &.landscape {
+        width: 32px;
+        height: 20px;
+      }
+      
+      &.portrait {
+        width: 20px;
+        height: 32px;
+      }
+      
+      &.ultrawide {
+        width: 40px;
+        height: 16px;
+      }
+    }
+    
+    .aspect-info {
+      .aspect-label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: $space-25;
+      }
+      
+      .aspect-size {
+        color: var(--theme-text-muted);
+        font-size: $font-size-75;
+      }
+    }
+  }
+
+  /* Size presets */
+  .size-presets {
+    display: flex;
+    gap: $space-200;
+    
+    sp-radio {
+      flex: 1;
+      text-align: center;
+      padding: $space-200 $space-100;
+      border: 1px solid var(--theme-border-subtle);
+      border-radius: $border-radius;
+      background-color: var(--theme-bg-layer-1);
+      transition: all 0.2s ease;
+      cursor: pointer;
+      
+      &:hover {
+        background-color: var(--theme-bg-layer-2);
+        border-color: var(--theme-accent);
+      }
+      
+      &[checked] {
+        border-color: var(--theme-accent);
+        background-color: color.mix($active, transparent, 10%);
+        
+        span {
+          color: var(--theme-accent);
+          font-weight: 600;
+        }
+      }
+      
+      span {
+        display: block;
+        margin-bottom: $space-50;
+      }
+    }
+  }
+
+  /* Seed slider */
+  .seed-slider {
+    width: 100%;
+  }
+
+  /* Form actions */
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: $space-500;
+    padding-top: $space-300;
+    border-top: 1px solid var(--theme-border-subtle);
+    
+    .generate-button {
+      min-width: 120px;
+    }
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 400px) {
+  .generation-form {
+    .aspect-ratio-group {
+      grid-template-columns: 1fr;
+    }
+    
+    .content-type-group,
+    .size-presets {
+      flex-direction: column;
+    }
+  }
+}
