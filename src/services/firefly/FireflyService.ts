@@ -561,7 +561,7 @@ export class FireflyService {
     })
 
     // Marketplace Strategy: Use presigned URLs directly (external server will handle Azure upload)
-    const results = outputs.map((output) => {
+    const results = await Promise.all(outputs.map(async (output) => {
       const presignedUrl = output.image.presignedUrl || output.image.url
       const filename = output.image.filename || `firefly-${crypto.randomUUID()}.jpg`
       
@@ -596,8 +596,27 @@ export class FireflyService {
         status: 'generated' as const
       }
 
+      // Download image and create blob URL for UXP compatibility
+      try {
+        console.warn('📥 Downloading image for UXP compatibility:', result.imageUrl)
+        const response = await fetch(result.imageUrl)
+        if (response.ok) {
+          const blob = await response.blob()
+          const blobUrl = URL.createObjectURL(blob)
+          console.warn('✅ Created blob URL:', blobUrl)
+          
+          // Replace the S3 URL with the blob URL
+          result.imageUrl = blobUrl
+          result.blobUrl = blobUrl
+        } else {
+          console.error('❌ Failed to download image:', response.status, response.statusText)
+        }
+      } catch (error) {
+        console.error('❌ Error downloading image:', error)
+      }
+
       return result
-    })
+    }))
 
     console.warn('✅ All outputs processed with presigned URLs:', {
       resultCount: results.length

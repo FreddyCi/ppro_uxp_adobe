@@ -115,6 +115,7 @@ const manifest: UXP_Manifest = {
         "https://vuejs.org/",
         "https://ims-na1.adobelogin.com", // Adobe IMS Authentication
         "https://firefly-api.adobe.io", // Adobe Firefly API
+        "https://pre-signed-firefly-prod.s3-accelerate.amazonaws.com", // AWS S3 for Firefly images
         "https://generativelanguage.googleapis.com", // Google Gemini API
         "https://fal.run", // Fal.ai API
         "https://uxppanelstorage.blob.core.windows.net", // Azure Blob Storage
