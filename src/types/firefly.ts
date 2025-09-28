@@ -202,6 +202,9 @@ export interface GenerationMetadata {
   userId?: string
   sessionId?: string
   timestamp: number
+  
+  // UXP persistence method
+  persistenceMethod?: 'blob' | 'dataUrl' | 'presigned'
 }
 
 // Service configuration

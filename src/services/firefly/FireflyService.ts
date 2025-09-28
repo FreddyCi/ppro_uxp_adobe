@@ -129,7 +129,8 @@ export class FireflyService {
       // Process outputs if job completed successfully
       const outputs = statusResponse.result?.outputs || statusResponse.outputs
       if (outputs && job.status === 'succeeded') {
-        job.outputs = await this.processGenerationOutputs(outputs, job.request)
+        // Use presigned URLs directly for immediate viewing (they expire in ~1 hour but show instantly)
+        job.outputs = await this.processGenerationOutputs(outputs, job.request, true)
       }
 
       console.warn('Firefly job status updated:', {
@@ -544,10 +545,12 @@ export class FireflyService {
 
   private async processGenerationOutputs(
     outputs: OutputImageV3[],
-    request: FireflyGenerationRequest
+    request: FireflyGenerationRequest,
+    usePresignedUrls = false // Option to use presigned URLs directly
   ): Promise<GenerationResult[]> {
     console.warn('Processing generation outputs with presigned URLs:', {
       outputCount: outputs.length,
+      usePresignedUrls,
       outputs: outputs.map(output => ({
         image: {
           url: output.image?.url,
@@ -560,21 +563,15 @@ export class FireflyService {
       }))
     })
 
-    // Marketplace Strategy: Use presigned URLs directly (external server will handle Azure upload)
     const results = await Promise.all(outputs.map(async (output) => {
       const presignedUrl = output.image.presignedUrl || output.image.url
       const filename = output.image.filename || `firefly-${crypto.randomUUID()}.jpg`
       
-      console.warn('Processing image with presigned URL for marketplace deployment:', {
-        presignedUrl: presignedUrl.substring(0, 100) + '...',
-        filename
-      })
-      
-      // Return result with presigned URL for immediate display
+      // Create base result with presigned URL
       const result: GenerationResult = {
         id: crypto.randomUUID(),
-        imageUrl: presignedUrl, // Use presigned URL directly
-        downloadUrl: presignedUrl, // Keep same URL for download
+        imageUrl: presignedUrl, // Start with presigned URL
+        downloadUrl: presignedUrl, // Keep original for download
         seed: output.seed,
         metadata: {
           prompt: request.prompt,
@@ -590,36 +587,85 @@ export class FireflyService {
           fileSize: output.image.size,
           userId: request.userId,
           sessionId: request.sessionId,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          persistenceMethod: 'presigned' // Default to presigned
         },
         timestamp: Date.now(),
         status: 'generated' as const
       }
 
-      // Download image and create blob URL for UXP compatibility
+      // If using presigned URLs directly, return without processing
+      if (usePresignedUrls) {
+        console.warn('🔗 Using presigned URL directly for immediate viewing:', {
+          presignedUrl: presignedUrl.substring(0, 100) + '...',
+          filename
+        })
+        return result
+      }
+
+      // Otherwise, download and create UXP-compatible URL (blob URL with data URL fallback)
       try {
         console.warn('📥 Downloading image for UXP compatibility:', result.imageUrl)
         const response = await fetch(result.imageUrl)
         if (response.ok) {
           const blob = await response.blob()
-          const blobUrl = URL.createObjectURL(blob)
-          console.warn('✅ Created blob URL:', blobUrl)
           
-          // Replace the S3 URL with the blob URL
-          result.imageUrl = blobUrl
-          result.blobUrl = blobUrl
+          // Try to create blob URL first
+          let persistentUrl: string
+          let persistenceMethod: 'blob' | 'dataUrl' | 'presigned' = 'presigned'
+          
+          try {
+            const blobUrl = URL.createObjectURL(blob)
+            console.warn('✅ Created blob URL:', blobUrl)
+            
+            // Check if UXP created a malformed blob URL (like "blob:/blob-1")
+            if (blobUrl.startsWith('blob:/') && !blobUrl.includes('http')) {
+              console.warn('⚠️ UXP created malformed blob URL, falling back to data URL:', blobUrl)
+              throw new Error('Malformed UXP blob URL detected')
+            }
+            
+            persistentUrl = blobUrl
+            persistenceMethod = 'blob'
+          } catch (blobError) {
+            console.warn('⚠️ Blob URL creation failed, falling back to data URL:', blobError)
+            
+            // Fallback to data URL for UXP compatibility
+            const reader = new FileReader()
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string)
+              reader.onerror = () => reject(reader.error)
+              reader.readAsDataURL(blob)
+            })
+            
+            persistentUrl = dataUrl
+            persistenceMethod = 'dataUrl'
+            console.warn('✅ Created data URL fallback:', dataUrl.substring(0, 50) + '...')
+          }
+          
+          // Replace the S3 URL with the persistent URL
+          result.imageUrl = persistentUrl
+          result.blobUrl = persistentUrl
+          result.metadata.persistenceMethod = persistenceMethod
+          
+          console.warn('✅ Image URL processed:', {
+            method: persistenceMethod,
+            urlPreview: persistentUrl.substring(0, 50) + '...'
+          })
         } else {
           console.error('❌ Failed to download image:', response.status, response.statusText)
+          console.warn('⚠️ Keeping presigned URL as fallback')
         }
       } catch (error) {
         console.error('❌ Error downloading image:', error)
+        console.warn('⚠️ Keeping presigned URL as fallback')
       }
 
       return result
     }))
 
-    console.warn('✅ All outputs processed with presigned URLs:', {
-      resultCount: results.length
+    console.warn('✅ All outputs processed:', {
+      resultCount: results.length,
+      processingMode: usePresignedUrls ? 'presigned-direct' : 'blob-with-fallback'
     })
 
     return results

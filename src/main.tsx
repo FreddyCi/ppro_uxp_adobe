@@ -261,6 +261,99 @@ const AppContent = () => {
                         <span>Clear</span>
                       {/* @ts-ignore */}
                       </sp-action-button>
+                      
+                      {/* Clean Images Button */}
+                      {/* @ts-ignore */}
+                      <sp-action-button 
+                        onClick={() => {
+                          const { cleanupInvalidBlobUrls } = useGenerationStore.getState().actions;
+                          cleanupInvalidBlobUrls();
+                          showInfo('Image Cleanup', 'Cleaned up invalid blob URLs');
+                        }}
+                        variant="secondary"
+                        size="s"
+                      >
+                        {/* @ts-ignore */}
+                        <sp-icon name="ui:Refresh" size="s" slot="icon"></sp-icon>
+                        <span>Clean URLs</span>
+                      {/* @ts-ignore */}
+                      </sp-action-button>
+
+                      {/* Log Images Button */}
+                      {/* @ts-ignore */}
+                      <sp-action-button 
+                        onClick={() => {
+                          const { generationHistory } = useGenerationStore.getState();
+                          console.warn('📊 Current stored images:', {
+                            totalCount: generationHistory.length,
+                            images: generationHistory.map((gen: any) => ({
+                              id: gen.id,
+                              imageUrl: gen.imageUrl,
+                              downloadUrl: gen.downloadUrl,
+                              isBlobUrl: gen.imageUrl.startsWith('blob:'),
+                              isDataUrl: gen.imageUrl.startsWith('data:'),
+                              isPresignedUrl: gen.imageUrl.startsWith('https://pre-signed-firefly-prod'),
+                              urlType: gen.imageUrl.startsWith('blob:') ? 'blob' : 
+                                      gen.imageUrl.startsWith('data:') ? 'data' : 
+                                      gen.imageUrl.startsWith('http') ? 'presigned' : 'unknown',
+                              urlPreview: gen.imageUrl.substring(0, 50) + '...',
+                              downloadUrlPreview: gen.downloadUrl ? gen.downloadUrl.substring(0, 50) + '...' : 'none',
+                              persistenceMethod: gen.metadata?.persistenceMethod || 'unknown',
+                              timestamp: gen.timestamp,
+                              prompt: gen.metadata?.prompt || 'No prompt'
+                            }))
+                          });
+                          showInfo('Debug', 'Image details logged to console');
+                        }}
+                        variant="secondary"
+                        size="s"
+                      >
+                        {/* @ts-ignore */}
+                        <sp-icon name="ui:Info" size="s" slot="icon"></sp-icon>
+                        <span>Log Images</span>
+                      {/* @ts-ignore */}
+                      </sp-action-button>
+
+                      {/* Switch to Presigned URLs Button */}
+                      {/* @ts-ignore */}
+                      <sp-action-button 
+                        onClick={() => {
+                          const store = useGenerationStore.getState();
+                          const { generationHistory } = store;
+                          
+                          // Update images to use downloadUrl (presigned URL) instead of processed URL
+                          const updatedHistory = generationHistory.map((gen: any) => {
+                            if (gen.downloadUrl && gen.downloadUrl !== gen.imageUrl) {
+                              console.warn('🔄 Switching to presigned URL for:', {
+                                prompt: gen.metadata?.prompt,
+                                from: gen.imageUrl.substring(0, 50) + '...',
+                                to: gen.downloadUrl.substring(0, 50) + '...'
+                              });
+                              return {
+                                ...gen,
+                                imageUrl: gen.downloadUrl, // Use presigned URL for display
+                                metadata: {
+                                  ...gen.metadata,
+                                  persistenceMethod: 'presigned'
+                                }
+                              };
+                            }
+                            return gen;
+                          });
+                          
+                          // Update the store with presigned URLs
+                          store.generationHistory = updatedHistory;
+                          
+                          showSuccess('Images Updated', 'Switched to presigned URLs for immediate viewing');
+                        }}
+                        variant="secondary"
+                        size="s"
+                      >
+                        {/* @ts-ignore */}
+                        <sp-icon name="ui:Link" size="s" slot="icon"></sp-icon>
+                        <span>Use Presigned</span>
+                      {/* @ts-ignore */}
+                      </sp-action-button>
                     </div>
 
                     {/* Status Section */}

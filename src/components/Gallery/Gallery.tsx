@@ -14,82 +14,6 @@ interface ImageData {
   tags: string[];
 }
 
-// Mock image data to match the screenshot
-const mockImages: ImageData[] = [
-  {
-    id: 1,
-    url: 'https://via.placeholder.com/300x200?text=City+Skyline',
-    prompt: 'City skyline at sunset with reflections in water',
-    contentType: 'art',
-    aspectRatio: 'landscape',
-    createdAt: new Date('2024-01-15'),
-    tags: ['city', 'sunset', 'urban']
-  },
-  {
-    id: 2,
-    url: 'https://via.placeholder.com/300x300?text=Creature',
-    prompt: 'Mystical forest creature with glowing eyes',
-    contentType: 'art',
-    aspectRatio: 'square',
-    createdAt: new Date('2024-01-14'),
-    tags: ['creature', 'fantasy', 'forest']
-  },
-  {
-    id: 3,
-    url: 'https://via.placeholder.com/300x300?text=Leaf+Frame',
-    prompt: 'Elegant leaf in white frame',
-    contentType: 'art',
-    aspectRatio: 'square',
-    createdAt: new Date('2024-01-13'),
-    tags: ['leaf', 'minimal', 'nature']
-  },
-  {
-    id: 4,
-    url: 'https://via.placeholder.com/300x200?text=Lake+Sunset',
-    prompt: 'Peaceful lake at sunset with reeds',
-    contentType: 'photo',
-    aspectRatio: 'landscape',
-    createdAt: new Date('2024-01-12'),
-    tags: ['lake', 'sunset', 'peaceful']
-  },
-  {
-    id: 5,
-    url: 'https://via.placeholder.com/300x200?text=City+Street',
-    prompt: 'Modern city street with neon lights',
-    contentType: 'photo',
-    aspectRatio: 'landscape',
-    createdAt: new Date('2024-01-11'),
-    tags: ['city', 'street', 'neon']
-  },
-  {
-    id: 6,
-    url: 'https://via.placeholder.com/300x300?text=Astronaut',
-    prompt: 'Astronaut portrait in space suit',
-    contentType: 'art',
-    aspectRatio: 'square',
-    createdAt: new Date('2024-01-10'),
-    tags: ['astronaut', 'space', 'portrait']
-  },
-  {
-    id: 7,
-    url: 'https://via.placeholder.com/300x200?text=Forest+Path',
-    prompt: 'Enchanted forest path with tall trees',
-    contentType: 'photo',
-    aspectRatio: 'landscape',
-    createdAt: new Date('2024-01-09'),
-    tags: ['forest', 'path', 'trees']
-  },
-  {
-    id: 8,
-    url: 'https://via.placeholder.com/300x300?text=Robot',
-    prompt: 'Friendly robot character design',
-    contentType: 'art',
-    aspectRatio: 'square',
-    createdAt: new Date('2024-01-08'),
-    tags: ['robot', 'character', 'friendly']
-  }
-];
-
 interface GalleryProps {}
 
 export const Gallery = () => {
@@ -120,8 +44,8 @@ export const Gallery = () => {
     }));
   }, [generationHistory]);
 
-  // Use real images if available, fallback to mock images for demo
-  const imagesToUse = storeImages.length > 0 ? storeImages : mockImages;
+  // Use only real images from the generation store
+  const imagesToUse = storeImages;
 
   // Filter and sort images
   const filteredImages = useMemo(() => {
@@ -367,7 +291,49 @@ export const Gallery = () => {
           {filteredImages.map((image: ImageData) => (
             <div key={image.id} className="gallery-item">
               <div className="item-image" onClick={() => handleImageClick(image.id)}>
-                <img src={image.url} alt={image.prompt} />
+                <img 
+                  src={image.url} 
+                  alt={image.prompt}
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    console.warn('❌ Image failed to load:', {
+                      originalSrc: target.src,
+                      prompt: image.prompt
+                    });
+                    
+                    // Try to find the original generation result to get downloadUrl
+                    const originalResult = generationHistory.find((result: any) => 
+                      result.metadata.prompt === image.prompt
+                    );
+                    
+                    if (originalResult?.downloadUrl && target.src !== originalResult.downloadUrl) {
+                      console.warn('🔄 Trying downloadUrl fallback:', originalResult.downloadUrl);
+                      target.src = originalResult.downloadUrl;
+                    } else {
+                      // Show error placeholder
+                      target.style.backgroundColor = '#f0f0f0';
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent && !parent.querySelector('.error-placeholder')) {
+                        const placeholder = document.createElement('div');
+                        placeholder.className = 'error-placeholder';
+                        placeholder.style.cssText = `
+                          width: 100%; height: 200px; background: #f0f0f0; 
+                          display: flex; align-items: center; justify-content: center;
+                          color: #666; font-size: 14px; text-align: center;
+                        `;
+                        placeholder.innerHTML = `
+                          <div>
+                            <div>🖼️</div>
+                            <div>Image unavailable</div>
+                            <div style="font-size: 12px; margin-top: 4px;">URL expired</div>
+                          </div>
+                        `;
+                        parent.appendChild(placeholder);
+                      }
+                    }
+                  }}
+                />
                 <div className="item-overlay">
                   {/* @ts-ignore */}
                   <sp-action-button quiet>
