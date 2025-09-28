@@ -6,7 +6,7 @@ import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
 import { FireflyService } from "./services/firefly";
 import { useGenerationStore } from "./store/generationStore";
-import { SunIcon, MoonIcon, LogoutIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
+import { SunIcon, MoonIcon, LogoutIcon, RefreshIcon, CloseIcon, LinkIcon, AlertIcon, InfoIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
 import "./layout.scss";
 
 const AppContent = () => {
@@ -256,8 +256,7 @@ const AppContent = () => {
                         variant="secondary"
                         size="s"
                       >
-                        {/* @ts-ignore */}
-                        <sp-icon name="ui:Close" size="s" slot="icon"></sp-icon>
+                        <CloseIcon size={14} className="theme-icon" />
                         <span>Clear</span>
                       {/* @ts-ignore */}
                       </sp-action-button>
@@ -273,8 +272,7 @@ const AppContent = () => {
                         variant="secondary"
                         size="s"
                       >
-                        {/* @ts-ignore */}
-                        <sp-icon name="ui:Refresh" size="s" slot="icon"></sp-icon>
+                        <RefreshIcon size={14} className="theme-icon" />
                         <span>Clean URLs</span>
                       {/* @ts-ignore */}
                       </sp-action-button>
@@ -308,8 +306,7 @@ const AppContent = () => {
                         variant="secondary"
                         size="s"
                       >
-                        {/* @ts-ignore */}
-                        <sp-icon name="ui:Info" size="s" slot="icon"></sp-icon>
+                        <InfoIcon size={14} className="theme-icon" />
                         <span>Log Images</span>
                       {/* @ts-ignore */}
                       </sp-action-button>
@@ -349,8 +346,7 @@ const AppContent = () => {
                         variant="secondary"
                         size="s"
                       >
-                        {/* @ts-ignore */}
-                        <sp-icon name="ui:Link" size="s" slot="icon"></sp-icon>
+                        <LinkIcon size={14} className="theme-icon" />
                         <span>Use Presigned</span>
                       {/* @ts-ignore */}
                       </sp-action-button>
@@ -588,8 +584,12 @@ const AppContent = () => {
                             onClick={handleGenerateImage}
                             disabled={isGenerating || !prompt.trim()}
                           >
-                            {/* @ts-ignore */}
-                            <sp-icon name={isGenerating ? "ui:Clock" : "ui:Refresh"} size="s" slot="icon"></sp-icon>
+                            {isGenerating ? (
+                              /* @ts-ignore */
+                              <sp-icon name="ui:Clock" size="s" slot="icon"></sp-icon>
+                            ) : (
+                              <RefreshIcon size={14} className="theme-icon" />
+                            )}
                             {isGenerating ? 'Generating...' : 'Generate'}
                           {/* @ts-ignore */}
                           </sp-button>

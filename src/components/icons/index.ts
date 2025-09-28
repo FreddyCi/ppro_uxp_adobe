@@ -4,3 +4,6 @@ export { CheckmarkCircleIcon } from './CheckmarkCircleIcon';
 export { InfoIcon } from './InfoIcon';
 export { AlertIcon } from './AlertIcon';
 export { LogoutIcon } from './LogoutIcon';
+export { RefreshIcon } from './RefreshIcon';
+export { CloseIcon } from './CloseIcon';
+export { LinkIcon } from './LinkIcon';
