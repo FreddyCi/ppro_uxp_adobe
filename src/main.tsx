@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import { uxp, premierepro } from "./globals";
 import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
+import { FireflyService } from "./services/firefly";
+import { useGenerationStore } from "./store/generationStore";
 import { SunIcon, MoonIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
 import "./layout.scss";
 
@@ -24,6 +26,9 @@ const AppContent = () => {
   
   // Get toast helpers
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
+  
+  // Get generation store actions
+  const { actions: { addGeneration } } = useGenerationStore();
 
   const hostName = (uxp.host.name as string).toLowerCase();
 
@@ -55,22 +60,62 @@ const AppContent = () => {
     try {
       showInfo('Generating Image', `Creating "${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}"`);
       
-      // TODO: Implement actual Firefly API call
-      // const fireflyService = new FireflyService(imsToken);
-      // const result = await fireflyService.generateImage({
-      //   prompt,
-      //   stylePreset,
-      //   contentType,
-      //   aspectRatio,
-      //   seed: seedValue > 0 ? seedValue : undefined
-      // });
+      console.log('🎨 Starting Firefly image generation...');
+      console.log('📝 Generation parameters:', {
+        prompt: prompt,
+        stylePreset: stylePreset,
+        contentType: contentType,
+        aspectRatio: aspectRatio,
+        seed: seedValue > 0 ? seedValue : undefined
+      });
       
-      // Simulate generation for now
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Create Firefly service with IMS token
+      const imsService = createIMSService();
+      const fireflyService = new FireflyService(imsService);
       
-      showSuccess('Image Generated', 'Your image has been created successfully!');
+      // Build generation request
+      const generationRequest = {
+        prompt: prompt,
+        contentClass: contentType as 'photo' | 'art',
+        size: aspectRatio === '1:1' ? { width: 1024, height: 1024 } :
+              aspectRatio === '16:9' ? { width: 1920, height: 1080 } :
+              aspectRatio === '9:16' ? { width: 1080, height: 1920 } :
+              { width: 1024, height: 1024 }, // default to square
+        numVariations: 1,
+        seeds: seedValue > 0 ? [seedValue] : undefined
+      };
+      
+      console.log('🚀 Sending generation request:', generationRequest);
+      
+      // Call Firefly API
+      const response = await fireflyService.generateImage(generationRequest);
+      console.log('✅ Firefly API response received:', response);
+      
+      // Poll for completion
+      const completedJob = await fireflyService.pollUntilComplete(response.data.jobId);
+      console.log('🎉 Generation completed:', completedJob);
+      
+      if (completedJob.outputs && completedJob.outputs.length > 0) {
+        const generationResult = completedJob.outputs[0];
+        console.log('🖼️ Generated image result:', generationResult);
+        
+        // Add to generation store
+        addGeneration(generationResult);
+        
+        showSuccess('Image Generated', 'Your image has been created successfully!');
+      } else {
+        throw new Error('No images were generated');
+      }
+      
     } catch (error: any) {
-      console.error('Image generation failed:', error);
+      console.error('❌ Image generation failed:', error);
+      console.error('🔍 Error details:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        stack: error.stack
+      });
       showError('Generation Failed', error.message || 'An unexpected error occurred.');
     } finally {
       setIsGenerating(false);

@@ -114,6 +114,7 @@ const manifest: UXP_Manifest = {
         "https://reactjs.org",
         "https://vuejs.org/",
         "https://ims-na1.adobelogin.com", // Adobe IMS Authentication
+        "https://firefly-api.adobe.io", // Adobe Firefly API
         "https://generativelanguage.googleapis.com", // Google Gemini API
         "https://fal.run", // Fal.ai API
         "https://uxppanelstorage.blob.core.windows.net", // Azure Blob Storage

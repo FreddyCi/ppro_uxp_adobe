@@ -17,7 +17,7 @@ import type {
   CustomModelsFF3pInfo,
   GenerateImagesRequestV3
 } from '../../types/firefly'
-import type { IMSService } from '../ims/IMSService'
+import type { IIMSService } from '../ims/IMSService'
 
 /**
  * FireflyService handles Adobe Firefly v3 API interactions
@@ -25,11 +25,11 @@ import type { IMSService } from '../ims/IMSService'
  */
 export class FireflyService {
   private readonly config: FireflyServiceConfig
-  private readonly imsService: IMSService
+  private readonly imsService: IIMSService
   private activeJobs = new Map<string, FireflyGenerationJob>()
   private rateLimitInfo: RateLimitInfo | null = null
 
-  constructor(imsService: IMSService, config: Partial<FireflyServiceConfig> = {}) {
+  constructor(imsService: IIMSService, config: Partial<FireflyServiceConfig> = {}) {
     this.imsService = imsService
     this.config = {
       apiUrl: 'https://firefly-api.adobe.io',
