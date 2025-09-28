@@ -127,6 +127,18 @@ svg {
   }
 }
 
+.theme-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  transition: color 0.2s ease;
+
+  path {
+    fill: currentColor !important;
+  }
+}
+
 /* Gallery Preview Flex */
 .gallery-preview {
   display: flex;
@@ -444,20 +456,54 @@ svg {
 sp-action-button {
   /* Theme-aware action button colors */
   --spectrum-actionbutton-background-color: var(--theme-button-bg);
+  --spectrum-actionbutton-background-color-hover: var(--theme-button-bg-hover);
   --spectrum-actionbutton-border-color: var(--theme-border);
+  --spectrum-actionbutton-border-color-hover: var(--theme-accent);
+  --spectrum-actionbutton-border-color-key-focus: var(--theme-accent);
   --spectrum-actionbutton-text-color: var(--theme-font);
-  
-  /* Add padding for better spacing */
+  --spectrum-actionbutton-text-color-hover: var(--theme-font);
+  --spectrum-actionbutton-quiet-text-color: var(--theme-highlight);
+
+  color: var(--spectrum-actionbutton-text-color);
   padding: $space-200 $space-300;
-  
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+
   &:hover {
+    color: var(--spectrum-actionbutton-text-color-hover);
+  }
+
+  &[variant="secondary"] {
+    --spectrum-actionbutton-text-color: var(--theme-highlight);
+    --spectrum-actionbutton-text-color-hover: var(--theme-font);
+    --spectrum-actionbutton-border-color: var(--theme-border-subtle);
+    --spectrum-actionbutton-border-color-hover: var(--theme-border);
+  }
+
+  &[quiet] {
+    --spectrum-actionbutton-background-color: transparent;
     --spectrum-actionbutton-background-color-hover: var(--theme-button-bg-hover);
-    --spectrum-actionbutton-border-color-hover: var(--theme-accent);
+    --spectrum-actionbutton-border-color: transparent;
+    --spectrum-actionbutton-border-color-hover: var(--theme-border-subtle);
+    color: var(--theme-highlight);
   }
-  
+
   &[disabled] {
-    opacity: 0.5;
+    opacity: 0.45;
+    cursor: not-allowed;
   }
+}
+
+sp-action-button .theme-icon {
+  color: inherit;
+  margin-right: $space-100;
+}
+
+sp-action-button:hover .theme-icon {
+  color: inherit;
+}
+
+sp-action-button .theme-icon:last-child {
+  margin-right: 0;
 }
 
 sp-divider {
