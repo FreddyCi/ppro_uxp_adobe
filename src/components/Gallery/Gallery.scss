@@ -446,23 +446,6 @@
 
       sp-textarea {
         width: 100%;
-
-        &::part(textarea) {
-          min-height: 120px;
-          resize: vertical;
-          padding: $space-200;
-          font-family: inherit;
-          font-size: $font-size-100;
-          line-height: 1.4;
-          color: var(--theme-font);
-          background: var(--theme-bg-layer-2);
-          border-radius: $border-radius;
-        }
-
-        &[disabled] {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
       }
 
       .character-counter {
