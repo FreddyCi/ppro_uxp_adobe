@@ -196,6 +196,17 @@ export const Gallery = () => {
     setIsCorrecting(false);
   }, []);
 
+  const handlePromptChange = useCallback((event: any) => {
+    const targetValue =
+      typeof event?.target?.value === 'string'
+        ? event.target.value
+        : typeof event?.detail?.value === 'string'
+          ? event.detail.value
+          : '';
+
+    setCorrectionPrompt(targetValue);
+  }, []);
+
   const getImageDimensions = useCallback((url: string) => {
     return new Promise<{ width: number; height: number; aspectRatio: number } | null>((resolve) => {
       const img = new Image();
@@ -460,8 +471,7 @@ export const Gallery = () => {
         <div className="gallery-grid">
           {filteredImages.map((image: ImageData) => (
             <div key={image.id} className="gallery-item">
-              <div className="item-content">
-                <div className="item-image">
+              <div className="item-image">
                 <img 
                   src={image.url} 
                   alt={image.prompt}
@@ -489,7 +499,7 @@ export const Gallery = () => {
                         const placeholder = document.createElement('div');
                         placeholder.className = 'error-placeholder';
                         placeholder.style.cssText = `
-                          width: 100%; height: 100%; background: #f0f0f0; 
+                          width: 100%; height: 200px; background: #f0f0f0; 
                           display: flex; align-items: center; justify-content: center;
                           color: #666; font-size: 14px; text-align: center;
                         `;
@@ -505,27 +515,26 @@ export const Gallery = () => {
                     }
                   }}
                 />
+              </div>
+              <div className="item-info">
+                <div className="item-prompt">{image.prompt}</div>
+                <div className="item-meta">
+                  <span className="item-type">{image.contentType}</span>
+                  <span className="item-date">{new Date(image.createdAt).toLocaleDateString()}</span>
                 </div>
-                <div className="item-info">
-                  <div className="item-prompt">{image.prompt}</div>
-                  <div className="item-meta">
-                    <span className="item-type">{image.contentType}</span>
-                    <span className="item-date">{new Date(image.createdAt).toLocaleDateString()}</span>
+                {image.source === 'generated' && (
+                  <div className="item-actions">
+                    {/* @ts-ignore */}
+                    <sp-button
+                      variant="secondary"
+                      size="s"
+                      onClick={() => handleOpenCorrectionDialog(image)}
+                    >
+                      Enhance with Gemini
+                    {/* @ts-ignore */}
+                    </sp-button>
                   </div>
-                  {image.source === 'generated' && (
-                    <div className="item-actions">
-                      {/* @ts-ignore */}
-                      <sp-button
-                        variant="secondary"
-                        size="s"
-                        onClick={() => handleOpenCorrectionDialog(image)}
-                      >
-                        Enhance with Gemini
-                      {/* @ts-ignore */}
-                      </sp-button>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           ))}
@@ -580,12 +589,15 @@ export const Gallery = () => {
                   <sp-label className="form-label">Tell Gemini what to enhance</sp-label>
                   {/* @ts-ignore */}
                   <sp-textarea
+                    key={selectedImage.id}
+                    className="prompt-textarea"
                     multiline
                     rows={4}
                     maxlength={500}
                     value={correctionPrompt}
                     placeholder="Add or refine the prompt that Gemini should follow..."
-                    onInput={(event: any) => setCorrectionPrompt(event.target.value)}
+                    onInput={handlePromptChange}
+                    onChange={handlePromptChange}
                     disabled={isCorrecting}
                   >
                   {/* @ts-ignore */}
