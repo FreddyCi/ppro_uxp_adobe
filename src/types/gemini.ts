@@ -127,6 +127,9 @@ export interface CorrectedImage {
   localMetadataPath?: string
   storageMode?: 'azure' | 'local'
   persistenceMethod?: 'blob' | 'dataUrl' | 'presigned' | 'local'
+  // UXP-specific fields for token-based file access
+  folderToken?: string
+  relativePath?: string
 }
 
 // Before/After Comparison for UI

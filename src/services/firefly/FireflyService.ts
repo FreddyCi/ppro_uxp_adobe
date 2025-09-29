@@ -619,6 +619,7 @@ export class FireflyService {
                 result.metadata.localPersistenceProvider = saveResult.provider
                 result.metadata.folderToken = saveResult.folderToken ?? null
                 result.metadata.localBaseFolder = saveResult.baseFolder ?? undefined
+                result.metadata.relativePath = saveResult.relativePath
                 result.localPath = saveResult.filePath
                 result.downloadUrl = saveResult.filePath
                 const providerLabel = saveResult.provider === 'bolt'

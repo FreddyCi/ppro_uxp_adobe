@@ -9,6 +9,8 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import type { GenerationResult } from '../types/firefly'
 import type { CorrectedImage } from '../types/gemini'
 import type { VideoMetadata } from '../types/blob'
+import { storage } from 'uxp'
+import { toTempUrl } from '../utils/uxpFs'
 
 // Extended types for Azure Storage integration
 export interface AzureBlobMetadata {
@@ -104,6 +106,7 @@ export interface GalleryStore {
 
     // Data management
     refreshGallery: () => Promise<void>
+    syncLocalFiles: () => Promise<void>
     clearAll: () => void
     setLoading: (loading: boolean) => void
     setError: (error: string | null) => void
@@ -547,6 +550,53 @@ export const useGalleryStore = create<GalleryStore>()(
           }
         },
 
+        async syncLocalFiles(): Promise<void> {
+          set({ isLoading: true, error: null })
+
+          try {
+            const syncedItems = await scanAndLoadLocalFiles()
+            if (syncedItems.length > 0) {
+              // Add new items to gallery, avoiding duplicates
+              const state = get()
+              const existingIds = new Set([
+                ...state.images.map(img => img.id),
+                ...state.correctedImages.map(img => img.id)
+              ])
+
+              const newCorrectedImages = syncedItems.filter(item => !existingIds.has(item.id))
+
+              if (newCorrectedImages.length > 0) {
+                set(state => ({
+                  correctedImages: [...newCorrectedImages, ...state.correctedImages],
+                  totalItems: getAllItems({
+                    ...state,
+                    correctedImages: [...newCorrectedImages, ...state.correctedImages]
+                  }).length,
+                }))
+                console.warn(`✅ Synced ${newCorrectedImages.length} local files to gallery`)
+              } else {
+                console.warn('ℹ️ No new local files to sync')
+              }
+            }
+
+            set({
+              isLoading: false,
+              lastRefresh: new Date(),
+              error: null,
+            })
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : 'Failed to sync local files'
+            console.error('❌ Sync local files failed:', error)
+            set({
+              isLoading: false,
+              error: errorMessage,
+            })
+          }
+        },
+
         clearAll(): void {
           set({
             images: [],
@@ -702,6 +752,144 @@ export const useGalleryDisplayItems = () => {
       totalPages: Math.ceil(sorted.length / state.itemsPerPage),
     }
   })
+}
+
+// Hydrate gallery items with temporary URLs for local files
+export async function loadGalleryItems(rawItems: GalleryItem[]): Promise<GalleryItem[]> {
+  return Promise.all(
+    rawItems.map(async it => {
+      // For corrected images with local storage
+      if ('storageMode' in it && it.storageMode === 'local' && 'folderToken' in it && 'relativePath' in it && it.folderToken && it.relativePath) {
+        try {
+          const src = await toTempUrl(it.folderToken, it.relativePath)
+          return { ...it, correctedUrl: src, thumbnailUrl: src }
+        } catch (e) {
+          console.warn('Failed to create temporary URL for local corrected image', it.relativePath, e)
+          return { ...it, broken: true }
+        }
+      }
+      // For generation results with local storage
+      else if ('metadata' in it && it.metadata && 'storageMode' in it.metadata && it.metadata.storageMode === 'local' && 'folderToken' in it.metadata && 'relativePath' in it.metadata && it.metadata.folderToken && it.metadata.relativePath) {
+        try {
+          const src = await toTempUrl(it.metadata.folderToken, it.metadata.relativePath)
+          return { ...it, imageUrl: src }
+        } catch (e) {
+          console.warn('Failed to create temporary URL for local generated image', it.metadata.relativePath, e)
+          return { ...it, broken: true }
+        }
+      }
+      return it // Cloud items already have durable URLs
+    })
+  )
+}
+
+// Scan local storage directory for metadata files and load corrected images
+async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
+  const fs = storage.localFileSystem
+  const syncedItems: CorrectedImage[] = []
+
+  try {
+    // Get the stored folder token and path
+    const folderToken = localStorage.getItem('boltuxp.localFolderToken')
+    const folderPath = localStorage.getItem('boltuxp.localFolderPath')
+
+    if (!folderToken || !folderPath) {
+      console.warn('No stored folder token or path found for local file sync')
+      return syncedItems
+    }
+
+    // Get the folder entry using the token
+    const folder = await fs.getEntryForPersistentToken(folderToken)
+    if (!folder || !folder.isFolder) {
+      console.warn('Invalid folder token for local file sync')
+      return syncedItems
+    }
+
+    // Recursively scan for JSON metadata files
+    const metadataFiles = await scanForMetadataFiles(folder)
+
+    for (const metadataFile of metadataFiles) {
+      try {
+        // Read and parse metadata file
+        const content = await metadataFile.read()
+        const metadata = JSON.parse(content)
+
+        // Check if this is a Gemini-corrected image
+        if (metadata.filename && metadata.filename.includes('gemini-corrected')) {
+          // Create default corrections if not present in metadata
+          const defaultCorrections = {
+            lineCleanup: true,
+            enhanceDetails: true,
+            noiseReduction: true,
+          };
+
+          // Create CorrectedImage from metadata
+          const correctedImage: CorrectedImage = {
+            id: metadata.id || crypto.randomUUID(),
+            originalUrl: metadata.originalUrl || '',
+            correctedUrl: '', // Will be set by loadGalleryItems
+            thumbnailUrl: '', // Will be set by loadGalleryItems
+            corrections: metadata.corrections || defaultCorrections,
+            metadata: {
+              corrections: metadata.corrections || defaultCorrections,
+              originalSize: metadata.originalSize || { width: 0, height: 0, aspectRatio: 1 },
+              correctedSize: metadata.correctedSize || { width: 0, height: 0, aspectRatio: 1 },
+              model: metadata.model || 'gemini-2.5-flash-image-preview',
+              version: metadata.version || 'v1beta',
+              processingTime: metadata.processingTime || 0,
+              timestamp: new Date(metadata.timestamp || metadata.savedAt || Date.now()),
+              operationsApplied: metadata.operationsApplied || ['lineCleanup', 'enhanceDetails', 'noiseReduction'],
+              resourceUsage: metadata.resourceUsage || { computeTime: 0, memoryUsed: 0 },
+            },
+            timestamp: new Date(metadata.timestamp || metadata.savedAt || Date.now()),
+            blobUrl: metadata.blobUrl || '',
+            filename: metadata.filename,
+            storageLocation: 'local',
+            localFilePath: metadata.filePath,
+            localMetadataPath: metadataFile.nativePath || metadataFile.name,
+            storageMode: 'local',
+            persistenceMethod: 'local',
+            folderToken: metadata.folderToken,
+            relativePath: metadata.relativePath,
+          }
+
+          syncedItems.push(correctedImage)
+        }
+      } catch (error) {
+        console.warn('Failed to parse metadata file:', metadataFile.name, error)
+      }
+    }
+
+    console.warn(`Found ${syncedItems.length} corrected images in local storage`)
+  } catch (error) {
+    console.error('Failed to scan local files:', error)
+  }
+
+  return syncedItems
+}
+
+// Recursively scan directory for .json metadata files
+async function scanForMetadataFiles(folder: any): Promise<any[]> {
+  const metadataFiles: any[] = []
+
+  try {
+    // Get all entries in the folder
+    const entries = await folder.getEntries()
+
+    for (const entry of entries) {
+      if (entry.isFile && entry.name.endsWith('.json')) {
+        metadataFiles.push(entry)
+      } else if (entry.isFolder) {
+        // Recursively scan subfolders
+        const subFiles = await scanForMetadataFiles(entry)
+        metadataFiles.push(...subFiles)
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to scan folder:', folder.name, error)
+  }
+
+  return metadataFiles
 }
 
 export default useGalleryStore

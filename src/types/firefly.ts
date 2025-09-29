@@ -184,6 +184,7 @@ export interface GenerationMetadata {
   localPersistenceProvider?: 'bolt' | 'uxp'
   folderToken?: string | null
   localBaseFolder?: string
+  relativePath?: string
 }
 
 // Service configuration

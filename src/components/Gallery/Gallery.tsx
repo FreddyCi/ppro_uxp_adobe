@@ -1,7 +1,7 @@
 // @ts-ignore
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useGenerationStore } from '../../store/generationStore';
-import { useGalleryStore } from '../../store/galleryStore';
+import { useGalleryStore, loadGalleryItems } from '../../store/galleryStore';
 import { createIMSService } from '../../services/ims/IMSService';
 import type { IMSService as IMSServiceClass } from '../../services/ims/IMSService';
 import { GeminiService } from '../../services/gemini';
@@ -184,6 +184,24 @@ export const Gallery = () => {
   const galleryActions = useGalleryStore(state => state.actions);
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
 
+  // State for hydrated corrected images
+  const [hydratedCorrectedImages, setHydratedCorrectedImages] = useState(correctedImages);
+
+  // Hydrate corrected images on mount and when correctedImages change
+  useEffect(() => {
+    const hydrateImages = async () => {
+      try {
+        const hydrated = await loadGalleryItems(correctedImages);
+        setHydratedCorrectedImages(hydrated as typeof correctedImages);
+      } catch (error) {
+        console.error('Failed to hydrate corrected images:', error);
+        setHydratedCorrectedImages(correctedImages); // Fallback to original
+      }
+    };
+
+    hydrateImages();
+  }, [correctedImages]);
+
   const geminiService = useMemo(() => {
     const imsService = createIMSService();
     return new GeminiService(imsService as unknown as IMSServiceClass);
@@ -218,9 +236,9 @@ export const Gallery = () => {
   }, [generationHistory]);
 
   const correctedGalleryImages = useMemo(() => {
-    return correctedImages.map(image => ({
+    return hydratedCorrectedImages.map(image => ({
       id: image.id,
-      url: image.correctedUrl,
+      url: image.correctedUrl, // Use hydrated URL
       prompt:
         image.metadata?.corrections?.customPrompt ||
         image.metadata?.operationsApplied?.join(', ') ||
@@ -231,11 +249,11 @@ export const Gallery = () => {
       tags: image.metadata?.operationsApplied?.slice(0, 3) || [],
       source: 'corrected' as const,
       parentId: image.parentGenerationId,
-      localFilePath: image.localFilePath,
+      localFilePath: image.localFilePath || image.correctedUrl,
       storageMode: image.storageMode,
       persistenceMethod: image.persistenceMethod,
     }));
-  }, [correctedImages]);
+  }, [hydratedCorrectedImages]);
 
   // Use only real images from the generation store
   const imagesToUse = useMemo(() => {
@@ -447,6 +465,8 @@ export const Gallery = () => {
       return;
     }
 
+    let correctionSucceeded = false;
+
     try {
       setIsCorrecting(true);
       showInfo('Enhancing image', 'Gemini is applying your corrections...');
@@ -477,6 +497,26 @@ export const Gallery = () => {
         imageBlob = await response.blob();
       }
 
+      const sourcePath = selectedImage.localFilePath || selectedImage.url;
+      const inferredMime = inferMimeType(sourcePath);
+      const originalMime = imageBlob.type;
+      const resolvedMime =
+        originalMime && originalMime.startsWith('image/')
+          ? originalMime
+          : inferredMime && inferredMime.startsWith('image/')
+            ? inferredMime
+            : 'image/jpeg';
+
+      if (!originalMime || originalMime !== resolvedMime) {
+        const arrayBuffer = await imageBlob.arrayBuffer();
+        imageBlob = new Blob([arrayBuffer], { type: resolvedMime });
+        console.warn('ℹ️ Normalized image blob MIME type for Gemini correction', {
+          originalType: originalMime,
+          resolvedMime,
+          sourcePath,
+        });
+      }
+
       const result = await geminiService.correctImage(imageBlob, params);
 
       if (!result.success || !result.data) {
@@ -484,13 +524,19 @@ export const Gallery = () => {
       }
 
       const correctedImage = result.data;
+      const previewUrl = correctedImage.blobUrl || correctedImage.correctedUrl;
+      const persistedUrl =
+        correctedImage.localFilePath || correctedImage.correctedUrl || previewUrl;
       const originalSize = await getImageDimensions(selectedImage.url);
-      const correctedSize = await getImageDimensions(correctedImage.correctedUrl);
+      const correctedSize = await getImageDimensions(previewUrl || persistedUrl);
 
       const enhancedImage = {
         ...correctedImage,
         originalUrl: selectedImage.url,
-        thumbnailUrl: correctedImage.thumbnailUrl || correctedImage.correctedUrl,
+        correctedUrl: persistedUrl,
+        thumbnailUrl:
+          correctedImage.thumbnailUrl || previewUrl || persistedUrl,
+        blobUrl: previewUrl || persistedUrl,
         parentGenerationId:
           selectedImage.source === 'generated'
             ? selectedImage.id
@@ -507,12 +553,25 @@ export const Gallery = () => {
 
       galleryActions.addCorrectedImage(enhancedImage);
 
+      console.warn('🖼️ Gemini: Added corrected image to gallery store', {
+        id: enhancedImage.id,
+        displayUrl: enhancedImage.correctedUrl,
+        previewUrl,
+        localFilePath: enhancedImage.localFilePath,
+      });
+
+      correctionSucceeded = true;
+
       showSuccess('Correction complete', 'Gemini created a refined version in your gallery.');
-      resetCorrectionDialog();
     } catch (error: any) {
       console.error('Gemini correction failed:', error);
       showError('Correction failed', error?.message || 'Unable to correct the image right now.');
-      setIsCorrecting(false);
+    } finally {
+      if (correctionSucceeded) {
+        resetCorrectionDialog();
+      } else {
+        setIsCorrecting(false);
+      }
     }
   }, [
     selectedImage,
@@ -665,6 +724,23 @@ export const Gallery = () => {
             </sp-picker>
           </div>
           <div className="gallery-actions">
+            {/* @ts-ignore */}
+            <sp-button
+              variant="secondary"
+              size="s"
+              onClick={async () => {
+                try {
+                  await galleryActions.syncLocalFiles();
+                  showSuccess('Sync complete', 'Local files have been synced to the gallery.');
+                } catch (error) {
+                  console.error('Sync failed:', error);
+                  showError('Sync failed', 'Could not sync local files. Check the console for details.');
+                }
+              }}
+            >
+              Sync local files
+            {/* @ts-ignore */}
+            </sp-button>
             {/* @ts-ignore */}
             <sp-button
               variant="secondary"
