@@ -16,5 +16,8 @@ export * from './gemini'
 // FAL.ai Video Generation service - T023: Implement FAL.ai Video Builder
 export * from './fal'
 
+// LTX Video generation service - T0XX: Integrate LTX text-to-video API
+export * from './ltx'
+
 // TODO: Uncomment these as services are implemented in their respective tasks:
 // export * from './premiere';   // T025: Implement UXP Premiere Pro API Integration

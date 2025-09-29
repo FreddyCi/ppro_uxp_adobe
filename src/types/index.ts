@@ -6,6 +6,7 @@ export * from './premiere'
 export * from './store'
 export * from './fal'
 export * from './ims'
+export * from './ltx'
 
 // Azure SDK-specific types (explicit exports to avoid conflicts)
 export type {

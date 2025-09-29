@@ -611,6 +611,7 @@ export const useGalleryStore = create<GalleryStore>()(
 
           try {
             const syncedItems = await scanAndLoadLocalFiles()
+            console.warn(`🔄 Starting sync with ${syncedItems.length} raw items from scan`)
 
             if (syncedItems.length > 0) {
               // Convert images to base64 data URLs for reliable display
@@ -649,22 +650,27 @@ export const useGalleryStore = create<GalleryStore>()(
                       }
                     }
 
-                    // Update the item with base64 data URL if conversion succeeded
+                    // Only return the item if conversion succeeded
                     if (dataUrl) {
                       return {
                         ...item,
                         correctedUrl: dataUrl,
                         thumbnailUrl: dataUrl,
                       }
+                    } else {
+                      console.warn('⚠️ Skipping item due to failed base64 conversion:', item.filename)
+                      return null
                     }
-
-                    return item
                   } catch (error) {
                     console.warn('❌ Failed to convert image to base64:', item.filename, error)
-                    return item
+                    return null
                   }
                 })
               )
+
+              // Filter out null items (failed conversions)
+              const validConvertedItems = base64ConvertedItems.filter((item): item is NonNullable<typeof item> => item !== null) as CorrectedImage[]
+              console.warn(`📊 After base64 conversion: ${validConvertedItems.length} valid items`)
 
               // Add new items to gallery, avoiding duplicates
               const state = get()
@@ -672,11 +678,16 @@ export const useGalleryStore = create<GalleryStore>()(
                 ...state.images.map(img => img.id),
                 ...state.correctedImages.map(img => img.id)
               ])
+              console.warn(`🆔 Existing IDs in gallery:`, Array.from(existingIds))
 
-              const newCorrectedImages = base64ConvertedItems.filter(item => !existingIds.has(item.id))
+              const newCorrectedImages = validConvertedItems.filter(item => !existingIds.has(item.id))
+              console.warn(`➕ New items to add: ${newCorrectedImages.length}`)
+              newCorrectedImages.forEach((item, index) => {
+                console.warn(`  ${index + 1}. ${item.filename} (ID: ${item.id})`)
+              })
 
               if (newCorrectedImages.length > 0) {
-                set(state => ({
+                set((state: GalleryStore) => ({
                   correctedImages: [...newCorrectedImages, ...state.correctedImages],
                   totalItems: getAllItems({
                     ...state,
@@ -868,6 +879,14 @@ export const useGalleryDisplayItems = () => {
 export async function loadGalleryItems(rawItems: GalleryItem[]): Promise<GalleryItem[]> {
   return Promise.all(
     rawItems.map(async it => {
+      // Skip hydration if item already has a data URL (from base64 conversion)
+      if (('correctedUrl' in it && it.correctedUrl?.startsWith('data:')) ||
+          ('thumbnailUrl' in it && it.thumbnailUrl?.startsWith('data:')) ||
+          ('imageUrl' in it && it.imageUrl?.startsWith('data:'))) {
+        console.log('Skipping hydration for item with existing data URL:', it.id)
+        return it
+      }
+
       // For corrected images with local storage
       if ('storageMode' in it && it.storageMode === 'local' && 'folderToken' in it && 'relativePath' in it && it.folderToken && it.relativePath) {
         try {
@@ -922,15 +941,61 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
 
     // Recursively scan for JSON metadata files
     const metadataFiles = await scanForMetadataFiles(folder)
+    console.warn(`🔍 Found ${metadataFiles.length} total JSON files in local storage`)
 
-    for (const metadataFile of metadataFiles) {
+    // Deduplicate files by native path to prevent processing the same file multiple times
+    const uniqueFiles = new Map()
+    for (const file of metadataFiles) {
+      const path = file.nativePath || file.name
+      if (!uniqueFiles.has(path)) {
+        uniqueFiles.set(path, file)
+      } else {
+        console.warn(`⚠️ Duplicate file found and skipped: ${path}`)
+      }
+    }
+    const deduplicatedFiles = Array.from(uniqueFiles.values())
+    console.warn(`🔧 After deduplication: ${deduplicatedFiles.length} unique JSON files`)
+
+    // Track processed IDs to prevent duplicates within this sync operation
+    const processedIds = new Set<string>()
+
+    for (const metadataFile of deduplicatedFiles) {
       try {
+        console.warn(`📄 Processing metadata file: ${metadataFile.name}`)
         // Read and parse metadata file
         const content = await metadataFile.read()
         const metadata = JSON.parse(content)
 
+        console.warn(`📋 Metadata content:`, {
+          filename: metadata.filename,
+          hasRelativePath: !!metadata.relativePath,
+          hasBlobUrl: !!metadata.blobUrl,
+          hasCorrectedUrl: !!metadata.correctedUrl,
+          id: metadata.id
+        })
+
         // Check if this is a Gemini-corrected image
         if (metadata.filename && metadata.filename.includes('gemini-corrected')) {
+          console.warn(`✅ Found Gemini-corrected image: ${metadata.filename}`)
+
+          // Skip if we don't have the required metadata for display
+          if (!metadata.relativePath && !metadata.blobUrl && !metadata.correctedUrl) {
+            console.warn('⚠️ Skipping metadata file missing required paths:', metadata.filename)
+            continue
+          }
+
+          // Use consistent ID based on filename if metadata doesn't have one
+          const consistentId = metadata.id || `corrected-${metadata.filename}`
+
+          // Skip if we've already processed this ID in this sync
+          if (processedIds.has(consistentId)) {
+            console.warn(`⚠️ Skipping duplicate ID within sync: ${consistentId}`)
+            continue
+          }
+
+          console.warn(`🆔 Using ID: ${consistentId} for ${metadata.filename}`)
+          processedIds.add(consistentId)
+
           // Create default corrections if not present in metadata
           const defaultCorrections = {
             lineCleanup: true,
@@ -940,7 +1005,7 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
 
           // Create CorrectedImage from metadata
           const correctedImage: CorrectedImage = {
-            id: metadata.id || crypto.randomUUID(),
+            id: consistentId,
             originalUrl: metadata.originalUrl || '',
             correctedUrl: '', // Will be set by loadGalleryItems
             thumbnailUrl: '', // Will be set by loadGalleryItems
@@ -969,15 +1034,21 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
           }
 
           syncedItems.push(correctedImage)
+          console.warn(`➕ Added corrected image to sync list: ${metadata.filename}`)
+        } else {
+          console.warn(`⏭️ Skipping non-Gemini file: ${metadata.filename || metadataFile.name}`)
         }
       } catch (error) {
-        console.warn('Failed to parse metadata file:', metadataFile.name, error)
+        console.warn('❌ Failed to parse metadata file:', metadataFile.name, error)
       }
     }
 
-    console.warn(`Found ${syncedItems.length} corrected images in local storage`)
+    console.warn(`📊 Final sync result: ${syncedItems.length} corrected images found`)
+    syncedItems.forEach((item, index) => {
+      console.warn(`  ${index + 1}. ${item.filename} (ID: ${item.id})`)
+    })
   } catch (error) {
-    console.error('Failed to scan local files:', error)
+    console.error('❌ Failed to scan local files:', error)
   }
 
   return syncedItems
@@ -990,20 +1061,24 @@ async function scanForMetadataFiles(folder: any): Promise<any[]> {
   try {
     // Get all entries in the folder
     const entries = await folder.getEntries()
+    console.warn(`📂 Scanning folder: ${folder.name || folder.nativePath} (${entries.length} entries)`)
 
     for (const entry of entries) {
       if (entry.isFile && entry.name.endsWith('.json')) {
+        console.warn(`📄 Found JSON file: ${entry.name}`)
         metadataFiles.push(entry)
       } else if (entry.isFolder) {
         // Recursively scan subfolders
+        console.warn(`📂 Recursing into subfolder: ${entry.name}`)
         const subFiles = await scanForMetadataFiles(entry)
         metadataFiles.push(...subFiles)
       }
     }
   } catch (error) {
-    console.warn('Failed to scan folder:', folder.name, error)
+    console.warn('❌ Failed to scan folder:', folder.name, error)
   }
 
+  console.warn(`📊 Folder scan complete: ${metadataFiles.length} JSON files found in ${folder.name || folder.nativePath}`)
   return metadataFiles
 }
 
