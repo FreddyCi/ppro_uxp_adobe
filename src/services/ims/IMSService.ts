@@ -161,20 +161,27 @@ export class IMSService implements IIMSService {
       // In UXP environment, always use direct HTTPS URLs
       const introspectUrl = `${this.config.imsUrl}/ims/validate_token/v1`
       
-      const response = await axios.post(
-        introspectUrl,
-        new URLSearchParams({
-          token,
-          client_id: this.config.clientId
-        }),
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json'
-          },
-          timeout: 10000
-        }
-      )
+      const params = new URLSearchParams({
+        token,
+        client_id: this.config.clientId,
+      })
+
+      if (this.config.clientSecret) {
+        params.append('client_secret', this.config.clientSecret)
+      }
+
+      if (this.config.orgId) {
+        params.append('org_id', this.config.orgId)
+      }
+
+      const response = await axios.post(introspectUrl, params.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+          'User-Agent': 'UXP-Panel/1.0.0',
+        },
+        timeout: 10000,
+      })
 
       return {
         valid: response.data.active === true,
@@ -186,7 +193,27 @@ export class IMSService implements IIMSService {
       }
 
     } catch (error) {
-      console.error('Token validation failed:', error instanceof Error ? error.message : 'Unknown error')
+      const errorDetails: Record<string, unknown> = {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        config: {
+          clientId: this.config.clientId,
+          orgId: this.config.orgId,
+          imsUrl: this.config.imsUrl,
+        },
+      }
+
+      if (axios.isAxiosError(error)) {
+        errorDetails.status = error.response?.status
+        errorDetails.statusText = error.response?.statusText
+        errorDetails.responseData = error.response?.data
+        errorDetails.requestConfig = {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers,
+        }
+      }
+
+      console.error('Token validation failed:', errorDetails)
       return {
         valid: false,
         error: {

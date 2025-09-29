@@ -583,7 +583,7 @@ export const Gallery = () => {
                     maxlength={500}
                     value={correctionPrompt}
                     placeholder="Add or refine the prompt that Gemini should follow..."
-                    onInput={(e: any) => setCorrectionPrompt(e.target.value)}
+                    onInput={(event: any) => setCorrectionPrompt(event.target.value)}
                     disabled={isCorrecting}
                   >
                   {/* @ts-ignore */}
