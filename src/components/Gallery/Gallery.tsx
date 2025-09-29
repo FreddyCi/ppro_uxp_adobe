@@ -703,7 +703,6 @@ export const Gallery = () => {
       <main className="gallery-main">
         {/* Gallery Header */}
         <header className="gallery-header">
-          <h2 className="gallery-title">Image Gallery</h2>
           <div className="gallery-sort">
             <span className="sort-label">Sort by:</span>
             {/* @ts-ignore */}
