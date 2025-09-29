@@ -460,7 +460,8 @@ export const Gallery = () => {
         <div className="gallery-grid">
           {filteredImages.map((image: ImageData) => (
             <div key={image.id} className="gallery-item">
-              <div className="item-image">
+              <div className="item-content">
+                <div className="item-image">
                 <img 
                   src={image.url} 
                   alt={image.prompt}
@@ -488,7 +489,7 @@ export const Gallery = () => {
                         const placeholder = document.createElement('div');
                         placeholder.className = 'error-placeholder';
                         placeholder.style.cssText = `
-                          width: 100%; height: 200px; background: #f0f0f0; 
+                          width: 100%; height: 100%; background: #f0f0f0; 
                           display: flex; align-items: center; justify-content: center;
                           color: #666; font-size: 14px; text-align: center;
                         `;
@@ -504,26 +505,27 @@ export const Gallery = () => {
                     }
                   }}
                 />
-              </div>
-              <div className="item-info">
-                <div className="item-prompt">{image.prompt}</div>
-                <div className="item-meta">
-                  <span className="item-type">{image.contentType}</span>
-                  <span className="item-date">{new Date(image.createdAt).toLocaleDateString()}</span>
                 </div>
-                {image.source === 'generated' && (
-                  <div className="item-actions">
-                    {/* @ts-ignore */}
-                    <sp-button
-                      variant="secondary"
-                      size="s"
-                      onClick={() => handleOpenCorrectionDialog(image)}
-                    >
-                      Enhance with Gemini
-                    {/* @ts-ignore */}
-                    </sp-button>
+                <div className="item-info">
+                  <div className="item-prompt">{image.prompt}</div>
+                  <div className="item-meta">
+                    <span className="item-type">{image.contentType}</span>
+                    <span className="item-date">{new Date(image.createdAt).toLocaleDateString()}</span>
                   </div>
-                )}
+                  {image.source === 'generated' && (
+                    <div className="item-actions">
+                      {/* @ts-ignore */}
+                      <sp-button
+                        variant="secondary"
+                        size="s"
+                        onClick={() => handleOpenCorrectionDialog(image)}
+                      >
+                        Enhance with Gemini
+                      {/* @ts-ignore */}
+                      </sp-button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
