@@ -24,6 +24,18 @@ const AppContent = () => {
   const [seedValue, setSeedValue] = useState<number>(0);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   
+  // Generation mode state
+  const [generationMode, setGenerationMode] = useState<'firefly' | 'ltx'>('firefly');
+  
+  // LTX video generation form state
+  const [ltxPrompt, setLtxPrompt] = useState<string>('');
+  const [ltxDuration, setLtxDuration] = useState<number>(6);
+  const [ltxFps, setLtxFps] = useState<number>(24);
+  const [ltxWidth, setLtxWidth] = useState<number>(1280);
+  const [ltxHeight, setLtxHeight] = useState<number>(720);
+  const [ltxSeed, setLtxSeed] = useState<number>(0);
+  const [isGeneratingLtx, setIsGeneratingLtx] = useState<boolean>(false);
+  
   // Get toast helpers
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
   
@@ -124,7 +136,74 @@ const AppContent = () => {
     }
   };
 
-  // Initialize theme on component mount
+  // Handle LTX video generation
+  const handleGenerateLtxVideo = async () => {
+    if (!ltxPrompt.trim()) {
+      showWarning('Missing Prompt', 'Please enter a description for your video.');
+      return;
+    }
+
+    setIsGeneratingLtx(true);
+
+    try {
+      showInfo('Generating Video', `Creating "${ltxPrompt.substring(0, 50)}${ltxPrompt.length > 50 ? '...' : ''}"`);
+      
+      console.log('🎬 Starting LTX video generation...');
+      console.log('📝 LTX generation parameters:', {
+        prompt: ltxPrompt,
+        duration_seconds: ltxDuration,
+        fps: ltxFps,
+        width: ltxWidth,
+        height: ltxHeight,
+        seed: ltxSeed > 0 ? ltxSeed : undefined
+      });
+      
+      // Import LTX service
+      const { LtxVideoService } = await import('./services/ltx');
+      
+      // Create LTX service instance
+      const ltxService = new LtxVideoService({
+        timeout: 240_000, // 4 minutes for video generation
+      });
+      
+      // Build LTX request
+      const ltxRequest = {
+        prompt: ltxPrompt,
+        duration_seconds: ltxDuration,
+        fps: ltxFps,
+        width: ltxWidth,
+        height: ltxHeight,
+        seed: ltxSeed > 0 ? ltxSeed : undefined
+      };
+      
+      console.log('🚀 Sending LTX generation request:', ltxRequest);
+      
+      // Call LTX API
+      const result = await ltxService.generateVideo(ltxRequest);
+      console.log('✅ LTX video generation completed:', result);
+      
+      // Handle the video blob - for now, just show success
+      // TODO: Add video to gallery store or handle storage
+      showSuccess('Video Generated', `Generated ${result.filename} (${(result.blob.size / 1024 / 1024).toFixed(2)} MB)`);
+      
+      // Create object URL for preview (if needed)
+      const videoUrl = URL.createObjectURL(result.blob);
+      console.log('🎥 Video URL:', videoUrl);
+      
+    } catch (error: any) {
+      console.error('❌ LTX video generation failed:', error);
+      console.error('🔍 Error details:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        status: error.status,
+        stack: error.stack
+      });
+      showError('Video Generation Failed', error.message || 'An unexpected error occurred.');
+    } finally {
+      setIsGeneratingLtx(false);
+    }
+  };
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
@@ -234,14 +313,40 @@ const AppContent = () => {
                 {/* Image Generation Card */}
                 <article className="card">
                   <header className="card-header">
-                    <h2 className="card-title">Generate Images</h2>
-                    <div className="text-detail">Create images using Adobe Firefly AI</div>
+                    <h2 className="card-title">Generate Content</h2>
+                    <div className="text-detail">Create images with Adobe Firefly AI or videos with LTX</div>
+                    
+                    {/* Generation Mode Toggle */}
+                    <div className="generation-mode-toggle">
+                      {/* @ts-ignore */}
+                      <sp-button-group>
+                        {/* @ts-ignore */}
+                        <sp-button
+                          variant={generationMode === 'firefly' ? 'primary' : 'secondary'}
+                          size="s"
+                          onClick={() => setGenerationMode('firefly')}
+                        >
+                          Firefly Image Gen
+                        {/* @ts-ignore */}
+                        </sp-button>
+                        {/* @ts-ignore */}
+                        <sp-button
+                          variant={generationMode === 'ltx' ? 'primary' : 'secondary'}
+                          size="s"
+                          onClick={() => setGenerationMode('ltx')}
+                        >
+                          LTX Video
+                        {/* @ts-ignore */}
+                        </sp-button>
+                      {/* @ts-ignore */}
+                      </sp-button-group>
+                    </div>
                   </header>
                   <div className="card-body">
                     {!imsToken ? (
                       <div className="auth-required">
                         <div className="text-detail" style={{ color: 'var(--theme-warning)' }}>
-                          Please authenticate to generate images
+                          Please authenticate to generate content
                         </div>
 
                         {/* @ts-ignore */}
@@ -250,7 +355,7 @@ const AppContent = () => {
                         {/* @ts-ignore */}
                         </sp-button>
                       </div>
-                    ) : (
+                    ) : generationMode === 'firefly' ? (
                       <div className="generation-form">
                         {/* Prompt Input */}
                         <div className="form-group">
@@ -374,32 +479,6 @@ const AppContent = () => {
                           </sp-radio-group>
                         </div>
 
-                        {/* Standard, Portrait, Ultrawide sizes */}
-                        <div className="form-group">
-                          {/* @ts-ignore */}
-                          <sp-radio-group className="size-presets">
-                            {/* @ts-ignore */}
-                            <sp-radio value="standard">
-                              <span>Standard</span>
-                              <div className="text-detail">1408×1024</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                            {/* @ts-ignore */}
-                            <sp-radio value="portrait">
-                              <span>Portrait</span>
-                              <div className="text-detail">1024×1408</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                            {/* @ts-ignore */}
-                            <sp-radio value="ultrawide">
-                              <span>Ultrawide</span>
-                              <div className="text-detail">2048×896</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                          {/* @ts-ignore */}
-                          </sp-radio-group>
-                        </div>
-
                         {/* Seed (Optional) */}
                         <div className="form-group">
                           {/* @ts-ignore */}
@@ -427,7 +506,146 @@ const AppContent = () => {
                             onClick={handleGenerateImage}
                             disabled={isGenerating || !prompt.trim()}
                           >
-                            {isGenerating ? 'Generating...' : 'Generate'}
+                            {isGenerating ? 'Generating...' : 'Generate Image'}
+                          {/* @ts-ignore */}
+                          </sp-button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="generation-form">
+                        {/* LTX Video Prompt Input */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Video Prompt *</sp-label>
+                          {/* @ts-ignore */}
+                          <sp-textarea 
+                            id="ltx-prompt-input"
+                            placeholder="A cinematic shot of a futuristic city skyline at sunset, camera slowly dolly-in with warm golden light..."
+                            className="prompt-input"
+                            multiline
+                            rows={3}
+                            maxlength={1000}
+                            value={ltxPrompt}
+                            onInput={(e: any) => setLtxPrompt(e.target.value)}
+                          >
+                          {/* @ts-ignore */}
+                          </sp-textarea>
+                          <div className="character-counter text-detail">
+                            {ltxPrompt.length}/1000 characters
+                          </div>
+                        </div>
+
+                        {/* Duration */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Duration</sp-label>
+                          <div className="text-detail mb-sm">Video length in seconds</div>
+                          {/* @ts-ignore */}
+                          <sp-slider 
+                            min={1} 
+                            max={10} 
+                            value={ltxDuration}
+                            step={1}
+                            className="duration-slider"
+                            onInput={(e: any) => setLtxDuration(parseInt(e.target.value) || 6)}
+                          >
+                          {/* @ts-ignore */}
+                          </sp-slider>
+                          <div className="text-detail mt-sm">{ltxDuration} seconds</div>
+                        </div>
+
+                        {/* FPS */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Frame Rate</sp-label>
+                          <div className="text-detail mb-sm">Frames per second</div>
+                          {/* @ts-ignore */}
+                          <sp-radio-group 
+                            value={ltxFps.toString()} 
+                            className="fps-group"
+                            onChange={(e: any) => setLtxFps(parseInt(e.target.value))}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-radio value="16">
+                              <span className="radio-label">16 FPS</span>
+                              <div className="radio-description text-detail">Smooth, cinematic</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="24">
+                              <span className="radio-label">24 FPS</span>
+                              <div className="radio-description text-detail">Film standard</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                          {/* @ts-ignore */}
+                          </sp-radio-group>
+                        </div>
+
+                        {/* Resolution */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Resolution</sp-label>
+                          <div className="text-detail mb-sm">Video dimensions</div>
+                          {/* @ts-ignore */}
+                          <sp-radio-group 
+                            value={`${ltxWidth}x${ltxHeight}`} 
+                            className="resolution-group"
+                            onChange={(e: any) => {
+                              const [width, height] = e.target.value.split('x').map(Number);
+                              setLtxWidth(width);
+                              setLtxHeight(height);
+                            }}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-radio value="1024x576">
+                              <span className="radio-label">1024×576</span>
+                              <div className="radio-description text-detail">16:9 SD</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="1280x720">
+                              <span className="radio-label">1280×720</span>
+                              <div className="radio-description text-detail">16:9 HD</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="1920x1080">
+                              <span className="radio-label">1920×1080</span>
+                              <div className="radio-description text-detail">16:9 Full HD</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                          {/* @ts-ignore */}
+                          </sp-radio-group>
+                        </div>
+
+                        {/* Seed (Optional) */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Seed (Optional)</sp-label>
+                          {/* @ts-ignore */}
+                          <sp-slider 
+                            min={0} 
+                            max={999999} 
+                            value={ltxSeed}
+                            step={1}
+                            className="seed-slider"
+                            onInput={(e: any) => setLtxSeed(parseInt(e.target.value) || 0)}
+                          >
+                          {/* @ts-ignore */}
+                          </sp-slider>
+                        </div>
+
+                        {/* Generate Button */}
+                        <div className="form-actions">
+                          {/* @ts-ignore */}
+                          <sp-button 
+                            variant="accent" 
+                            size="m"
+                            className="generate-button"
+                            onClick={handleGenerateLtxVideo}
+                            disabled={isGeneratingLtx || !ltxPrompt.trim()}
+                          >
+                            {isGeneratingLtx ? 'Generating...' : 'Generate Video'}
                           {/* @ts-ignore */}
                           </sp-button>
                         </div>
