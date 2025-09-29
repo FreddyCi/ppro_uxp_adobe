@@ -240,9 +240,7 @@ const AppContent = () => {
                   <div className="card-body">
                     {!imsToken ? (
                       <div className="auth-required">
-                        {/* @ts-ignore */}
-                        <sp-icon name="ui:Alert" size="s" style={{ color: 'var(--theme-warning)' }}></sp-icon>
-                        <div className="text-detail" style={{ marginLeft: '8px', color: 'var(--theme-warning)' }}>
+                        <div className="text-detail" style={{ color: 'var(--theme-warning)' }}>
                           Please authenticate to generate images
                         </div>
 

@@ -796,11 +796,20 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
 .auth-required {
   display: flex;
   align-items: center;
-  padding: $space-200;
-  background-color: var(--theme-bg-layer-1);
-  border: 1px solid var(--theme-warning);
+  justify-content: space-between;
+  padding: $space-300;
+  background-color: var(--theme-bg-base);
   border-radius: $border-radius;
-  margin-bottom: $space-300;
+  margin: $space-300;
+  border: 1px solid var(--theme-border-subtle);
+
+  .text-detail {
+    text-align: left;
+  }
+
+  .text-detail {
+    text-align: left;
+  }
 }
 
 /* Generation form */
