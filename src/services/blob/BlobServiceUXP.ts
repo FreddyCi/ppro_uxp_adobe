@@ -221,74 +221,7 @@ export class BlobService {
       const xmlText = await response.text()
       console.warn('📄 BlobService: Raw XML response length:', xmlText.length)
 
-      // Parse the XML response to extract blob information
-      const parser = new DOMParser()
-      const xmlDoc = parser.parseFromString(xmlText, 'text/xml')
-      
-      // Check for XML parsing errors
-      const parseError = xmlDoc.querySelector('parsererror')
-      if (parseError) {
-        console.error('❌ BlobService: XML parsing error:', parseError.textContent)
-        return []
-      }
-
-      // Extract blob information from XML
-      const blobElements = xmlDoc.querySelectorAll('Blob')
-      const blobs: Array<{
-        name: string
-        url: string
-        properties?: {
-          lastModified?: Date
-          contentLength?: number
-          contentType?: string
-        }
-      }> = []
-
-      console.warn('🔍 BlobService: Found blob elements in XML:', blobElements.length)
-
-      blobElements.forEach((blobElement, index) => {
-        try {
-          const nameElement = blobElement.querySelector('Name')
-          const propertiesElement = blobElement.querySelector('Properties')
-          
-          if (!nameElement || !nameElement.textContent) {
-            console.warn(`⚠️ BlobService: Blob ${index} missing name, skipping`)
-            return
-          }
-
-          const blobName = nameElement.textContent
-          const blobUrl = `${containerUrl}/${blobName}`
-
-          // Extract properties if available
-          let properties = undefined
-          if (propertiesElement) {
-            const lastModifiedElement = propertiesElement.querySelector('Last-Modified')
-            const contentLengthElement = propertiesElement.querySelector('Content-Length')
-            const contentTypeElement = propertiesElement.querySelector('Content-Type')
-
-            properties = {
-              lastModified: lastModifiedElement?.textContent ? new Date(lastModifiedElement.textContent) : undefined,
-              contentLength: contentLengthElement?.textContent ? parseInt(contentLengthElement.textContent, 10) : undefined,
-              contentType: contentTypeElement?.textContent || undefined
-            }
-          }
-
-          blobs.push({
-            name: blobName,
-            url: blobUrl,
-            properties
-          })
-
-          console.warn(`📦 BlobService: Parsed blob ${index + 1}:`, {
-            name: blobName,
-            url: blobUrl.substring(0, 80) + '...',
-            size: properties?.contentLength,
-            type: properties?.contentType
-          })
-        } catch (error) {
-          console.error(`❌ BlobService: Error parsing blob ${index}:`, error)
-        }
-      })
+      const blobs = this.parseBlobListXml(xmlText, containerUrl)
 
       console.warn(`✅ BlobService: Successfully listed ${blobs.length} real blobs from Azure Storage`)
       
@@ -311,6 +244,175 @@ export class BlobService {
         500
       )
     }
+  }
+
+  private parseBlobListXml(
+    xmlText: string,
+    containerUrl: string
+  ): Array<{
+    name: string
+    url: string
+    properties?: {
+      lastModified?: Date
+      contentLength?: number
+      contentType?: string
+    }
+  }> {
+    const trimmed = xmlText.trim()
+    if (!trimmed) {
+      return []
+    }
+
+    const SafeDOMParser =
+      typeof globalThis !== 'undefined' &&
+      'DOMParser' in globalThis
+        ? (globalThis as { DOMParser: typeof DOMParser }).DOMParser
+        : undefined
+
+    if (SafeDOMParser) {
+      try {
+        const parser = new SafeDOMParser()
+        const xmlDoc = parser.parseFromString(trimmed, 'text/xml')
+        const parseError = xmlDoc.querySelector('parsererror')
+
+        if (parseError) {
+          console.error('❌ BlobService: XML parsing error:', parseError.textContent)
+        } else {
+          const blobElements = Array.from(xmlDoc.querySelectorAll('Blob'))
+          console.warn('🔍 BlobService: Found blob elements in XML:', blobElements.length)
+
+          return blobElements
+            .map((blobElement, index) => {
+              const nameElement = blobElement.querySelector('Name')
+              const propertiesElement = blobElement.querySelector('Properties')
+
+              const blobName = nameElement?.textContent?.trim()
+              if (!blobName) {
+                console.warn(`⚠️ BlobService: Blob ${index} missing name, skipping`)
+                return null
+              }
+
+              const blobUrl = `${containerUrl}/${blobName}`
+
+              const lastModifiedElement = propertiesElement?.querySelector('Last-Modified')
+              const contentLengthElement = propertiesElement?.querySelector('Content-Length')
+              const contentTypeElement = propertiesElement?.querySelector('Content-Type')
+
+              const properties = propertiesElement
+                ? {
+                    lastModified: lastModifiedElement?.textContent
+                      ? new Date(lastModifiedElement.textContent)
+                      : undefined,
+                    contentLength: contentLengthElement?.textContent
+                      ? parseInt(contentLengthElement.textContent, 10)
+                      : undefined,
+                    contentType: contentTypeElement?.textContent || undefined,
+                  }
+                : undefined
+
+              console.warn(`📦 BlobService: Parsed blob ${index + 1}:`, {
+                name: blobName,
+                url: blobUrl.substring(0, 80) + '...',
+                size: properties?.contentLength,
+                type: properties?.contentType,
+              })
+
+              return {
+                name: blobName,
+                url: blobUrl,
+                properties,
+              }
+            })
+            .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        }
+      } catch (error) {
+        console.error('❌ BlobService: DOMParser parsing failed, falling back to regex parser:', error)
+      }
+    }
+
+    return this.parseBlobListXmlFallback(trimmed, containerUrl)
+  }
+
+  private parseBlobListXmlFallback(
+    xmlText: string,
+    containerUrl: string
+  ): Array<{
+    name: string
+    url: string
+    properties?: {
+      lastModified?: Date
+      contentLength?: number
+      contentType?: string
+    }
+  }> {
+    const blobRegex = /<Blob>([\s\S]*?)<\/Blob>/gi
+    const nameRegex = /<Name>([\s\S]*?)<\/Name>/i
+    const lastModifiedRegex = /<Last-Modified>([\s\S]*?)<\/Last-Modified>/i
+    const contentLengthRegex = /<Content-Length>([\s\S]*?)<\/Content-Length>/i
+    const contentTypeRegex = /<Content-Type>([\s\S]*?)<\/Content-Type>/i
+
+    const blobs: Array<{
+      name: string
+      url: string
+      properties?: {
+        lastModified?: Date
+        contentLength?: number
+        contentType?: string
+      }
+    }> = []
+
+    let index = 0
+    for (const match of xmlText.matchAll(blobRegex)) {
+      const blobBlock = match[1]
+      const nameMatch = blobBlock.match(nameRegex)
+      const blobName = nameMatch?.[1]?.trim()
+
+      if (!blobName) {
+        console.warn(`⚠️ BlobService: Blob ${index} missing name during fallback parsing, skipping`)
+        index += 1
+        continue
+      }
+
+      const blobUrl = `${containerUrl}/${blobName}`
+
+      const lastModifiedMatch = blobBlock.match(lastModifiedRegex)
+      const contentLengthMatch = blobBlock.match(contentLengthRegex)
+      const contentTypeMatch = blobBlock.match(contentTypeRegex)
+
+      const properties =
+        lastModifiedMatch || contentLengthMatch || contentTypeMatch
+          ? {
+              lastModified: lastModifiedMatch?.[1]
+                ? new Date(lastModifiedMatch[1])
+                : undefined,
+              contentLength: contentLengthMatch?.[1]
+                ? parseInt(contentLengthMatch[1], 10)
+                : undefined,
+              contentType: contentTypeMatch?.[1]?.trim() || undefined,
+            }
+          : undefined
+
+      blobs.push({
+        name: blobName,
+        url: blobUrl,
+        properties,
+      })
+
+      console.warn(`📦 BlobService: Fallback parsed blob ${index + 1}:`, {
+        name: blobName,
+        url: blobUrl.substring(0, 80) + '...',
+        size: properties?.contentLength,
+        type: properties?.contentType,
+      })
+
+      index += 1
+    }
+
+    console.warn('🔁 BlobService: Fallback XML parser results:', {
+      total: blobs.length,
+    })
+
+    return blobs
   }
 
   /**

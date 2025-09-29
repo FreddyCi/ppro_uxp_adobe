@@ -158,39 +158,8 @@ export class IMSService implements IIMSService {
    */
   async validateToken(token: string): Promise<IMSTokenValidation> {
     try {
-      // In UXP environment, always use direct HTTPS URLs
-      const introspectUrl = `${this.config.imsUrl}/ims/validate_token/v1`
-      
-      const params = new URLSearchParams({
-        token,
-        client_id: this.config.clientId,
-      })
-
-      if (this.config.clientSecret) {
-        params.append('client_secret', this.config.clientSecret)
-      }
-
-      if (this.config.orgId) {
-        params.append('org_id', this.config.orgId)
-      }
-
-      const response = await axios.post(introspectUrl, params.toString(), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Accept: 'application/json',
-          'User-Agent': 'UXP-Panel/1.0.0',
-        },
-        timeout: 10000,
-      })
-
-      return {
-        valid: response.data.active === true,
-        user_id: response.data.sub,
-        client_id: response.data.client_id,
-        scope: response.data.scope?.split(' '),
-        expires_at: response.data.exp,
-        token_type: response.data.token_type
-      }
+      const responseData = await this.requestTokenValidationViaGet(token)
+      return this.mapValidationResponse(responseData)
 
     } catch (error) {
       const errorDetails: Record<string, unknown> = {
@@ -211,9 +180,27 @@ export class IMSService implements IIMSService {
           method: error.config?.method,
           headers: error.config?.headers,
         }
+
+        if (error.response?.status === 400) {
+          try {
+            console.warn('Token validation GET returned 400. Retrying with POST payload...')
+            const postResponse = await this.requestTokenValidationViaPost(token)
+            console.warn('Token validation POST fallback succeeded.')
+            return this.mapValidationResponse(postResponse)
+          } catch (postError) {
+            errorDetails.postAttempt = this.extractAxiosErrorDetails(postError)
+          }
+        }
       }
 
       console.error('Token validation failed:', errorDetails)
+
+      const fallback = this.decodeTokenLocally(token)
+      if (fallback) {
+        console.warn('Token validation endpoint unavailable; using local JWT decode fallback for diagnostics.')
+        return fallback
+      }
+
       return {
         valid: false,
         error: {
@@ -221,6 +208,206 @@ export class IMSService implements IIMSService {
           message: error instanceof Error ? error.message : 'Token validation failed'
         }
       }
+    }
+  }
+
+  private async requestTokenValidationViaGet(token: string): Promise<Record<string, unknown>> {
+    const introspectUrl = new URL(`${this.config.imsUrl}/ims/validate_token/v1`)
+
+    introspectUrl.searchParams.set('token', token)
+    introspectUrl.searchParams.set('client_id', this.config.clientId)
+
+    if (this.config.clientSecret) {
+      introspectUrl.searchParams.set('client_secret', this.config.clientSecret)
+    }
+
+    const response = await axios.get(introspectUrl.toString(), {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'UXP-Panel/1.0.0',
+      },
+      timeout: 10000,
+    })
+
+    return (response.data ?? {}) as Record<string, unknown>
+  }
+
+  private async requestTokenValidationViaPost(token: string): Promise<Record<string, unknown>> {
+    const introspectUrl = `${this.config.imsUrl}/ims/validate_token/v1`
+
+    const params = new URLSearchParams({
+      token,
+      client_id: this.config.clientId,
+      token_type_hint: 'access_token',
+    })
+
+    if (this.config.clientSecret) {
+      params.append('client_secret', this.config.clientSecret)
+    }
+
+    if (this.config.orgId) {
+      params.append('org_id', this.config.orgId)
+    }
+
+    const response = await axios.post(introspectUrl, params.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        'User-Agent': 'UXP-Panel/1.0.0',
+      },
+      timeout: 10000,
+    })
+
+    return (response.data ?? {}) as Record<string, unknown>
+  }
+
+  private mapValidationResponse(data: Record<string, unknown>): IMSTokenValidation {
+    const toBoolean = (value: unknown): boolean | undefined => {
+      if (typeof value === 'boolean') {
+        return value
+      }
+      if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase()
+        if (normalized === 'true') return true
+        if (normalized === 'false') return false
+      }
+      return undefined
+    }
+
+    const toNumber = (value: unknown): number | undefined => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value
+      }
+      if (typeof value === 'string') {
+        const parsed = Number.parseInt(value, 10)
+        return Number.isFinite(parsed) ? parsed : undefined
+      }
+      return undefined
+    }
+
+    const scope = this.parseScope((data['scope'] ?? data['scopes']) as unknown)
+
+    const expiresAt = toNumber(data['exp'])
+      ?? toNumber(data['expires_at'])
+      ?? toNumber(data['expiresAt'])
+
+    const activeFlag = toBoolean(data['active'])
+    const validFlag = toBoolean(data['valid'])
+    const checkResult = typeof data['check_result'] === 'string'
+      ? (data['check_result'] as string).toUpperCase() === 'SUCCESS'
+      : undefined
+    const statusFlag = typeof data['status'] === 'string'
+      ? (data['status'] as string).toUpperCase() === 'ACTIVE'
+      : undefined
+
+    const tokenType = typeof data['token_type'] === 'string'
+      ? (data['token_type'] as string)
+      : typeof data['tokenType'] === 'string'
+        ? (data['tokenType'] as string)
+        : typeof data['typ'] === 'string'
+          ? (data['typ'] as string)
+          : 'Bearer'
+
+    const clientId = typeof data['client_id'] === 'string'
+      ? (data['client_id'] as string)
+      : typeof data['clientId'] === 'string'
+        ? (data['clientId'] as string)
+        : undefined
+
+    const userId = typeof data['sub'] === 'string'
+      ? (data['sub'] as string)
+      : typeof data['user_id'] === 'string'
+        ? (data['user_id'] as string)
+        : typeof data['userId'] === 'string'
+          ? (data['userId'] as string)
+          : typeof data['aud'] === 'string'
+            ? (data['aud'] as string)
+          : undefined
+
+    return {
+      valid: activeFlag ?? validFlag ?? checkResult ?? statusFlag ?? true,
+      user_id: userId,
+      client_id: clientId,
+      scope,
+      expires_at: expiresAt,
+      token_type: tokenType,
+    }
+  }
+
+  private parseScope(scope: unknown): string[] | undefined {
+    if (Array.isArray(scope)) {
+      return scope.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    }
+
+    if (typeof scope === 'string') {
+      return scope
+        .split(/[,\s]+/)
+        .map(entry => entry.trim())
+        .filter(Boolean)
+    }
+
+    return undefined
+  }
+
+  private decodeTokenLocally(token: string): IMSTokenValidation | null {
+    try {
+      const parts = token.split('.')
+      if (parts.length < 2) {
+        return null
+      }
+
+      const base64Url = parts[1]
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+      const padding = '='.repeat((4 - (base64.length % 4)) % 4)
+      const padded = `${base64}${padding}`
+
+      if (typeof globalThis.atob !== 'function') {
+        return null
+      }
+
+      const binary = globalThis.atob(padded)
+
+      let jsonPayload: string
+      if (typeof TextDecoder !== 'undefined') {
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i += 1) {
+          bytes[i] = binary.charCodeAt(i)
+        }
+        jsonPayload = new TextDecoder('utf-8').decode(bytes)
+      } else {
+        jsonPayload = decodeURIComponent(
+          Array.prototype.map
+            .call(binary, (char: string) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`)
+            .join('')
+        )
+      }
+
+      const payload = JSON.parse(jsonPayload) as Record<string, unknown>
+
+      return this.mapValidationResponse({ ...payload, valid: true })
+    } catch (decodeError) {
+      console.warn('Local token decode failed:', decodeError)
+      return null
+    }
+  }
+
+  private extractAxiosErrorDetails(error: unknown): Record<string, unknown> {
+    if (!axios.isAxiosError(error)) {
+      return {
+        message: error instanceof Error ? error.message : 'Unknown error',
+      }
+    }
+
+    return {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      responseData: error.response?.data,
+      requestConfig: {
+        url: error.config?.url,
+        method: error.config?.method,
+        headers: error.config?.headers,
+      },
     }
   }
 

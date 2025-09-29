@@ -245,6 +245,14 @@ export const useGenerationStore = create<GenerationStore>()(
          * Clean up invalid blob URLs (e.g., from different origins)
          */
         cleanupInvalidBlobUrls(): void {
+          if (typeof window === 'undefined' || typeof window.location?.origin !== 'string') {
+            console.warn('Skipping blob URL cleanup: window/location not available in current runtime')
+            return
+          }
+
+          const currentOrigin = window.location.origin
+          const canRevokeBlob = typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function'
+
           set((state) => {
             const validImages = state.generationHistory.filter(image => {
               // Keep data URLs and http URLs
@@ -255,7 +263,6 @@ export const useGenerationStore = create<GenerationStore>()(
               // For blob URLs, try to validate them
               if (image.imageUrl.startsWith('blob:')) {
                 // Check if blob URL is from current origin
-                const currentOrigin = window.location.origin
                 if (image.imageUrl.startsWith(`blob:${currentOrigin}`)) {
                   return true
                 } else {
@@ -264,8 +271,14 @@ export const useGenerationStore = create<GenerationStore>()(
                     blobUrl: image.imageUrl,
                     currentOrigin
                   })
-                  // Revoke the invalid blob URL
-                  URL.revokeObjectURL(image.imageUrl)
+                  // Revoke the invalid blob URL if supported
+                  if (canRevokeBlob) {
+                    try {
+                      URL.revokeObjectURL(image.imageUrl)
+                    } catch (revokeError) {
+                      console.warn('Failed to revoke blob URL during cleanup:', revokeError)
+                    }
+                  }
                   return false
                 }
               }
