@@ -616,15 +616,25 @@ export class FireflyService {
                 result.metadata.localMetadataPath = saveResult.metadataPath
                 result.metadata.persistenceMethod = 'local'
                 result.metadata.storageMode = 'local'
+                result.metadata.localPersistenceProvider = saveResult.provider
+                result.metadata.folderToken = saveResult.folderToken ?? null
+                result.metadata.localBaseFolder = saveResult.baseFolder ?? undefined
                 result.localPath = saveResult.filePath
                 result.downloadUrl = saveResult.filePath
-                console.warn('💾 Saved generation locally:', {
+                const providerLabel = saveResult.provider === 'bolt'
+                  ? '💾 Saved generation via Bolt hybrid addon'
+                  : '� Saved generation via UXP filesystem fallback'
+
+                console.warn(`${providerLabel}:`, {
+                  provider: saveResult.provider,
                   filePath: saveResult.filePath,
                   metadataPath: saveResult.metadataPath,
-                  relativePath: saveResult.relativePath
+                  relativePath: saveResult.relativePath,
+                  folderToken: saveResult.folderToken ?? undefined,
+                  baseFolder: saveResult.baseFolder ?? undefined
                 })
               } else {
-                console.warn('⚠️ Local storage addon unavailable; keeping data URL only')
+                console.warn('⚠️ Local storage unavailable; keeping data URL only')
               }
             } catch (storageError) {
               console.error('❌ Failed to save image locally:', storageError)

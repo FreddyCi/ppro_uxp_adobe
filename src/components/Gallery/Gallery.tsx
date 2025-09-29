@@ -32,6 +32,7 @@ interface GalleryProps {}
 export const Gallery = () => {
   // Get real images from generation store
   const { generationHistory } = useGenerationStore();
+  const generationActions = useGenerationStore(state => state.actions);
   const correctedImages = useGalleryStore(state => state.correctedImages);
   const galleryActions = useGalleryStore(state => state.actions);
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
@@ -174,6 +175,26 @@ export const Gallery = () => {
     setDateRange('All time');
     setSortBy('Newest');
   };
+
+  const handleClearLocalImages = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      const confirmed = window.confirm(
+        'This will remove all locally stored generated and corrected images. Continue?'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    try {
+      generationActions.clearHistory();
+      galleryActions.clearAll();
+      showSuccess('Gallery cleared', 'All locally stored images have been removed.');
+    } catch (error) {
+      console.error('Failed to clear locally stored images:', error);
+      showError('Clear failed', 'Could not remove stored images. Please try again.');
+    }
+  }, [generationActions, galleryActions, showSuccess, showError]);
 
   const correctionOptions = useMemo<{ id: string; label: string }[]>(
     () => [
@@ -472,6 +493,17 @@ export const Gallery = () => {
               </sp-menu>
             {/* @ts-ignore */}
             </sp-picker>
+          </div>
+          <div className="gallery-actions">
+            {/* @ts-ignore */}
+            <sp-button
+              variant="secondary"
+              size="s"
+              onClick={handleClearLocalImages}
+            >
+              Clear local images
+            {/* @ts-ignore */}
+            </sp-button>
           </div>
         </header>
 
