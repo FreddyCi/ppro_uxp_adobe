@@ -294,17 +294,28 @@ export class GeminiService {
    * Convert Blob to base64 string
    */
   private async blobToBase64(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const result = reader.result as string
-        // Remove data URL prefix (data:image/type;base64,)
-        const base64 = result.split(',')[1]
-        resolve(base64)
+    try {
+      const arrayBuffer = await blob.arrayBuffer()
+      const bytes = new Uint8Array(arrayBuffer)
+      const chunkSize = 0x8000
+      let binary = ''
+
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        const chunk = bytes.subarray(offset, offset + chunkSize)
+        binary += String.fromCharCode(...chunk)
       }
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
+
+      return btoa(binary)
+    } catch (error) {
+      console.error('Failed to convert blob to base64:', error)
+      throw this.createError(
+        'BLOB_CONVERSION_FAILED',
+        'Unable to prepare image for Gemini API',
+        'processing',
+        false,
+        error
+      )
+    }
   }
 
   /**

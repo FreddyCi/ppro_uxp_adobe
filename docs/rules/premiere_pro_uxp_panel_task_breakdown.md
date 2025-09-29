@@ -922,7 +922,7 @@ class FireflyService {
 **Progress Note:** Successfully implemented comprehensive Gallery component with complete Popup with html5 and scss flex with UXP Widget only components. Created responsive grid layout with 3 view modes (grid, list, details), image detail dialog with full metadata display, zoom and pan functionality (1.5x-5x zoom with mouse/keyboard controls), navigation controls with prev/next buttons and proper focus management. Implemented delete and clear history functions, thumbnail error handling, and complete integration with generationStore. Added zoom controls with mouse drag panning and keyboard shortcuts (+/- for zoom, 0 for reset). Component includes proper accessibility features, UXP compatibility, and exports correctly from features/index.ts. Integrated with main app navigation through TabContent.tsx - both Generate and Gallery tabs now display the actual functional components. All builds validate successfully with zero TypeScript errors.
 
 ### T020.5: Firefly API Smoke Test & Auth Persistence
-**Status:** 🚧 In Progress
+**Status:** ✅ Completed
 **Dependencies:** T020, baseline IMS authentication
 **Priority:** High
 **Estimate:** 1 day
@@ -1017,7 +1017,7 @@ class GeminiService {
 **Dependencies:** T021
 **Priority:** High
 **Estimate:** 75 minutes
-**Progress Note:** Successfully implemented image correction workflow with Gemini integration. Created ImageCorrectionDialog component with prompt input, service integration using real Google Gemini API, and Gallery integration for displaying corrected images. Fixed localStorage quota issues by disabling persistence for large data URLs. Core functionality working: users can select images, enter correction prompts, and see corrected results in Gallery (session-only persistence due to storage constraints). Fixed critical API response parsing issue (inlineData vs inline_data) enabling successful image corrections.
+**Progress Note:** Gemini correction flow now wires into the React gallery. Users see an “Enhance with Gemini” button on generated images, launching a modal that offers quick preset fixes plus optional prompt text. Corrections invoke the real Gemini service, append the refined image to the gallery, and surface status via toast + progress UI. Persistence still relies on in-memory blob URLs until Azure storage wiring (T023.6) lands.
 **Description:** Create UI for image correction workflow with before/after comparison
 **Deliverables:**
 - ✅ Simple prompt-based correction workflow (ImageCorrectionDialog with TextArea input)
