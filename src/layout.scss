@@ -1,16 +1,6 @@
 @use 'sass:color';
 @use './variables.scss' as *;
 
-/* =============================================================================
-   UXP Base Layout - Spectrum Design System Compliant
-   ============================================================================= */
-
-/* Reset and Base Styles */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
 
 :root, uxp-panel {
   /* Typography - Adobe Clean fallbacks */

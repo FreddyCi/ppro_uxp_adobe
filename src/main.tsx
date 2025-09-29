@@ -6,7 +6,7 @@ import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
 import { FireflyService } from "./services/firefly";
 import { useGenerationStore } from "./store/generationStore";
-import { SunIcon, MoonIcon, LogoutIcon, RefreshIcon, CloseIcon, LinkIcon, AlertIcon, InfoIcon, UserDeveloperIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
+import { RefreshIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
 import "./layout.scss";
 
 const AppContent = () => {
@@ -255,8 +255,6 @@ const AppContent = () => {
                         onClick={testIMSAuthentication} 
                         disabled={isAuthenticating}
                       >
-                        {/* @ts-ignore */}
-                        <sp-icon name="ui:CheckmarkMedium" size="s" slot="icon"></sp-icon>
                         <span>{isAuthenticating ? 'Authenticating...' : imsToken ? 'Refresh Token' : 'Login'}</span>
                       {/* @ts-ignore */}
                       </sp-action-button>
@@ -268,7 +266,6 @@ const AppContent = () => {
                         variant="secondary"
                         size="s"
                       >
-                        <CloseIcon size={14} className="theme-icon" />
                         <span>Clear</span>
                       {/* @ts-ignore */}
                       </sp-action-button>
@@ -284,7 +281,6 @@ const AppContent = () => {
                         variant="secondary"
                         size="s"
                       >
-                        <RefreshIcon size={14} className="theme-icon" />
                         <span>Clean URLs</span>
                       {/* @ts-ignore */}
                       </sp-action-button>
@@ -318,7 +314,6 @@ const AppContent = () => {
                         variant="secondary"
                         size="s"
                       >
-                        <InfoIcon size={14} className="theme-icon" />
                         <span>Log Images</span>
                       {/* @ts-ignore */}
                       </sp-action-button>
@@ -358,7 +353,6 @@ const AppContent = () => {
                         variant="secondary"
                         size="s"
                       >
-                        <LinkIcon size={14} className="theme-icon" />
                         <span>Use Presigned</span>
                       {/* @ts-ignore */}
                       </sp-action-button>
@@ -650,7 +644,6 @@ const AppContent = () => {
             variant="secondary"
             size="s"
           >
-            <UserDeveloperIcon size={14} className="theme-icon" />
             <span>{isDeveloperMode ? 'Developer On' : 'Developer Off'}</span>
           {/* @ts-ignore */}
           </sp-action-button>
@@ -662,11 +655,7 @@ const AppContent = () => {
             title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             className="theme-toggle"
           >
-            {isDarkMode ? (
-              <SunIcon size={16} className="theme-icon" />
-            ) : (
-              <MoonIcon size={16} className="theme-icon" />
-            )}
+            <span>{isDarkMode ? 'Dark Mode' : 'Light Mode'}</span>
           {/* @ts-ignore */}
           </sp-action-button>
 
@@ -679,7 +668,7 @@ const AppContent = () => {
               title="Logout"
               className="logout-button"
             >
-              <LogoutIcon size={16} className="theme-icon" />
+              <span>Logout</span>
             {/* @ts-ignore */}
             </sp-action-button>
           )}
