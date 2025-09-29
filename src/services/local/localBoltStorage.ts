@@ -207,7 +207,8 @@ class LocalBoltStorage {
       localPersistenceProvider: 'bolt' as const,
       savedAt: new Date().toISOString(),
       filename: safeFilename,
-      filePath
+      filePath,
+      relativePath: joinPath('/', dateFolder, safeFilename)
     }
 
     const metadataPath = joinPath(separator, directory, `${safeFilename}.json`)
@@ -355,7 +356,8 @@ class UxpLocalStorage {
       savedAt: new Date().toISOString(),
       filename: safeFilename,
       filePath: this.buildDisplayPath(separator, folderPath, dateFolder, safeFilename),
-      folderToken: this.getStoredToken()
+      folderToken: this.getStoredToken(),
+      relativePath: joinPath('/', dateFolder, safeFilename)
     }
 
     const metadataFile = await targetFolder.createFile?.(`${safeFilename}.json`, { overwrite: true })

@@ -12,6 +12,62 @@ import type { VideoMetadata } from '../types/blob'
 import { storage } from 'uxp'
 import { toTempUrl } from '../utils/uxpFs'
 
+// Utility function to convert blob to base64 data URL
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  try {
+    const arrayBuffer = await blob.arrayBuffer()
+    const bytes = new Uint8Array(arrayBuffer)
+    const base64 = encodeBase64(bytes)
+    const mimeType = blob.type || 'application/octet-stream'
+
+    return `data:${mimeType};base64,${base64}`
+  } catch (error) {
+    console.error('Failed to convert blob to data URL:', error)
+    throw error
+  }
+}
+
+// Utility function to encode bytes to base64
+function encodeBase64(bytes: Uint8Array): string {
+  if (typeof btoa === 'function') {
+    let binary = ''
+    const chunkSize = 0x8000
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize)
+      binary += Array.from(chunk, byte => String.fromCharCode(byte)).join('')
+    }
+    return btoa(binary)
+  }
+
+  const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+  let result = ''
+  let i = 0
+
+  for (; i + 3 <= bytes.length; i += 3) {
+    const triplet = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2]
+    result += base64Chars[(triplet >> 18) & 63]
+    result += base64Chars[(triplet >> 12) & 63]
+    result += base64Chars[(triplet >> 6) & 63]
+    result += base64Chars[triplet & 63]
+  }
+
+  if (i < bytes.length) {
+    const remaining = bytes.length - i
+    const chunk = (bytes[i] << 16) | ((remaining > 1 ? bytes[i + 1] : 0) << 8)
+    result += base64Chars[(chunk >> 18) & 63]
+    result += base64Chars[(chunk >> 12) & 63]
+    if (remaining === 2) {
+      result += base64Chars[(chunk >> 6) & 63]
+      result += '='
+    } else {
+      result += '='
+      result += '='
+    }
+  }
+
+  return result
+}
+
 // Extended types for Azure Storage integration
 export interface AzureBlobMetadata {
   containerName: string
@@ -555,7 +611,61 @@ export const useGalleryStore = create<GalleryStore>()(
 
           try {
             const syncedItems = await scanAndLoadLocalFiles()
+
             if (syncedItems.length > 0) {
+              // Convert images to base64 data URLs for reliable display
+              const base64ConvertedItems = await Promise.all(
+                syncedItems.map(async (item) => {
+                  try {
+                    let dataUrl = ''
+
+                    // Try to convert blob URL to base64
+                    if (item.blobUrl && item.blobUrl.startsWith('blob:')) {
+                      console.log('🔄 Converting blob URL to base64 for:', item.filename)
+                      const response = await fetch(item.blobUrl)
+                      const blob = await response.blob()
+                      dataUrl = await blobToDataUrl(blob)
+                      console.log('✅ Converted blob to base64 data URL:', dataUrl.substring(0, 50) + '...')
+                    }
+                    // Try to load from local file path
+                    else if (item.localFilePath) {
+                      console.log('🔄 Converting local file to base64 for:', item.filename)
+                      // Load the file using UXP filesystem
+                      const fs = storage.localFileSystem
+                      const folderToken = item.folderToken
+                      const relativePath = item.relativePath
+
+                      if (folderToken && relativePath) {
+                        try {
+                          const folder = await fs.getEntryForPersistentToken(folderToken)
+                          const file = await folder.getEntry(relativePath)
+                          const arrayBuffer = await file.read()
+                          const blob = new Blob([arrayBuffer])
+                          dataUrl = await blobToDataUrl(blob)
+                          console.log('✅ Converted local file to base64 data URL:', dataUrl.substring(0, 50) + '...')
+                        } catch (fileError) {
+                          console.warn('❌ Failed to load local file for base64 conversion:', fileError)
+                        }
+                      }
+                    }
+
+                    // Update the item with base64 data URL if conversion succeeded
+                    if (dataUrl) {
+                      return {
+                        ...item,
+                        correctedUrl: dataUrl,
+                        thumbnailUrl: dataUrl,
+                      }
+                    }
+
+                    return item
+                  } catch (error) {
+                    console.warn('❌ Failed to convert image to base64:', item.filename, error)
+                    return item
+                  }
+                })
+              )
+
               // Add new items to gallery, avoiding duplicates
               const state = get()
               const existingIds = new Set([
@@ -563,7 +673,7 @@ export const useGalleryStore = create<GalleryStore>()(
                 ...state.correctedImages.map(img => img.id)
               ])
 
-              const newCorrectedImages = syncedItems.filter(item => !existingIds.has(item.id))
+              const newCorrectedImages = base64ConvertedItems.filter(item => !existingIds.has(item.id))
 
               if (newCorrectedImages.length > 0) {
                 set(state => ({
@@ -573,7 +683,7 @@ export const useGalleryStore = create<GalleryStore>()(
                     correctedImages: [...newCorrectedImages, ...state.correctedImages]
                   }).length,
                 }))
-                console.warn(`✅ Synced ${newCorrectedImages.length} local files to gallery`)
+                console.warn(`✅ Synced ${newCorrectedImages.length} local files to gallery with base64 URLs`)
               } else {
                 console.warn('ℹ️ No new local files to sync')
               }
@@ -765,6 +875,11 @@ export async function loadGalleryItems(rawItems: GalleryItem[]): Promise<Gallery
           return { ...it, correctedUrl: src, thumbnailUrl: src }
         } catch (e) {
           console.warn('Failed to create temporary URL for local corrected image', it.relativePath, e)
+          // Fall back to blob URL if available
+          if ('blobUrl' in it && it.blobUrl) {
+            console.warn('Using blob URL fallback for corrected image', it.relativePath)
+            return { ...it, correctedUrl: it.blobUrl, thumbnailUrl: it.blobUrl }
+          }
           return { ...it, broken: true }
         }
       }
