@@ -11,6 +11,8 @@ import "./layout.scss";
 import { v4 as uuidv4 } from 'uuid';
 import { saveGenerationLocally } from './services/local/localBoltStorage';
 import { LtxVideoService } from './services/ltx';
+import { LumaVideoService } from './services/luma';
+import type { LumaGenerationRequest, LumaVideoModel } from './types/luma';
 
 const AppContent = () => {
   const [imsToken, setImsToken] = useState<string | null>(null);
@@ -28,7 +30,7 @@ const AppContent = () => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   
   // Generation mode state
-  const [generationMode, setGenerationMode] = useState<'firefly' | 'ltx'>('firefly');
+  const [generationMode, setGenerationMode] = useState<'firefly' | 'ltx' | 'luma'>('firefly');
   
   // LTX video generation form state
   const [ltxPrompt, setLtxPrompt] = useState<string>('');
@@ -38,6 +40,15 @@ const AppContent = () => {
   const [ltxHeight, setLtxHeight] = useState<number>(720);
   const [ltxSeed, setLtxSeed] = useState<number>(0);
   const [isGeneratingLtx, setIsGeneratingLtx] = useState<boolean>(false);
+
+  // Luma Dream Machine generation form state
+  const [lumaPrompt, setLumaPrompt] = useState<string>('');
+  const [lumaModel, setLumaModel] = useState<string>('ray-2');
+  const [lumaAspectRatio, setLumaAspectRatio] = useState<string>('16:9');
+  const [lumaDuration, setLumaDuration] = useState<string>('5s');
+  const [lumaResolution, setLumaResolution] = useState<string>('1080p');
+  const [lumaLoop, setLumaLoop] = useState<boolean>(false);
+  const [isGeneratingLuma, setIsGeneratingLuma] = useState<boolean>(false);
   
   // Get toast helpers
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
@@ -326,6 +337,199 @@ const AppContent = () => {
       setIsGeneratingLtx(false);
     }
   };
+
+  const handleGenerateLumaVideo = async () => {
+    if (!lumaPrompt.trim()) {
+      showWarning('Missing Prompt', 'Please enter a description for your video.');
+      return;
+    }
+
+    setIsGeneratingLuma(true);
+
+    const resolutionLookup: Record<string, { width: number; height: number }> = {
+      '540p': { width: 960, height: 540 },
+      '720p': { width: 1280, height: 720 },
+      '1080p': { width: 1920, height: 1080 },
+      '1440p': { width: 2560, height: 1440 },
+      '4k': { width: 3840, height: 2160 },
+    }
+
+    try {
+      showInfo('Generating Video', `Dreaming up "${lumaPrompt.substring(0, 50)}${lumaPrompt.length > 50 ? '...' : ''}"`);
+
+      console.log('🎞️ Starting Luma Dream Machine video generation...');
+      console.log('📝 Luma generation parameters:', {
+        prompt: lumaPrompt,
+        model: lumaModel,
+        aspect_ratio: lumaAspectRatio,
+        duration: lumaDuration,
+        resolution: lumaResolution,
+        loop: lumaLoop,
+      });
+
+      const lumaService = new LumaVideoService({
+        pollIntervalMs: 5_000,
+        maxPollAttempts: 120,
+      });
+
+      const lumaRequest: LumaGenerationRequest = {
+        prompt: lumaPrompt,
+        model: lumaModel as LumaVideoModel,
+        aspect_ratio: lumaAspectRatio,
+        duration: lumaDuration,
+        resolution: lumaResolution,
+        loop: lumaLoop,
+      };
+
+      console.log('🚀 Sending Luma Dream Machine request:', lumaRequest);
+
+      const result = await lumaService.generateVideo(lumaRequest);
+      console.log('✅ Luma Dream Machine generation completed:', result);
+
+      const durationSeconds = parseInt(lumaDuration.replace(/[^0-9]/g, ''), 10) || undefined;
+      const computedSeed = Math.floor(Math.random() * 999999);
+      const resolutionKey = typeof lumaResolution === 'string' ? lumaResolution.toLowerCase() : '';
+      const resolutionSize = resolutionLookup[resolutionKey] ?? undefined;
+
+      console.log('💾 Saving Luma Dream Machine video to local storage...');
+      const localSaveResult = await saveGenerationLocally({
+        blob: result.blob,
+        metadata: {
+          prompt: result.metadata.prompt || lumaPrompt,
+          seed: computedSeed,
+          jobId: result.metadata.id,
+          model: result.metadata.model || lumaModel,
+          version: 'Dream Machine 1.1.0',
+          timestamp: Date.now(),
+          filename: result.filename,
+          contentType: result.contentType,
+          fileSize: result.blob.size,
+          duration: durationSeconds,
+          fps: undefined,
+          resolution: resolutionSize,
+          persistenceMethod: 'local' as const,
+          storageMode: 'local' as const,
+        },
+        filename: result.filename,
+      });
+
+      if (!localSaveResult) {
+        console.warn('⚠️ Local save failed, falling back to data URL');
+
+        const arrayBuffer = await result.blob.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        const base64 = btoa(String.fromCharCode(...bytes));
+        const videoUrl = `data:${result.contentType};base64,${base64}`;
+
+        const videoGenerationResult = {
+          id: uuidv4(),
+          imageUrl: '',
+          videoUrl,
+          videoBlob: result.blob,
+          seed: computedSeed,
+          contentType: 'video' as const,
+          duration: durationSeconds,
+          fps: undefined,
+          resolution: resolutionSize,
+          metadata: {
+            prompt: result.metadata.prompt || lumaPrompt,
+            seed: computedSeed,
+            jobId: result.metadata.id,
+            model: result.metadata.model || lumaModel,
+            version: 'Dream Machine 1.1.0',
+            timestamp: Date.now(),
+            filename: result.filename,
+            contentType: result.contentType,
+            fileSize: result.blob.size,
+            duration: durationSeconds,
+            fps: undefined,
+            resolution: resolutionSize,
+            persistenceMethod: 'dataUrl' as const,
+            storageMode: 'local' as const,
+          },
+          timestamp: Date.now(),
+          status: 'generated' as const,
+          blobUrl: videoUrl,
+          localPath: result.filename,
+        };
+
+        addGeneration(videoGenerationResult);
+
+        showSuccess(
+          'Video Generated',
+          `Generated "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB) - saved in memory only`
+        );
+
+        console.log('🎥 Video added to gallery store (data URL fallback):', {
+          id: videoGenerationResult.id,
+          videoUrl,
+          filename: result.filename,
+          size: result.blob.size,
+        });
+      } else {
+        console.log('✅ Luma Dream Machine video saved locally:', localSaveResult);
+
+        const videoGenerationResult = {
+          id: uuidv4(),
+          imageUrl: '',
+          videoUrl: '',
+          videoBlob: result.blob,
+          seed: computedSeed,
+          contentType: 'video' as const,
+          duration: durationSeconds,
+          fps: undefined,
+          resolution: resolutionSize,
+          metadata: {
+            prompt: result.metadata.prompt || lumaPrompt,
+            seed: computedSeed,
+            jobId: result.metadata.id,
+            model: result.metadata.model || lumaModel,
+            version: 'Dream Machine 1.1.0',
+            timestamp: Date.now(),
+            filename: result.filename,
+            contentType: result.contentType,
+            fileSize: result.blob.size,
+            duration: durationSeconds,
+            fps: undefined,
+            resolution: resolutionSize,
+            persistenceMethod: 'local' as const,
+            storageMode: 'local' as const,
+            folderToken: localSaveResult.folderToken ?? null,
+            localFilePath: localSaveResult.filePath,
+            localMetadataPath: localSaveResult.metadataPath,
+            savedAt: new Date().toISOString(),
+            localPersistenceProvider: localSaveResult.provider,
+            localBaseFolder: localSaveResult.baseFolder,
+            relativePath: localSaveResult.relativePath,
+          },
+          timestamp: Date.now(),
+          status: 'generated' as const,
+          localPath: localSaveResult.filePath,
+        };
+
+        addGeneration(videoGenerationResult);
+
+        showSuccess(
+          'Video Generated',
+          `Generated "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB) - saved to ${localSaveResult.displayPath || localSaveResult.filePath}`
+        );
+
+        console.log('🎥 Video added to gallery store (local file):', {
+          id: videoGenerationResult.id,
+          localPath: localSaveResult.filePath,
+          relativePath: localSaveResult.relativePath,
+          filename: result.filename,
+          size: result.blob.size,
+        });
+      }
+
+    } catch (error: any) {
+      console.error('❌ Luma Dream Machine video generation failed:', error);
+      showError('Video Generation Failed', error?.message || 'An unexpected error occurred.');
+    } finally {
+      setIsGeneratingLuma(false);
+    }
+  };
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
@@ -436,7 +640,7 @@ const AppContent = () => {
                 <article className="card">
                   <header className="card-header">
                     <h2 className="card-title">Generate Content</h2>
-                    <div className="text-detail">Create images with Adobe Firefly AI or videos with LTX</div>
+                    <div className="text-detail">Create images with Adobe Firefly AI or videos with LTX and Luma Dream Machine</div>
                     
                     {/* Generation Mode Toggle */}
                     <div className="generation-mode-toggle">
@@ -460,6 +664,15 @@ const AppContent = () => {
                           LTX Video
                         {/* @ts-ignore */}
                         </sp-button>
+                          {/* @ts-ignore */}
+                          <sp-button
+                            variant={generationMode === 'luma' ? 'primary' : 'secondary'}
+                            size="s"
+                            onClick={() => setGenerationMode('luma')}
+                          >
+                            Luma Dream Machine
+                          {/* @ts-ignore */}
+                          </sp-button>
                       {/* @ts-ignore */}
                       </sp-button-group>
                     </div>
@@ -633,7 +846,7 @@ const AppContent = () => {
                           </sp-button>
                         </div>
                       </div>
-                    ) : (
+                    ) : generationMode === 'ltx' ? (
                       <div className="generation-form">
                         {/* LTX Video Prompt Input */}
                         <div className="form-group">
@@ -768,6 +981,188 @@ const AppContent = () => {
                             disabled={isGeneratingLtx || !ltxPrompt.trim()}
                           >
                             {isGeneratingLtx ? 'Generating...' : 'Generate Video'}
+                          {/* @ts-ignore */}
+                          </sp-button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="generation-form">
+                        {/* Luma Video Prompt */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Video Prompt *</sp-label>
+                          {/* @ts-ignore */}
+                          <sp-textarea 
+                            id="luma-prompt-input"
+                            placeholder="A sweeping drone shot over bioluminescent waves crashing on a night beach..."
+                            className="prompt-input"
+                            multiline
+                            rows={3}
+                            maxlength={1000}
+                            value={lumaPrompt}
+                            onInput={(e: any) => setLumaPrompt(e.target.value)}
+                          >
+                          {/* @ts-ignore */}
+                          </sp-textarea>
+                          <div className="character-counter text-detail">
+                            {lumaPrompt.length}/1000 characters
+                          </div>
+                        </div>
+
+                        {/* Model */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Model</sp-label>
+                          <div className="text-detail mb-sm">Choose the Dream Machine model</div>
+                          {/* @ts-ignore */}
+                          <sp-picker 
+                            placeholder="Select model"
+                            className="style-dropdown"
+                            value={lumaModel}
+                            onChange={(e: any) => setLumaModel(e.target.value)}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-menu slot="options">
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="ray-2">Ray 2</sp-menu-item>
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="ray-flash-2">Ray Flash 2</sp-menu-item>
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="ray-1-6">Ray 1.6</sp-menu-item>
+                            {/* @ts-ignore */}
+                            </sp-menu>
+                          {/* @ts-ignore */}
+                          </sp-picker>
+                        </div>
+
+                        {/* Aspect Ratio */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Aspect Ratio</sp-label>
+                          <div className="text-detail mb-sm">Select the composition</div>
+                          {/* @ts-ignore */}
+                          <sp-radio-group 
+                            value={lumaAspectRatio}
+                            className="content-type-group"
+                            onChange={(e: any) => setLumaAspectRatio(e.target.value)}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-radio value="16:9">
+                              <span className="radio-label">16:9</span>
+                              <div className="radio-description text-detail">Widescreen</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="9:16">
+                              <span className="radio-label">9:16</span>
+                              <div className="radio-description text-detail">Vertical</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="1:1">
+                              <span className="radio-label">1:1</span>
+                              <div className="radio-description text-detail">Square</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="21:9">
+                              <span className="radio-label">21:9</span>
+                              <div className="radio-description text-detail">Ultra-wide</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                          {/* @ts-ignore */}
+                          </sp-radio-group>
+                        </div>
+
+                        {/* Duration */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Duration</sp-label>
+                          <div className="text-detail mb-sm">Clip length</div>
+                          {/* @ts-ignore */}
+                          <sp-radio-group 
+                            value={lumaDuration}
+                            className="fps-group"
+                            onChange={(e: any) => setLumaDuration(e.target.value)}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-radio value="5s">
+                              <span className="radio-label">5 seconds</span>
+                              <div className="radio-description text-detail">Quick loop</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="9s">
+                              <span className="radio-label">9 seconds</span>
+                              <div className="radio-description text-detail">Longer motion</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                          {/* @ts-ignore */}
+                          </sp-radio-group>
+                        </div>
+
+                        {/* Resolution */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Resolution</sp-label>
+                          <div className="text-detail mb-sm">Output size</div>
+                          {/* @ts-ignore */}
+                          <sp-radio-group 
+                            value={lumaResolution}
+                            className="resolution-group"
+                            onChange={(e: any) => setLumaResolution(e.target.value)}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-radio value="540p">
+                              <span className="radio-label">540p</span>
+                              <div className="radio-description text-detail">Lightweight preview</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="720p">
+                              <span className="radio-label">720p</span>
+                              <div className="radio-description text-detail">HD</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="1080p">
+                              <span className="radio-label">1080p</span>
+                              <div className="radio-description text-detail">Full HD</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="4k">
+                              <span className="radio-label">4K</span>
+                              <div className="radio-description text-detail">Ultra HD</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                          {/* @ts-ignore */}
+                          </sp-radio-group>
+                        </div>
+
+                        {/* Loop */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-checkbox 
+                            checked={lumaLoop}
+                            onChange={(e: any) => setLumaLoop(Boolean(e.target.checked))}
+                          >
+                            Loop video when playing
+                          {/* @ts-ignore */}
+                          </sp-checkbox>
+                        </div>
+
+                        {/* Generate Button */}
+                        <div className="form-actions">
+                          {/* @ts-ignore */}
+                          <sp-button 
+                            variant="accent" 
+                            size="m"
+                            className="generate-button"
+                            onClick={handleGenerateLumaVideo}
+                            disabled={isGeneratingLuma || !lumaPrompt.trim()}
+                          >
+                            {isGeneratingLuma ? 'Generating...' : 'Generate Video'}
                           {/* @ts-ignore */}
                           </sp-button>
                         </div>

@@ -38,10 +38,10 @@ describe('App Component', () => {
   it('renders the main layout with generate tab active', () => {
     render(<App />);
 
-  expect(screen.getByRole('heading', { name: /adobe uxp panel/i })).toBeInTheDocument();
-  expect(screen.getByRole('heading', { level: 2, name: /generate images/i })).toBeInTheDocument();
-    expect(screen.getByText(/please authenticate to generate images/i)).toBeInTheDocument();
-  expect(screen.getAllByText(/login/i)[0]).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /adobe uxp panel/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /generate content/i })).toBeInTheDocument();
+    expect(screen.getByText(/please authenticate to generate content/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/login/i)[0]).toBeInTheDocument();
   });
 
   it('allows switching to the gallery tab', async () => {
@@ -50,7 +50,7 @@ describe('App Component', () => {
 
     await user.click(screen.getByText(/gallery/i));
 
-  expect(screen.getByRole('heading', { level: 2, name: /sign in to view your gallery/i })).toBeInTheDocument();
-  expect(screen.getAllByText(/login/i)[0]).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /sign in to view your gallery/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/login/i)[0]).toBeInTheDocument();
   });
 });

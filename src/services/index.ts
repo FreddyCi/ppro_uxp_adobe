@@ -19,5 +19,8 @@ export * from './fal'
 // LTX Video generation service - T0XX: Integrate LTX text-to-video API
 export * from './ltx'
 
+// Luma Labs Dream Machine video generation service
+export * from './luma'
+
 // TODO: Uncomment these as services are implemented in their respective tasks:
 // export * from './premiere';   // T025: Implement UXP Premiere Pro API Integration
