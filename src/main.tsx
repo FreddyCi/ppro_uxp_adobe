@@ -427,12 +427,6 @@ const AppContent = () => {
                             onClick={handleGenerateImage}
                             disabled={isGenerating || !prompt.trim()}
                           >
-                            {isGenerating ? (
-                              /* @ts-ignore */
-                              <sp-icon name="ui:Clock" size="s" slot="icon"></sp-icon>
-                            ) : (
-                              <RefreshIcon size={14} className="theme-icon" />
-                            )}
                             {isGenerating ? 'Generating...' : 'Generate'}
                           {/* @ts-ignore */}
                           </sp-button>
