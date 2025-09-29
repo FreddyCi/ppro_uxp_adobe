@@ -905,8 +905,36 @@ export async function loadGalleryItems(rawItems: GalleryItem[]): Promise<Gallery
       // For generation results with local storage
       else if ('metadata' in it && it.metadata && 'storageMode' in it.metadata && it.metadata.storageMode === 'local' && 'folderToken' in it.metadata && 'relativePath' in it.metadata && it.metadata.folderToken && it.metadata.relativePath) {
         try {
-          const src = await toTempUrl(it.metadata.folderToken, it.metadata.relativePath)
-          return { ...it, imageUrl: src }
+          // Resolve proper MIME type for blob creation
+          let mimeType = it.metadata.contentType;
+          if (mimeType === 'video') {
+            // Infer specific video MIME type from file extension
+            const extension = it.metadata.relativePath.split('.').pop()?.toLowerCase();
+            switch (extension) {
+              case 'mp4':
+                mimeType = 'video/mp4';
+                break;
+              case 'webm':
+                mimeType = 'video/webm';
+                break;
+              case 'avi':
+                mimeType = 'video/avi';
+                break;
+              case 'mov':
+                mimeType = 'video/quicktime';
+                break;
+              case 'mkv':
+                mimeType = 'video/x-matroska';
+                break;
+              case 'm4v':
+                mimeType = 'video/x-m4v';
+                break;
+              default:
+                mimeType = 'video/mp4'; // Default fallback
+            }
+          }
+          const src = await toTempUrl(it.metadata.folderToken, it.metadata.relativePath, mimeType);
+          return { ...it, imageUrl: src };
         } catch (e) {
           console.warn('Failed to create temporary URL for local generated image', it.metadata.relativePath, e)
           return { ...it, broken: true }

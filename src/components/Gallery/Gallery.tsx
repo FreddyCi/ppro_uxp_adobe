@@ -33,13 +33,26 @@ function inferMimeType(filePath: string, fallback: string = 'image/jpeg'): strin
       return 'image/vnd.adobe.photoshop';
     case 'svg':
       return 'image/svg+xml';
+    // Video formats
+    case 'mp4':
+      return 'video/mp4';
+    case 'webm':
+      return 'video/webm';
+    case 'avi':
+      return 'video/avi';
+    case 'mov':
+      return 'video/quicktime';
+    case 'mkv':
+      return 'video/x-matroska';
+    case 'm4v':
+      return 'video/x-m4v';
     default:
       return fallback;
   }
 }
 
-// Helper function to load local image file as blob
-async function loadLocalImageAsBlob(filePath: string): Promise<Blob> {
+// Helper function to load local file as blob (supports images and videos)
+async function loadLocalFileAsBlob(filePath: string): Promise<Blob> {
   const inferredMimeType = inferMimeType(filePath);
   // Try Bolt addon first
   try {
@@ -153,7 +166,7 @@ async function loadLocalImageAsBlob(filePath: string): Promise<Blob> {
     console.warn('UXP filesystem read failed:', uxpError);
   }
 
-  throw new Error(`Unable to load local image file: ${filePath}`);
+  throw new Error(`Unable to load local file: ${filePath}`);
 }
 
 type GallerySource = 'generated' | 'corrected';
@@ -234,10 +247,11 @@ export const Gallery = () => {
         const updatedResults = generationHistory.map((result, index) => {
           const hydratedItem = hydrated[index] as any; // Cast to any to access correctedUrl
           if (hydratedItem && result.metadata?.storageMode === 'local' && result.metadata?.persistenceMethod === 'local') {
+            const hydratedUrl = hydratedItem.imageUrl || hydratedItem.correctedUrl;
             return {
               ...result,
-              imageUrl: hydratedItem.correctedUrl || result.imageUrl,
-              videoUrl: result.contentType === 'video' ? (hydratedItem.correctedUrl || result.videoUrl) : result.videoUrl,
+              imageUrl: hydratedUrl || result.imageUrl,
+              videoUrl: result.contentType === 'video' ? (hydratedUrl || result.videoUrl) : result.videoUrl,
             };
           }
           return result;
@@ -534,7 +548,7 @@ export const Gallery = () => {
       if (selectedImage.localFilePath) {
         try {
           console.warn('📁 Loading image from local file for Gemini correction:', selectedImage.localFilePath);
-          imageBlob = await loadLocalImageAsBlob(selectedImage.localFilePath);
+          imageBlob = await loadLocalFileAsBlob(selectedImage.localFilePath);
           console.warn('✅ Successfully loaded local image for correction');
         } catch (localError) {
           console.warn('⚠️ Failed to load local image, falling back to URL fetch:', localError);
@@ -815,43 +829,56 @@ export const Gallery = () => {
             <div key={image.id} className="gallery-item">
               <div className="item-image">
                 {image.isVideo ? (
-                  <video 
-                    src={image.videoUrl || image.url} 
-                    controls
-                    muted
-                    poster={image.url} // Use thumbnail if available
-                    style={{ width: '100%', height: '200px', objectFit: 'cover' }}
-                    onError={(e) => {
-                      const target = e.target as HTMLVideoElement;
-                      console.warn('❌ Video failed to load:', {
-                        originalSrc: target.src,
-                        prompt: image.prompt,
-                        storageMode: image.storageMode,
-                        persistenceMethod: image.persistenceMethod,
-                      });
+                  (image.videoUrl || image.url) ? (
+                    <video 
+                      src={image.videoUrl || image.url} 
+                      controls
+                      muted
+                      poster={image.url} // Use thumbnail if available
+                      style={{ width: '100%', height: '200px', objectFit: 'cover' }}
+                      onError={(e) => {
+                        const target = e.target as HTMLVideoElement;
+                        console.warn('❌ Video failed to load:', {
+                          originalSrc: target.src,
+                          prompt: image.prompt,
+                          storageMode: image.storageMode,
+                          persistenceMethod: image.persistenceMethod,
+                        });
 
-                      // Show error placeholder
-                      target.style.display = 'none';
-                      const parent = target.parentElement;
-                      if (parent && !parent.querySelector('.error-placeholder')) {
-                        const placeholder = document.createElement('div');
-                        placeholder.className = 'error-placeholder';
-                        placeholder.style.cssText = `
-                          width: 100%; height: 200px; background: #f0f0f0; 
-                          display: flex; align-items: center; justify-content: center;
-                          color: #666; font-size: 14px; text-align: center;
-                        `;
-                        placeholder.innerHTML = `
-                          <div>
-                            <div>🎥</div>
-                            <div>Video unavailable</div>
-                            <div style="font-size: 12px; margin-top: 4px;">URL expired</div>
-                          </div>
-                        `;
-                        parent.appendChild(placeholder);
-                      }
-                    }}
-                  />
+                        // Show error placeholder
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent && !parent.querySelector('.error-placeholder')) {
+                          const placeholder = document.createElement('div');
+                          placeholder.className = 'error-placeholder';
+                          placeholder.style.cssText = `
+                            width: 100%; height: 200px; background: #f0f0f0; 
+                            display: flex; align-items: center; justify-content: center;
+                            color: #666; font-size: 14px; text-align: center;
+                          `;
+                          placeholder.innerHTML = `
+                            <div>
+                              <div>🎥</div>
+                              <div>Video unavailable</div>
+                              <div style="font-size: 12px; margin-top: 4px;">URL expired</div>
+                            </div>
+                          `;
+                          parent.appendChild(placeholder);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="error-placeholder" style={{
+                      width: '100%', height: '200px', background: '#f0f0f0', 
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#666', fontSize: '14px', textAlign: 'center'
+                    }}>
+                      <div>
+                        <div>🎥</div>
+                        <div>Video loading...</div>
+                      </div>
+                    </div>
+                  )
                 ) : (
                   <img 
                     src={image.url} 

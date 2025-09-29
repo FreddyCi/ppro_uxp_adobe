@@ -5,7 +5,7 @@ import { storage } from 'uxp';
  * This is necessary for local files to be renderable in the Gallery component.
  * Since UXP doesn't have createTemporaryUrl, we read the file and create a blob URL.
  */
-export async function toTempUrl(folderToken: string | null | undefined, relativePath: string | undefined): Promise<string> {
+export async function toTempUrl(folderToken: string | null | undefined, relativePath: string | undefined, mimeType?: string): Promise<string> {
   const fs = storage.localFileSystem;
 
   if (!folderToken || !relativePath) {
@@ -25,14 +25,17 @@ export async function toTempUrl(folderToken: string | null | undefined, relative
       throw new Error('File not found: ' + relativePath);
     }
 
-    // Read the file content
-    const arrayBuffer = await file.read();
+    // Read the file content as binary data
+    const binaryFormat = storage.formats?.binary;
+    const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
+    const arrayBuffer = await file.read(readOptions);
+
     if (!arrayBuffer) {
       throw new Error('Failed to read file content');
     }
 
-    // Create a blob and blob URL
-    const blob = new Blob([arrayBuffer]);
+    // Create a blob and blob URL with proper MIME type
+    const blob = new Blob([arrayBuffer], mimeType ? { type: mimeType } : undefined);
     const blobUrl = URL.createObjectURL(blob);
 
     return blobUrl;
