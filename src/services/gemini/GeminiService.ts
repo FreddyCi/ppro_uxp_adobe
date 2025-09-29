@@ -518,6 +518,8 @@ export class GeminiService {
       },
       timestamp: new Date(),
       blobUrl: blobUrl, // Store blob URL for persistence and download
+      filename,
+      storageLocation: 'memory',
     }
 
     return correctedImage

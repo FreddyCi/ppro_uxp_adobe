@@ -101,6 +101,15 @@ export interface CorrectionMetadata {
 }
 
 // Final Result for Gallery
+export interface CorrectedImageAzureMetadata {
+  containerName: string
+  blobName: string
+  blobUrl: string
+  uploadedAt: string
+  etag?: string
+  size?: number
+}
+
 export interface CorrectedImage {
   id: string
   originalUrl: string
@@ -111,6 +120,9 @@ export interface CorrectedImage {
   timestamp: Date
   blobUrl?: string // Azure Blob storage URL
   parentGenerationId?: string // Link to original Firefly generation
+  filename?: string
+  storageLocation?: 'memory' | 'azure' | 'local'
+  azureMetadata?: CorrectedImageAzureMetadata
 }
 
 // Before/After Comparison for UI

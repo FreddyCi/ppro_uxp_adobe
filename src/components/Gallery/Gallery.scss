@@ -444,25 +444,17 @@
       flex-direction: column;
       gap: $space-100;
 
-      sp-textarea {
-        width: 100%;
-      }
 
-      .character-counter {
-        margin-top: 0;
-        font-size: $font-size-75;
-        text-align: right;
-        color: var(--theme-highlight);
-      }
     }
 
-    .checkbox-grid {
+     .checkbox-grid {
       margin-top: $space-200;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      display: flex;
+      flex-wrap: wrap;
       gap: $space-100;
 
       .checkbox-option {
+        flex: 1 1 calc(50% - #{$space-100});
         background: var(--theme-bg-layer-2);
         border: 1px solid var(--theme-border-subtle);
         border-radius: $border-radius;
