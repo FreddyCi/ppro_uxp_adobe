@@ -245,7 +245,7 @@ const AppContent = () => {
                         </div>
 
                         {/* @ts-ignore */}
-                        <sp-button variant="accent" size="s" onClick={testIMSAuthentication} style={{ marginLeft: '12px' }}>
+                        <sp-button variant="accent" onClick={testIMSAuthentication} style={{ marginLeft: '12px' }}>
                           Login
                         {/* @ts-ignore */}
                         </sp-button>
@@ -456,7 +456,6 @@ const AppContent = () => {
                       {/* @ts-ignore */}
                       <sp-button
                         variant="accent"
-                        size="s"
                         onClick={testIMSAuthentication}
                         style={{ marginLeft: '12px' }}
                       >
