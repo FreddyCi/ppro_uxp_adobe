@@ -9,8 +9,38 @@ import type { CorrectionParams } from '../../types/gemini';
 import { useToastHelpers } from '../../hooks/useToast';
 import './Gallery.scss';
 
+function inferMimeType(filePath: string, fallback: string = 'image/jpeg'): string {
+  const extension = filePath.split('.').pop()?.toLowerCase() || '';
+
+  switch (extension) {
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return 'image/gif';
+    case 'bmp':
+      return 'image/bmp';
+    case 'tif':
+    case 'tiff':
+      return 'image/tiff';
+    case 'heic':
+      return 'image/heic';
+    case 'psd':
+      return 'image/vnd.adobe.photoshop';
+    case 'svg':
+      return 'image/svg+xml';
+    default:
+      return fallback;
+  }
+}
+
 // Helper function to load local image file as blob
 async function loadLocalImageAsBlob(filePath: string): Promise<Blob> {
+  const inferredMimeType = inferMimeType(filePath);
   // Try Bolt addon first
   try {
     const requireFn = (globalThis as unknown as { require?: (moduleId: string) => any }).require;
@@ -27,7 +57,7 @@ async function loadLocalImageAsBlob(filePath: string): Promise<Blob> {
             for (let i = 0; i < binaryString.length; i++) {
               bytes[i] = binaryString.charCodeAt(i);
             }
-            return new Blob([bytes]);
+            return new Blob([bytes], { type: inferredMimeType });
           }
         }
       }
@@ -36,16 +66,87 @@ async function loadLocalImageAsBlob(filePath: string): Promise<Blob> {
     console.warn('Bolt addon read failed, trying UXP filesystem:', boltError);
   }
 
-  // Try UXP filesystem fallback
+  // Try UXP filesystem fallback with stored folder token
   try {
     const requireFn = (globalThis as unknown as { require?: (moduleId: string) => any }).require;
     if (requireFn) {
       const uxp = requireFn('uxp') as any;
-      const localFileSystem = uxp?.storage?.localFileSystem;
+      const storage = uxp?.storage;
+      const localFileSystem = storage?.localFileSystem;
+      const binaryFormat = storage?.formats?.binary;
       if (localFileSystem) {
-        // For UXP, we need to get the file entry and read it
-        // This is a simplified version - in practice, we'd need the folder token
-        throw new Error('UXP filesystem reading requires folder token - not implemented for loading');
+        // Get the stored folder token
+        const FOLDER_TOKEN_STORAGE_KEY = 'boltuxp.localFolderToken';
+        const FOLDER_PATH_STORAGE_KEY = 'boltuxp.localFolderPath';
+        const token = typeof window !== 'undefined' && window.localStorage 
+          ? window.localStorage.getItem(FOLDER_TOKEN_STORAGE_KEY) 
+          : null;
+        const storedFolderPath = typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem(FOLDER_PATH_STORAGE_KEY)
+          : null;
+        
+        if (token) {
+          // Get the folder entry using the token
+          let folder: any = null;
+          if (typeof localFileSystem.getEntryWithToken === 'function') {
+            folder = await localFileSystem.getEntryWithToken(token);
+          } else if (typeof localFileSystem.getEntryForPersistentToken === 'function') {
+            folder = await localFileSystem.getEntryForPersistentToken(token);
+          }
+          
+          if (folder) {
+            // Determine the relative path from the stored base folder if available
+            let relativePath = filePath;
+            if (storedFolderPath && filePath.startsWith(storedFolderPath)) {
+              relativePath = filePath.slice(storedFolderPath.length);
+            }
+
+            relativePath = relativePath.replace(/^[/\\]+/, '');
+            const pathSegments = relativePath
+              .split(/[/\\]+/)
+              .filter(segment => segment.length > 0);
+
+            let currentEntry: any = folder;
+            for (const segment of pathSegments) {
+              if (!currentEntry?.getEntry) {
+                currentEntry = null;
+                break;
+              }
+
+              try {
+                currentEntry = await currentEntry.getEntry(segment);
+              } catch (segmentError) {
+                console.warn('UXP filesystem segment lookup failed:', {
+                  segment,
+                  error: segmentError
+                });
+                currentEntry = null;
+                break;
+              }
+            }
+
+            if (currentEntry && typeof currentEntry.read === 'function') {
+              if (!binaryFormat) {
+                console.warn('UXP storage binary format unavailable; attempting default read.');
+              }
+
+              const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
+              const arrayBuffer = await currentEntry.read(readOptions);
+              if (arrayBuffer instanceof ArrayBuffer) {
+                return new Blob([arrayBuffer], { type: inferredMimeType });
+              }
+
+              // Some environments may return a typed array; normalise to ArrayBuffer
+              if (arrayBuffer?.buffer instanceof ArrayBuffer) {
+                return new Blob([arrayBuffer.buffer], { type: inferredMimeType });
+              }
+
+              throw new Error('UXP filesystem read did not return binary data.');
+            }
+          }
+        }
+        
+        throw new Error('Unable to access UXP filesystem with stored token');
       }
     }
   } catch (uxpError) {
