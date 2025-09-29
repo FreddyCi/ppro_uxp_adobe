@@ -12,6 +12,10 @@ import type {
   BeforeAfterComparison,
 } from '../../types/gemini'
 import type { IMSService } from '../ims/IMSService'
+import {
+  isLocalStorageMode,
+  saveGenerationLocally,
+} from '../local/localBoltStorage'
 
 /**
  * Service response wrapper for consistent error handling
@@ -458,13 +462,13 @@ export class GeminiService {
   }
 
   /**
-   * Transform Gemini response to CorrectedImage with memory-based storage
+   * Transform Gemini response to CorrectedImage with local storage
    */
   private async transformToCorrectImage(
     responseData: { data: string },
     corrections: CorrectionParams
   ): Promise<CorrectedImage> {
-    // Convert base64 to blob for memory storage
+    // Convert base64 to blob for storage
     const base64Data = responseData.data
     const mimeType = 'image/png' // Gemini typically returns PNG
     const byteCharacters = atob(base64Data)
@@ -477,20 +481,79 @@ export class GeminiService {
     const byteArray = new Uint8Array(byteNumbers)
     const blob = new Blob([byteArray], { type: mimeType })
 
-    // Create memory-based blob URL for the corrected image
+    // Create memory-based blob URL for immediate display
     const blobUrl = URL.createObjectURL(blob)
     const imageId = crypto.randomUUID()
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const filename = `gemini-corrected-${timestamp}.png`
 
+    let localFilePath: string | undefined
+    let localMetadataPath: string | undefined
+    let storageMode: 'local' | 'azure' = 'azure'
+    let persistenceMethod: 'blob' | 'dataUrl' | 'presigned' | 'local' = 'blob'
+
+    // Try to save locally if local storage is enabled
+    if (isLocalStorageMode()) {
+      try {
+        const saveResult = await saveGenerationLocally({
+          blob,
+          metadata: {
+            prompt: 'Gemini correction',
+            contentClass: 'photo' as const,
+            style: undefined,
+            size: { width: 1024, height: 1024 }, // Default size, could be improved
+            seed: Math.floor(Math.random() * 1000000), // Random seed for corrections
+            jobId: imageId,
+            model: this.config.model,
+            version: 'v1beta',
+            filename: filename,
+            contentType: mimeType,
+            fileSize: blob.size,
+            userId: undefined,
+            sessionId: undefined,
+            timestamp: Date.now(),
+            persistenceMethod: 'local',
+            storageMode: 'local',
+          },
+          filename,
+          subfolder: new Date().toISOString().slice(0, 10),
+        })
+
+        if (saveResult) {
+          localFilePath = saveResult.filePath
+          localMetadataPath = saveResult.metadataPath
+          storageMode = 'local'
+          persistenceMethod = 'local'
+
+          console.warn(
+            '💾 Gemini: Saved corrected image locally',
+            {
+              id: imageId,
+              filename: filename,
+              filePath: saveResult.filePath,
+              metadataPath: saveResult.metadataPath,
+              provider: saveResult.provider,
+              relativePath: saveResult.relativePath,
+            }
+          )
+        } else {
+          console.warn('⚠️ Gemini: Local storage unavailable for corrected image')
+        }
+      } catch (storageError) {
+        console.error('❌ Gemini: Failed to save corrected image locally:', storageError)
+      }
+    }
+
     console.warn(
-      '📁 Gemini: Created memory-based blob URL for corrected image',
+      '📁 Gemini: Created corrected image',
       {
         id: imageId,
         filename: filename,
         size: blob.size,
         blobUrl: blobUrl,
-        location: 'memory',
+        localFilePath: localFilePath,
+        storageMode: storageMode,
+        persistenceMethod: persistenceMethod,
       }
     )
 
@@ -519,7 +582,11 @@ export class GeminiService {
       timestamp: new Date(),
       blobUrl: blobUrl, // Store blob URL for persistence and download
       filename,
-      storageLocation: 'memory',
+      storageLocation: storageMode === 'local' ? 'local' : 'memory',
+      localFilePath: localFilePath,
+      localMetadataPath: localMetadataPath,
+      storageMode: storageMode,
+      persistenceMethod: persistenceMethod,
     }
 
     return correctedImage

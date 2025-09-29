@@ -123,6 +123,10 @@ export interface CorrectedImage {
   filename?: string
   storageLocation?: 'memory' | 'azure' | 'local'
   azureMetadata?: CorrectedImageAzureMetadata
+  localFilePath?: string
+  localMetadataPath?: string
+  storageMode?: 'azure' | 'local'
+  persistenceMethod?: 'blob' | 'dataUrl' | 'presigned' | 'local'
 }
 
 // Before/After Comparison for UI

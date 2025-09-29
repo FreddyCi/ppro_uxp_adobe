@@ -9,6 +9,52 @@ import type { CorrectionParams } from '../../types/gemini';
 import { useToastHelpers } from '../../hooks/useToast';
 import './Gallery.scss';
 
+// Helper function to load local image file as blob
+async function loadLocalImageAsBlob(filePath: string): Promise<Blob> {
+  // Try Bolt addon first
+  try {
+    const requireFn = (globalThis as unknown as { require?: (moduleId: string) => any }).require;
+    if (requireFn) {
+      const uxp = requireFn('uxp') as any;
+      if (uxp?.addon?.get) {
+        const addon = uxp.addon.get('bolt-uxp-hybrid.uxpaddon');
+        if (addon?.readFile) {
+          const base64Data = addon.readFile(filePath, false); // false = don't base64 encode
+          if (base64Data) {
+            // Convert base64 to blob
+            const binaryString = atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            return new Blob([bytes]);
+          }
+        }
+      }
+    }
+  } catch (boltError) {
+    console.warn('Bolt addon read failed, trying UXP filesystem:', boltError);
+  }
+
+  // Try UXP filesystem fallback
+  try {
+    const requireFn = (globalThis as unknown as { require?: (moduleId: string) => any }).require;
+    if (requireFn) {
+      const uxp = requireFn('uxp') as any;
+      const localFileSystem = uxp?.storage?.localFileSystem;
+      if (localFileSystem) {
+        // For UXP, we need to get the file entry and read it
+        // This is a simplified version - in practice, we'd need the folder token
+        throw new Error('UXP filesystem reading requires folder token - not implemented for loading');
+      }
+    }
+  } catch (uxpError) {
+    console.warn('UXP filesystem read failed:', uxpError);
+  }
+
+  throw new Error(`Unable to load local image file: ${filePath}`);
+}
+
 type GallerySource = 'generated' | 'corrected';
 
 interface ImageData {
@@ -84,6 +130,9 @@ export const Gallery = () => {
       tags: image.metadata?.operationsApplied?.slice(0, 3) || [],
       source: 'corrected' as const,
       parentId: image.parentGenerationId,
+      localFilePath: image.localFilePath,
+      storageMode: image.storageMode,
+      persistenceMethod: image.persistenceMethod,
     }));
   }, [correctedImages]);
 
@@ -301,12 +350,32 @@ export const Gallery = () => {
       setIsCorrecting(true);
       showInfo('Enhancing image', 'Gemini is applying your corrections...');
 
-      const response = await fetch(selectedImage.url);
-      if (!response.ok) {
-        throw new Error('Unable to load the original image.');
+      let imageBlob: Blob;
+
+      // Try to load from local file first if available
+      if (selectedImage.localFilePath) {
+        try {
+          console.warn('📁 Loading image from local file for Gemini correction:', selectedImage.localFilePath);
+          imageBlob = await loadLocalImageAsBlob(selectedImage.localFilePath);
+          console.warn('✅ Successfully loaded local image for correction');
+        } catch (localError) {
+          console.warn('⚠️ Failed to load local image, falling back to URL fetch:', localError);
+          // Fall back to URL fetch
+          const response = await fetch(selectedImage.url);
+          if (!response.ok) {
+            throw new Error('Unable to load the original image.');
+          }
+          imageBlob = await response.blob();
+        }
+      } else {
+        // Load from URL as before
+        const response = await fetch(selectedImage.url);
+        if (!response.ok) {
+          throw new Error('Unable to load the original image.');
+        }
+        imageBlob = await response.blob();
       }
 
-      const imageBlob = await response.blob();
       const result = await geminiService.correctImage(imageBlob, params);
 
       if (!result.success || !result.data) {
