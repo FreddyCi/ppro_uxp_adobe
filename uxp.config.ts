@@ -123,6 +123,7 @@ const manifest: UXP_Manifest = {
         "https://api.ltx.video/v1", // LTX Video API v1 endpoint
         "https://api.lumalabs.ai", // Luma Labs Dream Machine API
         "https://api.lumalabs.ai/dream-machine/v1", // Luma Labs Dream Machine API v1 endpoint
+        "https://storage.cdn-luma.com", // Luma Dream Machine CDN for generated assets
         `ws://localhost:${extraPrefs.hotReloadPort}`, // Required for hot reload
       ],
     },
