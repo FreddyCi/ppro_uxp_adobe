@@ -618,6 +618,13 @@ export class FireflyService {
                 result.metadata.storageMode = 'local'
                 result.localPath = saveResult.filePath
                 result.downloadUrl = saveResult.filePath
+                console.warn('💾 Saved generation locally:', {
+                  filePath: saveResult.filePath,
+                  metadataPath: saveResult.metadataPath,
+                  relativePath: saveResult.relativePath
+                })
+              } else {
+                console.warn('⚠️ Local storage addon unavailable; keeping data URL only')
               }
             } catch (storageError) {
               console.error('❌ Failed to save image locally:', storageError)
