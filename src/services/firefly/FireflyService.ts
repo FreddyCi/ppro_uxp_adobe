@@ -14,7 +14,6 @@ import type {
   FireflyServiceError,
   FireflyServiceResponse,
   RateLimitInfo,
-  CustomModelsFF3pInfo,
   GenerateImagesRequestV3
 } from '../../types/firefly'
 import type { IIMSService } from '../ims/IMSService'
@@ -261,67 +260,6 @@ export class FireflyService {
       throw this.createServiceError(
         'DOWNLOAD_FAILED',
         'Failed to download image from presigned URL',
-        error as Error
-      )
-    }
-  }
-
-  /**
-   * Get available custom models
-   */
-  async getCustomModels(options: {
-    sortBy?: 'assetName' | 'createdDate' | 'modifiedDate'
-    start?: number
-    limit?: number
-    publishedState?: 'all' | 'ready' | 'published' | 'unpublished' | 'queued' | 'training' | 'failed' | 'cancelled'
-  } = {}): Promise<FireflyServiceResponse<CustomModelsFF3pInfo>> {
-    const startTime = Date.now()
-    
-    try {
-      const accessToken = await this.imsService.getAccessToken()
-      // Note: Custom models require user token which is not implemented in current IMSService
-      // const userToken = await this.imsService.getUserToken?.() // Optional user token for custom models
-      
-      const queryParams = new URLSearchParams()
-      if (options.sortBy) queryParams.set('sortBy', options.sortBy)
-      if (options.start !== undefined) queryParams.set('start', options.start.toString())
-      if (options.limit !== undefined) queryParams.set('limit', options.limit.toString())
-      if (options.publishedState) queryParams.set('publishedState', options.publishedState)
-
-      const url = `${this.config.apiUrl}/v3/custom-models?${queryParams}`
-      const headers: Record<string, string> = {
-        'Authorization': `Bearer ${accessToken}`,
-        'x-api-key': this.config.clientId,
-        'x-request-id': crypto.randomUUID()
-      }
-
-      // if (userToken) {
-      //   headers['x-user-token'] = `Bearer ${userToken}`
-      // }
-
-      const response = await this.makeApiRequest(url, {
-        method: 'GET',
-        headers
-      })
-
-      const data = await response.json()
-      this.updateRateLimitInfo(response)
-
-      console.warn('Custom models retrieved:', {
-        count: data.custom_models?.length || 0,
-        totalCount: data.total_count
-      })
-
-      return {
-        data,
-        rateLimitInfo: this.rateLimitInfo || undefined,
-        processingTime: Date.now() - startTime
-      }
-    } catch (error) {
-      console.error('Failed to get custom models:', error)
-      throw this.createServiceError(
-        'CUSTOM_MODELS_FAILED',
-        'Failed to retrieve custom models',
         error as Error
       )
     }

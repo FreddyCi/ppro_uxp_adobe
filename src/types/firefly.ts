@@ -99,36 +99,6 @@ export type ColligoErrorCodeAsyncV3 =
   | 'job_not_found'
   | 'bad_request'
 
-// Custom Models API
-export interface CustomModelFF3pInfo {
-  version: string
-  assetName: string
-  size: number
-  etag: string
-  trainingMode: 'subject' | 'style'
-  assetId: string
-  mediaType: string
-  createdDate: string
-  modifiedDate: string
-  publishedState: 'never' | 'published' | 'unpublished'
-  baseModel: {
-    name: string
-    version: string
-  }
-  samplePrompt: string
-  displayName: string
-  conceptId?: string
-}
-
-export interface CustomModelsFF3pInfo {
-  custom_models: CustomModelFF3pInfo[]
-  _links: {
-    page?: { href: string; rel: string }
-    next?: { href: string; rel: string }
-  }
-  total_count: number
-}
-
 // Enhanced interfaces for our application
 export interface FireflyGenerationRequest {
   prompt: string
