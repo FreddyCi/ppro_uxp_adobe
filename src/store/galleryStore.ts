@@ -890,7 +890,7 @@ export async function loadGalleryItems(rawItems: GalleryItem[]): Promise<Gallery
       // For corrected images with local storage
       if ('storageMode' in it && it.storageMode === 'local' && 'folderToken' in it && 'relativePath' in it && it.folderToken && it.relativePath) {
         try {
-          const src = await toTempUrl(it.folderToken, it.relativePath)
+          const src = await toTempUrl(it.folderToken, it.relativePath, undefined, it.localFilePath);
           return { ...it, correctedUrl: src, thumbnailUrl: src }
         } catch (e) {
           console.warn('Failed to create temporary URL for local corrected image', it.relativePath, e)
@@ -898,6 +898,21 @@ export async function loadGalleryItems(rawItems: GalleryItem[]): Promise<Gallery
           if ('blobUrl' in it && it.blobUrl) {
             console.warn('Using blob URL fallback for corrected image', it.relativePath)
             return { ...it, correctedUrl: it.blobUrl, thumbnailUrl: it.blobUrl }
+          }
+          return { ...it, broken: true }
+        }
+      }
+      // For items with localFilePath but no folderToken/relativePath (fallback)
+      else if ('localFilePath' in it && it.localFilePath && 'storageMode' in it && it.storageMode === 'local') {
+        try {
+          const src = await toTempUrl(undefined, undefined, undefined, it.localFilePath);
+          return { ...it, correctedUrl: src, thumbnailUrl: src, imageUrl: src }
+        } catch (e) {
+          console.warn('Failed to create temporary URL for local file using localFilePath', it.localFilePath, e)
+          // Fall back to blob URL if available
+          if ('blobUrl' in it && it.blobUrl) {
+            console.warn('Using blob URL fallback for local file', it.localFilePath)
+            return { ...it, correctedUrl: it.blobUrl, thumbnailUrl: it.blobUrl, imageUrl: it.blobUrl }
           }
           return { ...it, broken: true }
         }
@@ -933,10 +948,48 @@ export async function loadGalleryItems(rawItems: GalleryItem[]): Promise<Gallery
                 mimeType = 'video/mp4'; // Default fallback
             }
           }
-          const src = await toTempUrl(it.metadata.folderToken, it.metadata.relativePath, mimeType);
+          const src = await toTempUrl(it.metadata.folderToken, it.metadata.relativePath, mimeType, it.metadata.localFilePath);
           return { ...it, imageUrl: src };
         } catch (e) {
           console.warn('Failed to create temporary URL for local generated image', it.metadata.relativePath, e)
+          return { ...it, broken: true }
+        }
+      }
+      // For generation results with localFilePath but no folderToken/relativePath (fallback)
+      else if ('metadata' in it && it.metadata && 'storageMode' in it.metadata && it.metadata.storageMode === 'local' && 'localFilePath' in it.metadata && it.metadata.localFilePath) {
+        try {
+          // Resolve proper MIME type for blob creation
+          let mimeType = it.metadata.contentType;
+          if (mimeType === 'video') {
+            // Infer specific video MIME type from file extension
+            const extension = it.metadata.localFilePath.split('.').pop()?.toLowerCase();
+            switch (extension) {
+              case 'mp4':
+                mimeType = 'video/mp4';
+                break;
+              case 'webm':
+                mimeType = 'video/webm';
+                break;
+              case 'avi':
+                mimeType = 'video/avi';
+                break;
+              case 'mov':
+                mimeType = 'video/quicktime';
+                break;
+              case 'mkv':
+                mimeType = 'video/x-matroska';
+                break;
+              case 'm4v':
+                mimeType = 'video/x-m4v';
+                break;
+              default:
+                mimeType = 'video/mp4'; // Default fallback
+            }
+          }
+          const src = await toTempUrl(undefined, undefined, mimeType, it.metadata.localFilePath);
+          return { ...it, imageUrl: src };
+        } catch (e) {
+          console.warn('Failed to create temporary URL for local generated image using localFilePath', it.metadata.localFilePath, e)
           return { ...it, broken: true }
         }
       }

@@ -206,7 +206,6 @@ const AppContent = () => {
           storageMode: 'local' as const,
         },
         filename: result.filename,
-        subfolder: 'videos'
       });
       
       if (!localSaveResult) {
