@@ -439,7 +439,34 @@ const AppContent = () => {
             )}
 
             {activeTab === 'gallery' && (
-              <Gallery />
+              imsToken ? (
+                <Gallery />
+              ) : (
+                <article className="card">
+                  <header className="card-header">
+                    <h2 className="card-title">Sign in to view your gallery</h2>
+                    <div className="text-detail">Authenticate to browse saved generations.</div>
+                  </header>
+                  <div className="card-body">
+                    <div className="auth-required" style={{ margin: 0 }}>
+                      <div className="text-detail" style={{ color: 'var(--theme-warning)' }}>
+                        Please authenticate to access the gallery
+                      </div>
+
+                      {/* @ts-ignore */}
+                      <sp-button
+                        variant="accent"
+                        size="s"
+                        onClick={testIMSAuthentication}
+                        style={{ marginLeft: '12px' }}
+                      >
+                        Login
+                      {/* @ts-ignore */}
+                      </sp-button>
+                    </div>
+                  </div>
+                </article>
+              )
             )}
           </div>
         </section>

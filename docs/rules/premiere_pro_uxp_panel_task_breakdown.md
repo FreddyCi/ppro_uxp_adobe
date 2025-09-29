@@ -921,91 +921,38 @@ class FireflyService {
 **Estimate:** 90 minutes
 **Progress Note:** Successfully implemented comprehensive Gallery component with complete Popup with html5 and scss flex with UXP Widget only components. Created responsive grid layout with 3 view modes (grid, list, details), image detail dialog with full metadata display, zoom and pan functionality (1.5x-5x zoom with mouse/keyboard controls), navigation controls with prev/next buttons and proper focus management. Implemented delete and clear history functions, thumbnail error handling, and complete integration with generationStore. Added zoom controls with mouse drag panning and keyboard shortcuts (+/- for zoom, 0 for reset). Component includes proper accessibility features, UXP compatibility, and exports correctly from features/index.ts. Integrated with main app navigation through TabContent.tsx - both Generate and Gallery tabs now display the actual functional components. All builds validate successfully with zero TypeScript errors.
 
-### T020.5: Live Firefly API Testing & UXP Auth Persistence Fix
-**Status:** ✅ Completed
-**Dependencies:** T020, IMS Authentication Fix
-**Priority:** Critical
-**Estimate:** 30 minutes
-**Progress Note:** Successfully completed end-to-end Firefly API testing with real image generation AND fixed critical UXP authentication persistence issue. **Major Fix**: Resolved authentication token loss on UXP plugin reload - auth store now properly persists and rehydrates authentication state using enhanced localStorage with Date serialization fix, improved error handling for quota exceeded errors, automatic token validation on rehydration, and debug logging for troubleshooting. Updated main.tsx to use auth store instead of manual state management, added logout functionality, and improved user feedback. Users no longer need to re-authenticate after UXP Developer Tools reload. Fixed critical Gallery pagination bug where images weren't displaying due to incorrect index calculation (currentPage * itemsPerPage vs (currentPage - 1) * itemsPerPage). Generated test image "A sunset over mountains" using real Firefly API with IMS authentication. Image successfully stored as data URL, persisted across sessions, and displays correctly in Gallery with proper metadata (prompt, timestamp, job ID). Completed full workflow: Login → Generate → Gallery display. All debugging code cleaned up. System ready for production use with persistent authentication.
-**Description:** Test real Firefly image generation with live API
+### T020.5: Firefly API Smoke Test & Auth Persistence
+**Status:** 🚧 In Progress
+**Dependencies:** T020, baseline IMS authentication
+**Priority:** High
+**Estimate:** 1 day
+**Progress Note:** Firefly service calls and IMS helpers are wired in the UI, but we have not validated the workflow end-to-end with live credentials and our auth state still lives inside `main.tsx`. We need to exercise the real API, move authentication into the shared store with persistence, and confirm gallery entries survive a panel reload before calling this complete.
+**Description:** Validate Adobe Firefly image generation against the production API and persist IMS authentication across UXP reloads.
 **Deliverables:**
-- ✅ IMS authentication works with real credentials
-- ✅ Generate one test image: "A sunset over mountains"
-- ✅ Image appears in Gallery with proper pagination fix
-- ✅ Error handling works if generation fails
+- [ ] Run a Firefly generation with live IMS credentials and capture the resulting job ID, prompt, and asset reference.
+- [ ] Persist IMS authentication via `authStore` so the session survives closing and reopening the panel.
+- [ ] Ensure generated images (prompt, timestamp, job ID) populate the gallery and remain after a reload.
+- [ ] Document and surface error states with actionable toast messages and logging behind a debug flag.
 **Simple Test:**
-
-2. ✅ Click Login button - authenticates successfully with real IMS credentials
-3. ✅ Enter prompt: "A sunset over mountains"
-4. ✅ Click Generate - creates real image via Firefly API v3 async workflow
-5. ✅ Check Gallery tab - image displays correctly with metadata
+1. Log in with IMS credentials using the panel UI.
+2. Submit the prompt "A sunset over mountains" and wait for the job to complete.
+3. Switch to the Gallery tab, confirm the new entry appears with metadata, then reload the panel to verify persistence.
+4. Review the console and toast output for any failures or rate-limit notices.
 **Acceptance Criteria:**
-- ✅ Login works without errors (IMS OAuth client credentials flow successful)
-- ✅ Test prompt generates real image (Firefly API v3 async job workflow completed)
-- ✅ Image displays in Gallery with metadata (Fixed pagination bug, image shows on page 1 with full metadata)
-- ✅ **MAJOR FIX**: Authentication persists across UXP plugin reloads (Enhanced auth store with proper localStorage persistence, Date serialization handling, and automatic token validation)
-- ✅ **BONUS**: Debug helpers available for troubleshooting auth issues (debugAuthState function and enhanced logging)
-
-**Coding Rules:**
-- Test with real Adobe credentials in .env.local
-- Validate complete end-to-end workflow
-- Document any API issues or limitations found
-- Ensure production-ready error handling
-
-- Review docs directory if needed
-- Do not over engineer
-
-
-**Description:** Build gallery view for generated images using React Spectrum components
-**Deliverables:**
-- ✅ Spectrum `Grid` layout for thumbnail display (Responsive CSS grid with 3 columns, auto-sizing based on view mode)
-- ✅ `Dialog` component for image detail view with metadata (Full DialogTrigger with detailed metadata, generation settings, and image info)
-- ✅ Click-to-open modal dialog functionality (Image thumbnails clickable with proper button implementation and accessibility)
-- ✅ `ActionButton` navigation controls (prev/next) (Prev/next buttons with proper focus management and keyboard navigation)
-- ✅ Delete and clear history functions with confirmation dialogs (Individual delete and clear all functionality with user feedback)
-**Enhanced Gallery Features Implemented:**
-- ✅ Responsive grid layout using CSS Grid (3 view modes: grid, list, details with dynamic column sizing)
-- ✅ Image zoom and pan functionality (1.5x-5x zoom with mouse drag panning and smooth transitions)
-- ✅ Metadata display (prompt, settings, timestamp) in organized view (Complete metadata including generation settings, job IDs, and file info)
-- ✅ Full-screen modal dialog with image detail view (Click any thumbnail to open detailed view with navigation)
-- ✅ Selection states using React Spectrum patterns (Visual selection indicators and proper state management)
-- ✅ View mode toggle buttons (Grid, List, Details views with proper ActionButton styling)
-- ✅ Pagination controls (Page navigation with proper disable states)
-- ✅ Error handling for failed image loads (Graceful fallback with "Failed to load" message)
-- ✅ Download functionality (Direct image download with browser download API)
-- ✅ Duplicate generation feature (Allows re-creating images with same settings)
-- ✅ Keyboard accessibility (Full keyboard navigation and zoom controls with +/- keys)
-- ✅ Integration with toast notifications (Success/error feedback for all operations)
-**Technical Implementation:**
-- Complete integration with generationStore for history management
-- Proper TypeScript interfaces and error handling
-- UXP-compatible styling and component usage
-- Mouse and keyboard event handling for zoom/pan with proper accessibility
-- React Spectrum Dialog, ButtonGroup, ActionButton, and layout components
-- CSS Grid layout with responsive design tokens
-- Integration with main app navigation through TabContent.tsx
-- Click handlers properly implemented on image thumbnails for modal dialog opening
-- Fixed React Spectrum polyfill issues with Node.js globals (process, buffer) for browser compatibility
-- Optimized Vite configuration with ESBuild polyfill plugins for seamless React Spectrum operation
-**Acceptance Criteria:**
-- ✅ Images display correctly in Spectrum-styled grid (3 responsive view modes working correctly)
-- ✅ Detail view shows full resolution with proper Spectrum dialog (Full metadata display with zoom/pan functionality)
-- ✅ Clicking any image thumbnail opens the detail modal dialog (Both grid and list view modes support click-to-open)
-- ✅ Navigation between images works smoothly with focus management (Prev/next navigation with proper focus states)
-- ✅ Zoom and pan functionality working with mouse and keyboard controls
-- ✅ Delete and clear operations provide proper user feedback
-- ✅ Component integrates seamlessly with existing authentication and service systems
-- ✅ All builds pass without TypeScript errors and exports correctly
-
-**Coding Rules:**
-- Review docs directory if needed
-- Do not over engineer
+- [ ] IMS login persists across a UXP panel reload without re-authentication.
+- [ ] Firefly jobs complete through `FireflyService` with recorded job IDs and stored metadata.
+- [ ] Gallery displays generated assets after reload with intact prompt/timestamp information.
+- [ ] Errors propagate to the UI with retry guidance and logged context for debugging.
+**Coding Guidelines:**
+- Use `.env` for credentials and keep secrets out of source control.
+- Avoid persisting full data URLs in localStorage; prefer references or temp files when possible.
+- Gate verbose logging behind a debug flag to keep production output clean.
 ---
 
 ## Phase 6: Gemini Image Correction
 
 ### T021: Create Gemini API Service Adapter
-**Status:** ✅ Completed
+**Status:** ToDo
 **Dependencies:** T020
 **Priority:** High
 **Estimate:** 75 minutes
@@ -1066,7 +1013,7 @@ class GeminiService {
 ---
 
 ### T022: Build Image Correction UI
-**Status:** ✅ Completed
+**Status:** Todo
 **Dependencies:** T021
 **Priority:** High
 **Estimate:** 75 minutes
