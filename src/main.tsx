@@ -9,6 +9,7 @@ import { useGenerationStore } from "./store/generationStore";
 import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
 import "./layout.scss";
 import { v4 as uuidv4 } from 'uuid';
+import { saveGenerationLocally } from './services/local/localBoltStorage';
 import { LtxVideoService } from './services/ltx';
 
 const AppContent = () => {
@@ -184,20 +185,10 @@ const AppContent = () => {
       const result = await ltxService.generateVideo(ltxRequest);
       console.log('✅ LTX video generation completed:', result);
       
-      // Create video URL for display
-      const videoUrl = URL.createObjectURL(result.blob);
-      
-      // Create generation result for the video
-      const videoGenerationResult = {
-        id: uuidv4(),
-        imageUrl: videoUrl, // Use videoUrl as the primary URL for gallery compatibility
-        videoUrl: videoUrl,
-        videoBlob: result.blob,
-        seed: ltxSeed > 0 ? ltxSeed : Math.floor(Math.random() * 999999),
-        contentType: 'video' as const,
-        duration: ltxDuration,
-        fps: ltxFps,
-        resolution: { width: ltxWidth, height: ltxHeight },
+      // Save video to local storage
+      console.log('💾 Saving LTX video to local storage...');
+      const localSaveResult = await saveGenerationLocally({
+        blob: result.blob,
         metadata: {
           prompt: ltxPrompt,
           seed: ltxSeed > 0 ? ltxSeed : Math.floor(Math.random() * 999999),
@@ -211,26 +202,116 @@ const AppContent = () => {
           duration: ltxDuration,
           fps: ltxFps,
           resolution: { width: ltxWidth, height: ltxHeight },
-          persistenceMethod: 'blob' as const,
+          persistenceMethod: 'local' as const,
           storageMode: 'local' as const,
         },
-        timestamp: Date.now(),
-        status: 'generated' as const,
-        blobUrl: videoUrl,
-        localPath: result.filename,
-      };
-      
-      // Add video to generation store
-      addGeneration(videoGenerationResult);
-      
-      showSuccess('Video Generated', `Generated "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB)`);
-      
-      console.log('🎥 Video added to gallery store:', {
-        id: videoGenerationResult.id,
-        videoUrl,
         filename: result.filename,
-        size: result.blob.size
+        subfolder: 'videos'
       });
+      
+      if (!localSaveResult) {
+        console.warn('⚠️ Local save failed, falling back to data URL');
+        // Fallback to data URL if local save fails
+        const arrayBuffer = await result.blob.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        const base64 = btoa(String.fromCharCode(...bytes));
+        const videoUrl = `data:${result.contentType};base64,${base64}`;
+        
+        // Create generation result for the video
+        const videoGenerationResult = {
+          id: uuidv4(),
+          imageUrl: videoUrl,
+          videoUrl: videoUrl,
+          videoBlob: result.blob,
+          seed: ltxSeed > 0 ? ltxSeed : Math.floor(Math.random() * 999999),
+          contentType: 'video' as const,
+          duration: ltxDuration,
+          fps: ltxFps,
+          resolution: { width: ltxWidth, height: ltxHeight },
+          metadata: {
+            prompt: ltxPrompt,
+            seed: ltxSeed > 0 ? ltxSeed : Math.floor(Math.random() * 999999),
+            jobId: result.metadata.requestId,
+            model: 'LTX Video',
+            version: '1.0',
+            timestamp: Date.now(),
+            filename: result.filename,
+            contentType: result.contentType,
+            fileSize: result.blob.size,
+            duration: ltxDuration,
+            fps: ltxFps,
+            resolution: { width: ltxWidth, height: ltxHeight },
+            persistenceMethod: 'dataUrl' as const,
+            storageMode: 'local' as const,
+          },
+          timestamp: Date.now(),
+          status: 'generated' as const,
+          blobUrl: videoUrl,
+          localPath: result.filename,
+        };
+        
+        // Add video to generation store
+        addGeneration(videoGenerationResult);
+        
+        showSuccess('Video Generated', `Generated "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB) - saved in memory only`);
+        
+        console.log('🎥 Video added to gallery store (data URL fallback):', {
+          id: videoGenerationResult.id,
+          videoUrl,
+          filename: result.filename,
+          size: result.blob.size
+        });
+      } else {
+        console.log('✅ LTX video saved locally:', localSaveResult);
+        
+        // Create generation result for the video with local file reference
+        const videoGenerationResult = {
+          id: uuidv4(),
+          imageUrl: '', // Will be set by toTempUrl in gallery
+          videoUrl: '', // Will be set by toTempUrl in gallery
+          videoBlob: result.blob,
+          seed: ltxSeed > 0 ? ltxSeed : Math.floor(Math.random() * 999999),
+          contentType: 'video' as const,
+          duration: ltxDuration,
+          fps: ltxFps,
+          resolution: { width: ltxWidth, height: ltxHeight },
+          metadata: {
+            prompt: ltxPrompt,
+            seed: ltxSeed > 0 ? ltxSeed : Math.floor(Math.random() * 999999),
+            jobId: result.metadata.requestId,
+            model: 'LTX Video',
+            version: '1.0',
+            timestamp: Date.now(),
+            filename: result.filename,
+            contentType: result.contentType,
+            fileSize: result.blob.size,
+            duration: ltxDuration,
+            fps: ltxFps,
+            resolution: { width: ltxWidth, height: ltxHeight },
+            persistenceMethod: 'local' as const,
+            storageMode: 'local' as const,
+            folderToken: localSaveResult.folderToken,
+            relativePath: localSaveResult.relativePath,
+            localFilePath: localSaveResult.filePath,
+          },
+          timestamp: Date.now(),
+          status: 'generated' as const,
+          localPath: localSaveResult.filePath,
+        };
+        
+        // Add video to generation store
+        addGeneration(videoGenerationResult);
+        
+        showSuccess('Video Generated', `Generated "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB) - saved to ${localSaveResult.displayPath || localSaveResult.filePath}`);
+        
+        console.log('🎥 Video added to gallery store (local file):', {
+          id: videoGenerationResult.id,
+          localPath: localSaveResult.filePath,
+          relativePath: localSaveResult.relativePath,
+          filename: result.filename,
+          size: result.blob.size
+        });
+      }
       
     } catch (error: any) {
       console.error('❌ LTX video generation failed:', error);

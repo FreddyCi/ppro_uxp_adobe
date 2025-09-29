@@ -193,6 +193,9 @@ export const Gallery = () => {
   // State for hydrated corrected images
   const [hydratedCorrectedImages, setHydratedCorrectedImages] = useState(correctedImages);
 
+  // State for hydrated generation results
+  const [hydratedGenerationResults, setHydratedGenerationResults] = useState(generationHistory);
+
   // Hydrate corrected images on mount and when correctedImages change
   useEffect(() => {
     const hydrateImages = async () => {
@@ -208,6 +211,48 @@ export const Gallery = () => {
     hydrateImages();
   }, [correctedImages]);
 
+  // Hydrate generation results on mount and when generationHistory changes
+  useEffect(() => {
+    const hydrateGenerationResults = async () => {
+      try {
+        // Create a mock array that looks like corrected images for hydration
+        const mockItems = generationHistory.map(result => ({
+          id: result.id,
+          correctedUrl: result.imageUrl,
+          thumbnailUrl: result.imageUrl,
+          localFilePath: result.localPath,
+          storageMode: result.metadata?.storageMode,
+          persistenceMethod: result.metadata?.persistenceMethod,
+          folderToken: result.metadata?.folderToken,
+          relativePath: result.metadata?.relativePath,
+          timestamp: result.timestamp,
+        }));
+
+        const hydrated = await loadGalleryItems(mockItems as any);
+        
+        // Map back to generation results with updated URLs
+        const updatedResults = generationHistory.map((result, index) => {
+          const hydratedItem = hydrated[index] as any; // Cast to any to access correctedUrl
+          if (hydratedItem && result.metadata?.storageMode === 'local' && result.metadata?.persistenceMethod === 'local') {
+            return {
+              ...result,
+              imageUrl: hydratedItem.correctedUrl || result.imageUrl,
+              videoUrl: result.contentType === 'video' ? (hydratedItem.correctedUrl || result.videoUrl) : result.videoUrl,
+            };
+          }
+          return result;
+        });
+
+        setHydratedGenerationResults(updatedResults);
+      } catch (error) {
+        console.error('Failed to hydrate generation results:', error);
+        setHydratedGenerationResults(generationHistory); // Fallback to original
+      }
+    };
+
+    hydrateGenerationResults();
+  }, [generationHistory]);
+
   const geminiService = useMemo(() => {
     const imsService = createIMSService();
     return new GeminiService(imsService as unknown as IMSServiceClass);
@@ -222,7 +267,7 @@ export const Gallery = () => {
   
   // Convert generation results to gallery format
   const storeImages = useMemo(() => {
-    return generationHistory.map((result) => ({
+    return hydratedGenerationResults.map((result) => ({
       id: result.id,
       url: result.contentType === 'video' ? (result.videoUrl || result.imageUrl) : result.imageUrl,
       prompt: result.metadata?.prompt || 'Untitled generation',
@@ -245,7 +290,7 @@ export const Gallery = () => {
       fps: result.fps,
       resolution: result.resolution,
     }));
-  }, [generationHistory]);
+  }, [hydratedGenerationResults]);
 
   const correctedGalleryImages = useMemo(() => {
     return hydratedCorrectedImages.map(image => ({
