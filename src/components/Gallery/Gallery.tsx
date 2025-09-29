@@ -172,6 +172,12 @@ interface ImageData {
   localFilePath?: string;
   storageMode?: 'azure' | 'local';
   persistenceMethod?: 'blob' | 'dataUrl' | 'presigned' | 'local';
+  // Video support
+  isVideo?: boolean;
+  videoUrl?: string;
+  duration?: number;
+  fps?: number;
+  resolution?: { width: number; height: number };
 }
 
 interface GalleryProps {}
@@ -218,9 +224,9 @@ export const Gallery = () => {
   const storeImages = useMemo(() => {
     return generationHistory.map((result) => ({
       id: result.id,
-      url: result.imageUrl,
+      url: result.contentType === 'video' ? (result.videoUrl || result.imageUrl) : result.imageUrl,
       prompt: result.metadata?.prompt || 'Untitled generation',
-      contentType: (result.metadata?.contentClass || 'art').toLowerCase(),
+      contentType: result.contentType === 'video' ? 'video' : (result.metadata?.contentClass || 'art').toLowerCase(),
       aspectRatio: 'square', // Default since we're generating square images
       createdAt: new Date(result.timestamp),
       tags: (result.metadata?.prompt || '')
@@ -232,6 +238,12 @@ export const Gallery = () => {
       localFilePath: result.localPath || result.metadata?.localFilePath,
       storageMode: result.metadata?.storageMode,
       persistenceMethod: result.metadata?.persistenceMethod,
+      // Video support
+      isVideo: result.contentType === 'video',
+      videoUrl: result.videoUrl,
+      duration: result.duration,
+      fps: result.fps,
+      resolution: result.resolution,
     }));
   }, [generationHistory]);
 
@@ -757,78 +769,121 @@ export const Gallery = () => {
           {filteredImages.map((image: ImageData) => (
             <div key={image.id} className="gallery-item">
               <div className="item-image">
-                <img 
-                  src={image.url} 
-                  alt={image.prompt}
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    console.warn('❌ Image failed to load:', {
-                      originalSrc: target.src,
-                      prompt: image.prompt,
-                      storageMode: image.storageMode,
-                      persistenceMethod: image.persistenceMethod,
-                    });
+                {image.isVideo ? (
+                  <video 
+                    src={image.videoUrl || image.url} 
+                    controls
+                    muted
+                    poster={image.url} // Use thumbnail if available
+                    style={{ width: '100%', height: '200px', objectFit: 'cover' }}
+                    onError={(e) => {
+                      const target = e.target as HTMLVideoElement;
+                      console.warn('❌ Video failed to load:', {
+                        originalSrc: target.src,
+                        prompt: image.prompt,
+                        storageMode: image.storageMode,
+                        persistenceMethod: image.persistenceMethod,
+                      });
 
-                    if (image.localFilePath && target.src !== image.localFilePath) {
-                      console.warn('📁 Trying local file fallback:', image.localFilePath);
-                      target.src = image.localFilePath;
-                      return;
-                    }
+                      // Show error placeholder
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent && !parent.querySelector('.error-placeholder')) {
+                        const placeholder = document.createElement('div');
+                        placeholder.className = 'error-placeholder';
+                        placeholder.style.cssText = `
+                          width: 100%; height: 200px; background: #f0f0f0; 
+                          display: flex; align-items: center; justify-content: center;
+                          color: #666; font-size: 14px; text-align: center;
+                        `;
+                        placeholder.innerHTML = `
+                          <div>
+                            <div>🎥</div>
+                            <div>Video unavailable</div>
+                            <div style="font-size: 12px; margin-top: 4px;">URL expired</div>
+                          </div>
+                        `;
+                        parent.appendChild(placeholder);
+                      }
+                    }}
+                  />
+                ) : (
+                  <img 
+                    src={image.url} 
+                    alt={image.prompt}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      console.warn('❌ Image failed to load:', {
+                        originalSrc: target.src,
+                        prompt: image.prompt,
+                        storageMode: image.storageMode,
+                        persistenceMethod: image.persistenceMethod,
+                      });
 
-                    if (image.downloadUrl && target.src !== image.downloadUrl) {
-                      console.warn('🔄 Trying downloadUrl fallback:', image.downloadUrl);
-                      target.src = image.downloadUrl;
-                      return;
-                    }
+                      if (image.localFilePath && target.src !== image.localFilePath) {
+                        console.warn('📁 Trying local file fallback:', image.localFilePath);
+                        target.src = image.localFilePath;
+                        return;
+                      }
 
-                    // Try to find the original generation result to get additional fallbacks
-                    const originalResult = generationHistory.find((result) =>
-                      result.id === image.id || result.metadata.prompt === image.prompt
-                    );
+                      if (image.downloadUrl && target.src !== image.downloadUrl) {
+                        console.warn('🔄 Trying downloadUrl fallback:', image.downloadUrl);
+                        target.src = image.downloadUrl;
+                        return;
+                      }
 
-                    if (originalResult?.metadata?.localFilePath && target.src !== originalResult.metadata.localFilePath) {
-                      console.warn('📁 Trying original result local path:', originalResult.metadata.localFilePath);
-                      target.src = originalResult.metadata.localFilePath;
-                      return;
-                    }
+                      // Try to find the original generation result to get additional fallbacks
+                      const originalResult = generationHistory.find((result) =>
+                        result.id === image.id || result.metadata.prompt === image.prompt
+                      );
 
-                    if (originalResult?.downloadUrl && target.src !== originalResult.downloadUrl) {
-                      console.warn('🔄 Trying downloadUrl fallback:', originalResult.downloadUrl);
-                      target.src = originalResult.downloadUrl;
-                      return;
-                    }
+                      if (originalResult?.metadata?.localFilePath && target.src !== originalResult.metadata.localFilePath) {
+                        console.warn('📁 Trying original result local path:', originalResult.metadata.localFilePath);
+                        target.src = originalResult.metadata.localFilePath;
+                        return;
+                      }
 
-                    // Show error placeholder
-                    target.style.backgroundColor = '#f0f0f0';
-                    target.style.display = 'none';
-                    const parent = target.parentElement;
-                    if (parent && !parent.querySelector('.error-placeholder')) {
-                      const placeholder = document.createElement('div');
-                      placeholder.className = 'error-placeholder';
-                      placeholder.style.cssText = `
-                        width: 100%; height: 200px; background: #f0f0f0; 
-                        display: flex; align-items: center; justify-content: center;
-                        color: #666; font-size: 14px; text-align: center;
-                      `;
-                      placeholder.innerHTML = `
-                        <div>
-                          <div>🖼️</div>
-                          <div>Image unavailable</div>
-                          <div style="font-size: 12px; margin-top: 4px;">URL expired</div>
-                        </div>
-                      `;
-                      parent.appendChild(placeholder);
-                    }
-                  }}
-                />
+                      if (originalResult?.downloadUrl && target.src !== originalResult.downloadUrl) {
+                        console.warn('🔄 Trying downloadUrl fallback:', originalResult.downloadUrl);
+                        target.src = originalResult.downloadUrl;
+                        return;
+                      }
+
+                      // Show error placeholder
+                      target.style.backgroundColor = '#f0f0f0';
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent && !parent.querySelector('.error-placeholder')) {
+                        const placeholder = document.createElement('div');
+                        placeholder.className = 'error-placeholder';
+                        placeholder.style.cssText = `
+                          width: 100%; height: 200px; background: #f0f0f0; 
+                          display: flex; align-items: center; justify-content: center;
+                          color: #666; font-size: 14px; text-align: center;
+                        `;
+                        placeholder.innerHTML = `
+                          <div>
+                            <div>🖼️</div>
+                            <div>Image unavailable</div>
+                            <div style="font-size: 12px; margin-top: 4px;">URL expired</div>
+                          </div>
+                        `;
+                        parent.appendChild(placeholder);
+                      }
+                    }}
+                  />
+                )}
               </div>
               <div className="item-info">
                 <div className="item-prompt">{image.prompt}</div>
                 <div className="item-meta">
                   <span className="item-type">{image.contentType}</span>
                   <span className="item-date">{new Date(image.createdAt).toLocaleDateString()}</span>
+                  {image.isVideo && image.duration && (
+                    <span className="item-duration">{image.duration}s</span>
+                  )}
                 </div>
-                {image.source === 'generated' && (
+                {image.source === 'generated' && !image.isVideo && (
                   <div className="item-actions">
                     {/* @ts-ignore */}
                     <sp-button

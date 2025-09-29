@@ -146,6 +146,14 @@ export interface GenerationResult {
   blobUrl?: string // Azure Blob storage URL
   thumbnailUrl?: string
   localPath?: string
+  
+  // Content type support (images and videos)
+  contentType?: 'image' | 'video'
+  videoUrl?: string // For video content
+  videoBlob?: Blob // For video blob storage
+  duration?: number // Video duration in seconds
+  fps?: number // Video frame rate
+  resolution?: SizeV3 // Video resolution
 }
 
 export interface GenerationMetadata {
@@ -185,6 +193,12 @@ export interface GenerationMetadata {
   folderToken?: string | null
   localBaseFolder?: string
   relativePath?: string
+  
+  // Video-specific metadata
+  duration?: number // Video duration in seconds
+  fps?: number // Video frame rate
+  videoCodec?: string // Video codec information
+  audioCodec?: string // Audio codec information
 }
 
 // Service configuration

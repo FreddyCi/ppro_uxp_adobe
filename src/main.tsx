@@ -8,6 +8,7 @@ import { FireflyService } from "./services/firefly";
 import { useGenerationStore } from "./store/generationStore";
 import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
 import "./layout.scss";
+import { v4 as uuidv4 } from 'uuid';
 
 const AppContent = () => {
   const [imsToken, setImsToken] = useState<string | null>(null);
@@ -182,13 +183,53 @@ const AppContent = () => {
       const result = await ltxService.generateVideo(ltxRequest);
       console.log('✅ LTX video generation completed:', result);
       
-      // Handle the video blob - for now, just show success
-      // TODO: Add video to gallery store or handle storage
-      showSuccess('Video Generated', `Generated ${result.filename} (${(result.blob.size / 1024 / 1024).toFixed(2)} MB)`);
-      
-      // Create object URL for preview (if needed)
+      // Create video URL for display
       const videoUrl = URL.createObjectURL(result.blob);
-      console.log('🎥 Video URL:', videoUrl);
+      
+      // Create generation result for the video
+      const videoGenerationResult = {
+        id: uuidv4(),
+        imageUrl: videoUrl, // Use videoUrl as the primary URL for gallery compatibility
+        videoUrl: videoUrl,
+        videoBlob: result.blob,
+        seed: ltxSeed > 0 ? ltxSeed : Math.floor(Math.random() * 999999),
+        contentType: 'video' as const,
+        duration: ltxDuration,
+        fps: ltxFps,
+        resolution: { width: ltxWidth, height: ltxHeight },
+        metadata: {
+          prompt: ltxPrompt,
+          seed: ltxSeed > 0 ? ltxSeed : Math.floor(Math.random() * 999999),
+          jobId: result.metadata.requestId,
+          model: 'LTX Video',
+          version: '1.0',
+          timestamp: Date.now(),
+          filename: result.filename,
+          contentType: result.contentType,
+          fileSize: result.blob.size,
+          duration: ltxDuration,
+          fps: ltxFps,
+          resolution: { width: ltxWidth, height: ltxHeight },
+          persistenceMethod: 'blob' as const,
+          storageMode: 'local' as const,
+        },
+        timestamp: Date.now(),
+        status: 'generated' as const,
+        blobUrl: videoUrl,
+        localPath: result.filename,
+      };
+      
+      // Add video to generation store
+      addGeneration(videoGenerationResult);
+      
+      showSuccess('Video Generated', `Generated "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB)`);
+      
+      console.log('🎥 Video added to gallery store:', {
+        id: videoGenerationResult.id,
+        videoUrl,
+        filename: result.filename,
+        size: result.blob.size
+      });
       
     } catch (error: any) {
       console.error('❌ LTX video generation failed:', error);
