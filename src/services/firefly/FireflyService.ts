@@ -580,15 +580,10 @@ export class FireflyService {
             persistenceMethod = 'blob'
           } catch (blobError) {
             console.warn('⚠️ Blob URL creation failed, falling back to data URL:', blobError)
-            
-            // Fallback to data URL for UXP compatibility
-            const reader = new FileReader()
-            const dataUrl = await new Promise<string>((resolve, reject) => {
-              reader.onload = () => resolve(reader.result as string)
-              reader.onerror = () => reject(reader.error)
-              reader.readAsDataURL(blob)
-            })
-            
+
+            // Fallback to data URL for UXP compatibility without FileReader dependency
+            const dataUrl = await this.convertBlobToDataUrl(blob)
+
             persistentUrl = dataUrl
             persistenceMethod = 'dataUrl'
             console.warn('✅ Created data URL fallback:', dataUrl.substring(0, 50) + '...')
@@ -646,6 +641,60 @@ export class FireflyService {
     })
 
     return results
+  }
+
+  private async convertBlobToDataUrl(blob: Blob): Promise<string> {
+    try {
+      const arrayBuffer = await blob.arrayBuffer()
+      const bytes = new Uint8Array(arrayBuffer)
+      const base64 = this.encodeBase64(bytes)
+      const mimeType = blob.type || 'application/octet-stream'
+
+      return `data:${mimeType};base64,${base64}`
+    } catch (error) {
+      console.error('Failed to convert blob to data URL:', error)
+      throw error
+    }
+  }
+
+  private encodeBase64(bytes: Uint8Array): string {
+    if (typeof btoa === 'function') {
+      let binary = ''
+      const chunkSize = 0x8000
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize)
+        binary += Array.from(chunk, byte => String.fromCharCode(byte)).join('')
+      }
+      return btoa(binary)
+    }
+
+    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    let result = ''
+    let i = 0
+
+    for (; i + 3 <= bytes.length; i += 3) {
+      const triplet = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2]
+      result += base64Chars[(triplet >> 18) & 63]
+      result += base64Chars[(triplet >> 12) & 63]
+      result += base64Chars[(triplet >> 6) & 63]
+      result += base64Chars[triplet & 63]
+    }
+
+    if (i < bytes.length) {
+      const remaining = bytes.length - i
+      const chunk = (bytes[i] << 16) | ((remaining > 1 ? bytes[i + 1] : 0) << 8)
+      result += base64Chars[(chunk >> 18) & 63]
+      result += base64Chars[(chunk >> 12) & 63]
+      if (remaining === 2) {
+        result += base64Chars[(chunk >> 6) & 63]
+        result += '='
+      } else {
+        result += '='
+        result += '='
+      }
+    }
+
+    return result
   }
 
   private mapApiStatus(apiStatus: string): FireflyGenerationJob['status'] {
