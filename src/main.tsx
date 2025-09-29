@@ -6,7 +6,7 @@ import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
 import { FireflyService } from "./services/firefly";
 import { useGenerationStore } from "./store/generationStore";
-import { RefreshIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
+import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
 import "./layout.scss";
 
 const AppContent = () => {
@@ -467,7 +467,7 @@ const AppContent = () => {
             title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             className="theme-toggle"
           >
-            <span>{isDarkMode ? 'Dark Mode' : 'Light Mode'}</span>
+            {isDarkMode ? <MoonIcon className="theme-icon" /> : <SunIcon className="theme-icon" />}
           {/* @ts-ignore */}
           </sp-action-button>
 
