@@ -8,6 +8,7 @@ import { useGenerationStore } from '../store/generationStore'
 import { createAzureStorageServices, createAzureEnabledAddGeneration } from '../services/azureStorageFactory'
 import { IMSService } from '../services/ims/IMSService'
 import type { GenerationResult } from '../types/firefly'
+import { isAzureEnabled } from '../services/storageMode'
 
 let azureServices: ReturnType<typeof createAzureStorageServices> | null = null
 let azureEnabledAddGeneration: ((result: GenerationResult) => Promise<void>) | null = null
@@ -20,6 +21,11 @@ function initializeAzureServices(): void {
   if (azureServices || isInitialized) return
   
   isInitialized = true
+
+  if (!isAzureEnabled()) {
+    console.warn('⚙️ Azure Store: Skipping Azure service initialization - storage mode is local')
+    return
+  }
 
   try {
     console.warn('🔧 Azure Store: Initializing Azure Storage services...')

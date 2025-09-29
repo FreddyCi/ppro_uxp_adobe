@@ -8,6 +8,7 @@ import { createImageMigrationService } from './blob/ImageMigrationService'
 import { createAzureMigrationIntegration } from './AzureMigrationIntegration'
 import type { IMSService } from './ims/IMSService'
 import type { GenerationResult } from '../types/firefly'
+import { isAzureEnabled } from './storageMode'
 
 export interface AzureStorageServices {
   azureBlobService: ReturnType<typeof createAzureSDKBlobService>
@@ -29,6 +30,10 @@ export function createAzureStorageServices(
   imsService: IMSService,
   config: AzureStorageConfig = {}
 ): AzureStorageServices {
+  if (!isAzureEnabled()) {
+    throw new Error('Azure storage services are disabled in local storage mode')
+  }
+
   console.warn('🔧 Azure Storage: Initializing services...')
 
   // Create Azure Blob Service with environment configuration
@@ -74,6 +79,12 @@ export function createAzureEnabledAddGeneration(
   azureMigrationIntegration: ReturnType<typeof createAzureMigrationIntegration>,
   originalAddGeneration: (result: GenerationResult) => void
 ) {
+  if (!isAzureEnabled()) {
+    return async (result: GenerationResult): Promise<void> => {
+      originalAddGeneration(result)
+    }
+  }
+
   return async (result: GenerationResult): Promise<void> => {
     console.warn('🔄 Azure Storage: Processing generation result for Azure migration...')
 
@@ -107,6 +118,11 @@ export async function migrateExistingGenerationHistory(
   generationHistory: GenerationResult[],
   updateHistory: (newHistory: GenerationResult[]) => void
 ): Promise<void> {
+  if (!isAzureEnabled()) {
+    updateHistory(generationHistory)
+    return
+  }
+
   console.warn('🔄 Azure Storage: Migrating existing generation history...')
 
   try {
@@ -134,6 +150,14 @@ export async function validateAzureStorageConfiguration(
   issues: string[]
   recommendations: string[]
 }> {
+  if (!isAzureEnabled()) {
+    return {
+      isValid: true,
+      issues: [],
+      recommendations: ['Azure storage is disabled in local mode; no validation required']
+    }
+  }
+
   const issues: string[] = []
   const recommendations: string[] = []
 

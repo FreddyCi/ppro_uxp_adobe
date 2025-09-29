@@ -17,6 +17,10 @@ import type {
   GenerateImagesRequestV3
 } from '../../types/firefly'
 import type { IIMSService } from '../ims/IMSService'
+import {
+  isLocalStorageMode,
+  saveGenerationLocally,
+} from '../local/localBoltStorage'
 
 /**
  * FireflyService handles Adobe Firefly v3 API interactions
@@ -27,9 +31,11 @@ export class FireflyService {
   private readonly imsService: IIMSService
   private activeJobs = new Map<string, FireflyGenerationJob>()
   private rateLimitInfo: RateLimitInfo | null = null
+  private readonly useLocalStorage: boolean
 
   constructor(imsService: IIMSService, config: Partial<FireflyServiceConfig> = {}) {
     this.imsService = imsService
+    this.useLocalStorage = isLocalStorageMode()
     this.config = {
       apiUrl: 'https://firefly-api.adobe.io',
       clientId: import.meta.env.VITE_IMS_CLIENT_ID || '',
@@ -128,8 +134,14 @@ export class FireflyService {
       // Process outputs if job completed successfully
       const outputs = statusResponse.result?.outputs || statusResponse.outputs
       if (outputs && job.status === 'succeeded') {
+        const usePresigned = !this.useLocalStorage
         // Use presigned URLs directly for immediate viewing (they expire in ~1 hour but show instantly)
-        job.outputs = await this.processGenerationOutputs(outputs, job.request, true)
+        job.outputs = await this.processGenerationOutputs(
+          outputs,
+          job.request,
+          usePresigned,
+          job.jobId
+        )
       }
 
       console.warn('Firefly job status updated:', {
@@ -484,7 +496,8 @@ export class FireflyService {
   private async processGenerationOutputs(
     outputs: OutputImageV3[],
     request: FireflyGenerationRequest,
-    usePresignedUrls = false // Option to use presigned URLs directly
+    usePresignedUrls = false, // Option to use presigned URLs directly
+    jobId?: string
   ): Promise<GenerationResult[]> {
     console.warn('Processing generation outputs with presigned URLs:', {
       outputCount: outputs.length,
@@ -517,7 +530,7 @@ export class FireflyService {
           style: request.style,
           size: request.size,
           seed: output.seed,
-          jobId: '',
+          jobId: jobId ?? '',
           model: 'firefly-v3',
           version: 'v3',
           filename: filename,
@@ -526,7 +539,8 @@ export class FireflyService {
           userId: request.userId,
           sessionId: request.sessionId,
           timestamp: Date.now(),
-          persistenceMethod: 'presigned' // Default to presigned
+          persistenceMethod: usePresignedUrls ? 'presigned' : 'dataUrl',
+          storageMode: this.useLocalStorage ? 'local' : 'azure'
         },
         timestamp: Date.now(),
         status: 'generated' as const
@@ -589,6 +603,31 @@ export class FireflyService {
             method: persistenceMethod,
             urlPreview: persistentUrl.substring(0, 50) + '...'
           })
+
+          if (this.useLocalStorage) {
+            try {
+              const saveResult = await saveGenerationLocally({
+                blob,
+                metadata: {
+                  ...result.metadata,
+                  jobId: jobId ?? result.metadata.jobId,
+                },
+                filename,
+                subfolder: new Date(result.timestamp).toISOString().slice(0, 10),
+              })
+
+              if (saveResult) {
+                result.metadata.localFilePath = saveResult.filePath
+                result.metadata.localMetadataPath = saveResult.metadataPath
+                result.metadata.persistenceMethod = 'local'
+                result.metadata.storageMode = 'local'
+                result.localPath = saveResult.filePath
+                result.downloadUrl = saveResult.filePath
+              }
+            } catch (storageError) {
+              console.error('❌ Failed to save image locally:', storageError)
+            }
+          }
         } else {
           console.error('❌ Failed to download image:', response.status, response.statusText)
           console.warn('⚠️ Keeping presigned URL as fallback')

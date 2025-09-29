@@ -28,6 +28,7 @@ import type {
   EnvironmentAwareBlobConfig,
 } from '../../types/blob.js'
 import type { IMSService } from '../ims/IMSService.js'
+import { isAzureEnabled } from '../storageMode.js'
 
 export interface BlobServiceConfig extends EnvironmentAwareBlobConfig {
   defaultContainer: string
@@ -50,10 +51,21 @@ export class BlobService {
     this.validateConfig()
   }
 
+  private ensureAzureEnabled(): void {
+    if (!isAzureEnabled()) {
+      throw new Error('Azure Blob operations are disabled in local storage mode')
+    }
+  }
+
   /**
    * Validate configuration and initialize clients
    */
   private validateConfig(): void {
+    if (!isAzureEnabled()) {
+      console.warn('BlobService initialized while Azure storage is disabled')
+      return
+    }
+
     const { accountName, containerName, defaultContainer } = this.config
 
     if (!accountName || !containerName || !defaultContainer) {
@@ -70,6 +82,8 @@ export class BlobService {
    * Initialize blob service client based on environment
    */
   private async initializeClient(): Promise<void> {
+    this.ensureAzureEnabled()
+
     if (this.blobServiceClient) return
 
     try {
@@ -141,6 +155,7 @@ export class BlobService {
    */
   async uploadImage(file: File, metadata: ImageMetadata): Promise<string> {
     try {
+      this.ensureAzureEnabled()
       await this.initializeClient()
 
       if (!this.containerClient) {
@@ -194,6 +209,7 @@ export class BlobService {
     _options?: SasUrlOptions
   ): Promise<string> {
     try {
+      this.ensureAzureEnabled()
       await this.initializeClient()
 
       if (!this.blobServiceClient) {
@@ -230,6 +246,7 @@ export class BlobService {
     options?: BlobDownloadOptions
   ): Promise<Blob> {
     try {
+      this.ensureAzureEnabled()
       // Extract blob name from URL
       const url = new URL(blobUrl)
       const pathParts = url.pathname.split('/')
@@ -278,6 +295,7 @@ export class BlobService {
     permissions: BlobPermissions = 'r'
   ): Promise<BlobAccessInfo> {
     try {
+      this.ensureAzureEnabled()
       await this.initializeClient()
 
       if (!this.containerClient) {
@@ -323,6 +341,7 @@ export class BlobService {
     }
   }>> {
     try {
+      this.ensureAzureEnabled()
       await this.initializeClient()
 
       if (!this.containerClient) {
@@ -372,6 +391,7 @@ export class BlobService {
    */
   async blobExists(blobName: string): Promise<boolean> {
     try {
+      this.ensureAzureEnabled()
       await this.initializeClient()
 
       if (!this.containerClient) {
@@ -391,6 +411,7 @@ export class BlobService {
    */
   async deleteBlob(blobName: string): Promise<void> {
     try {
+      this.ensureAzureEnabled()
       await this.initializeClient()
 
       if (!this.containerClient) {
@@ -516,6 +537,15 @@ export class BlobService {
     lastChecked: Date
   }> {
     try {
+      if (!isAzureEnabled()) {
+        return {
+          status: 'healthy',
+          environment: this.config.environment,
+          containerExists: false,
+          lastChecked: new Date(),
+        }
+      }
+
       await this.initializeClient()
 
       const containerExists = this.containerClient
@@ -543,6 +573,10 @@ export class BlobService {
  * Factory function to create BlobService from environment variables
  */
 export function createBlobService(imsService?: IMSService): BlobService {
+  if (!isAzureEnabled()) {
+    throw new Error('BlobService cannot be created when Azure storage is disabled')
+  }
+
   const config: BlobServiceConfig = {
     accountName:
       import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_NAME || 'devstoreaccount1',

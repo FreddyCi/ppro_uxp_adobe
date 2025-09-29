@@ -159,9 +159,17 @@ interface ToastProviderProps {
 export const ToastProvider = ({ children }: ToastProviderProps) => {
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
+  const addToast = useCallback((toast: Omit<Toast, 'id' | 'timestamp'>) => {
     const id = `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    setToasts(prev => [...prev, { ...toast, id, timeout: toast.timeout ?? 4500 }])
+    setToasts(prev => [
+      ...prev,
+      {
+        ...toast,
+        id,
+        timeout: toast.timeout ?? 4500,
+        timestamp: new Date(),
+      },
+    ])
   }, [])
 
   const removeToast = useCallback((id: string) => {

@@ -307,7 +307,11 @@ export class ImageMigrationService {
       azureMetadata.originalFilename = metadata.filename || ''
       azureMetadata.contentType = metadata.contentType || 'image/jpeg'
       azureMetadata.fileSize = metadata.fileSize?.toString() || ''
-      azureMetadata.generatedAt = metadata.timestamp.toISOString()
+      const generatedAtDate =
+        typeof metadata.timestamp === 'number' && !Number.isNaN(metadata.timestamp)
+          ? new Date(metadata.timestamp)
+          : new Date()
+      azureMetadata.generatedAt = generatedAtDate.toISOString()
       azureMetadata.migratedAt = new Date().toISOString()
       azureMetadata.source = 'firefly-migration'
       azureMetadata.migrationService = 'ImageMigrationService'

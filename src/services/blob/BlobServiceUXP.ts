@@ -13,6 +13,7 @@ import type {
   EnvironmentAwareBlobConfig,
 } from '../../types/blob.js'
 import type { IMSService } from '../ims/IMSService.js'
+import { isAzureEnabled } from '../storageMode.js'
 
 export interface BlobServiceConfig extends EnvironmentAwareBlobConfig {
   defaultContainer: string
@@ -646,6 +647,10 @@ export class BlobService {
  * Factory function to create BlobService from environment variables
  */
 export function createBlobService(imsService?: IMSService): BlobService {
+  if (!isAzureEnabled()) {
+    throw new Error('BlobServiceUXP cannot be created when Azure storage is disabled')
+  }
+
   const config: BlobServiceConfig = {
     accountName:
       import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_NAME || 'devstoreaccount1',

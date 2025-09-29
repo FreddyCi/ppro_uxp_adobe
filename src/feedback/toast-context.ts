@@ -1,9 +1,5 @@
-/**
- * Toast types and utilities - Store-based implementation
- * Re-exports from uiStore to maintain API compatibility
- */
-
-import { useUIToasts, type Toast as UIStoreToast } from '../store/uiStore'
+import { createContext, useContext } from 'react'
+import type { Toast as UIStoreToast } from '../store/uiStore'
 
 // Type aliases for compatibility
 export type ToastTone = 'positive' | 'negative' | 'info' | 'notice'
@@ -11,7 +7,7 @@ export type ToastTone = 'positive' | 'negative' | 'info' | 'notice'
 // Re-export Toast type from store
 export type Toast = UIStoreToast
 
-// Context value interface for compatibility (implemented via store)
+// Context value interface
 export interface ToastContextValue {
   toasts: Toast[]
   addToast: (toast: Omit<Toast, 'id' | 'timestamp'>) => void
@@ -19,10 +15,12 @@ export interface ToastContextValue {
   clearToasts: () => void
 }
 
-// Store-based context implementation (no React Context needed)
-export const useToastContext = (): ToastContextValue => {
-  return useUIToasts()
-}
+export const ToastContext = createContext<ToastContextValue | undefined>(undefined)
 
-// For backward compatibility, export as ToastContext (function instead of React Context)
-export const ToastContext = useToastContext
+export const useToastContext = (): ToastContextValue => {
+  const context = useContext(ToastContext)
+  if (!context) {
+    throw new Error('useToastContext must be used within a ToastProvider')
+  }
+  return context
+}

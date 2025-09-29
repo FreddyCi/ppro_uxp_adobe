@@ -28,6 +28,22 @@ import type {
 
 ## 🚀 **Quick Start**
 
+### 🗂 Storage Modes
+
+The blob pipeline now supports two persistence modes controlled by the `VITE_STORAGE_MODE` environment variable:
+
+- **`azure` (default)** – Enables all Azure SDK integrations, including Azure Blob uploads, migration helpers, and SAS URL generation. Use this when you have valid storage credentials configured.
+- **`local`** – Disables Azure services and routes generated assets through the Bolt hybrid addon. Firefly image outputs are written to the user's Documents directory (`BoltUXP/Generations/<date>/...`), and generation metadata records the `localFilePath` and `storageMode: 'local'` for gallery fallback.
+
+In local mode the following adjustments apply automatically:
+
+- Azure factories such as `createAzureSDKBlobService`, `createAzureStorageServices`, and legacy `createBlobService` throw descriptive errors when invoked.
+- The hybrid addon exposes `getDefaultStoragePath`, `ensureDirectory`, and `writeFile` to safely persist binary payloads from UXP.
+- `saveGenerationLocally` stores both the binary asset and a JSON metadata companion file, returning file paths to the Firefly pipeline.
+- Gallery rendering prefers the in-memory blob URL first, then falls back to the recorded local path or download URL if an image tag fails to load.
+
+Switch between modes by setting `VITE_STORAGE_MODE=local` (or `azure`) in your environment before running the panel.
+
 ### **1. Basic Setup:**
 ```typescript
 import { createAzureSDKBlobService } from '@/services/blob'
@@ -108,6 +124,9 @@ Azure Blob Storage
 # Azure Storage
 VITE_AZURE_STORAGE_ACCOUNT_NAME=uxppanelstorage
 VITE_AZURE_STORAGE_ACCOUNT_KEY=your-account-key
+
+# Storage mode toggle
+VITE_STORAGE_MODE=azure  # or 'local' for hybrid-addon persistence
 
 # Adobe IMS (already configured)
 VITE_IMS_CLIENT_ID=f39e1cd1c58f4989908590855698236f

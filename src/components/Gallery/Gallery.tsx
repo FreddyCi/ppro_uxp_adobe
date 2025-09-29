@@ -21,6 +21,10 @@ interface ImageData {
   tags: string[];
   source: GallerySource;
   parentId?: string;
+  downloadUrl?: string;
+  localFilePath?: string;
+  storageMode?: 'azure' | 'local';
+  persistenceMethod?: 'blob' | 'dataUrl' | 'presigned' | 'local';
 }
 
 interface GalleryProps {}
@@ -46,7 +50,7 @@ export const Gallery = () => {
   
   // Convert generation results to gallery format
   const storeImages = useMemo(() => {
-    return generationHistory.map((result: any) => ({
+    return generationHistory.map((result) => ({
       id: result.id,
       url: result.imageUrl,
       prompt: result.metadata?.prompt || 'Untitled generation',
@@ -58,6 +62,10 @@ export const Gallery = () => {
         .filter(Boolean)
         .slice(0, 3),
       source: 'generated' as const,
+      downloadUrl: result.downloadUrl,
+      localFilePath: result.localPath || result.metadata?.localFilePath,
+      storageMode: result.metadata?.storageMode,
+      persistenceMethod: result.metadata?.persistenceMethod,
     }));
   }, [generationHistory]);
 
@@ -479,39 +487,60 @@ export const Gallery = () => {
                     const target = e.target as HTMLImageElement;
                     console.warn('❌ Image failed to load:', {
                       originalSrc: target.src,
-                      prompt: image.prompt
+                      prompt: image.prompt,
+                      storageMode: image.storageMode,
+                      persistenceMethod: image.persistenceMethod,
                     });
-                    
-                    // Try to find the original generation result to get downloadUrl
-                    const originalResult = generationHistory.find((result: any) => 
-                      result.metadata.prompt === image.prompt
+
+                    if (image.localFilePath && target.src !== image.localFilePath) {
+                      console.warn('📁 Trying local file fallback:', image.localFilePath);
+                      target.src = image.localFilePath;
+                      return;
+                    }
+
+                    if (image.downloadUrl && target.src !== image.downloadUrl) {
+                      console.warn('🔄 Trying downloadUrl fallback:', image.downloadUrl);
+                      target.src = image.downloadUrl;
+                      return;
+                    }
+
+                    // Try to find the original generation result to get additional fallbacks
+                    const originalResult = generationHistory.find((result) =>
+                      result.id === image.id || result.metadata.prompt === image.prompt
                     );
-                    
+
+                    if (originalResult?.metadata?.localFilePath && target.src !== originalResult.metadata.localFilePath) {
+                      console.warn('📁 Trying original result local path:', originalResult.metadata.localFilePath);
+                      target.src = originalResult.metadata.localFilePath;
+                      return;
+                    }
+
                     if (originalResult?.downloadUrl && target.src !== originalResult.downloadUrl) {
                       console.warn('🔄 Trying downloadUrl fallback:', originalResult.downloadUrl);
                       target.src = originalResult.downloadUrl;
-                    } else {
-                      // Show error placeholder
-                      target.style.backgroundColor = '#f0f0f0';
-                      target.style.display = 'none';
-                      const parent = target.parentElement;
-                      if (parent && !parent.querySelector('.error-placeholder')) {
-                        const placeholder = document.createElement('div');
-                        placeholder.className = 'error-placeholder';
-                        placeholder.style.cssText = `
-                          width: 100%; height: 200px; background: #f0f0f0; 
-                          display: flex; align-items: center; justify-content: center;
-                          color: #666; font-size: 14px; text-align: center;
-                        `;
-                        placeholder.innerHTML = `
-                          <div>
-                            <div>🖼️</div>
-                            <div>Image unavailable</div>
-                            <div style="font-size: 12px; margin-top: 4px;">URL expired</div>
-                          </div>
-                        `;
-                        parent.appendChild(placeholder);
-                      }
+                      return;
+                    }
+
+                    // Show error placeholder
+                    target.style.backgroundColor = '#f0f0f0';
+                    target.style.display = 'none';
+                    const parent = target.parentElement;
+                    if (parent && !parent.querySelector('.error-placeholder')) {
+                      const placeholder = document.createElement('div');
+                      placeholder.className = 'error-placeholder';
+                      placeholder.style.cssText = `
+                        width: 100%; height: 200px; background: #f0f0f0; 
+                        display: flex; align-items: center; justify-content: center;
+                        color: #666; font-size: 14px; text-align: center;
+                      `;
+                      placeholder.innerHTML = `
+                        <div>
+                          <div>🖼️</div>
+                          <div>Image unavailable</div>
+                          <div style="font-size: 12px; margin-top: 4px;">URL expired</div>
+                        </div>
+                      `;
+                      parent.appendChild(placeholder);
                     }
                   }}
                 />

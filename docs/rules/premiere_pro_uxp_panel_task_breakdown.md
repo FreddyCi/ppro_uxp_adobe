@@ -1046,187 +1046,6 @@ class GeminiService {
 - Do not over engineer
 ---
 
-### T023.5: Create Full Azure SDK Blob Storage Service
-**Status:** ✅ Completed
-**Dependencies:** T022
-**Priority:** High
-**Estimate:** 90 minutes
-**Progress Note:** Successfully implemented Azure SDK Blob Storage service layer with @azure/storage-blob v12 SDK. Created AzureSDKBlobService.ts with complete blob operations (upload, download, delete, list), container management, SAS token generation, metadata handling, and health diagnostics. Integrated IMS authentication for Azure AD service principal access. Service supports environment-aware configuration switching between local development and production Azure Storage. All TypeScript interfaces and error handling implemented. Service layer ready for Gallery integration.
-**Description:** Replace Azurite-based FilesystemStorageService with production-ready Azure SDK Blob Storage service
-**Deliverables:**
-- `services/blob/AzureSDKBlobService.ts` class using @azure/storage-blob SDK
-- Production Azure Storage Account integration with SAS tokens
-- IMS authentication for Azure AD service principal access
-- Blob container management with proper permissions and lifecycle policies
-- Image and video metadata storage with Azure Blob custom metadata
-- Environment-aware configuration (local Azurite vs Azure cloud)
-**Azure SDK Integration:**
-```typescript
-class AzureSDKBlobService {
-  // Core storage operations using Azure SDK
-  uploadBlob(file: File, containerName: string, blobName: string, metadata?: Record<string, string>): Promise<BlobUploadResponse>
-  downloadBlob(containerName: string, blobName: string): Promise<BlobDownloadResponse>
-  deleteBlob(containerName: string, blobName: string): Promise<void>
-  listBlobs(containerName: string, prefix?: string): Promise<BlobItem[]>
-
-  // Container management
-  createContainer(containerName: string, options?: ContainerCreateOptions): Promise<void>
-  ensureContainer(containerName: string): Promise<void>
-  setContainerPermissions(containerName: string, access: PublicAccessType): Promise<void>
-
-  // SAS token generation for secure blob access
-  generateBlobSASUrl(containerName: string, blobName: string, permissions: BlobSASPermissions, expiresIn: number): Promise<string>
-  generateContainerSASUrl(containerName: string, permissions: ContainerSASPermissions, expiresIn: number): Promise<string>
-
-  // Metadata and properties management
-  setBlobMetadata(containerName: string, blobName: string, metadata: Record<string, string>): Promise<void>
-  getBlobMetadata(containerName: string, blobName: string): Promise<Record<string, string>>
-  setBlobProperties(containerName: string, blobName: string, properties: BlobHTTPHeaders): Promise<void>
-
-  // Health and diagnostics
-  testConnection(): Promise<boolean>
-  getStorageStats(): Promise<StorageAccountStats>
-  getServiceProperties(): Promise<BlobServiceProperties>
-}
-```
-**Production Azure Features:**
-- **Azure AD Authentication:** Service principal integration with IMS tokens for secure access
-- **SAS Token Management:** Time-limited, permission-scoped URLs for direct blob access from UXP panel
-- **Blob Lifecycle Policies:** Automatic cleanup of temporary files and old generations
-- **Hot/Cool/Archive Tiers:** Cost optimization for different blob access patterns
-- **Custom Metadata:** Store generation parameters, prompts, correction history in blob metadata
-- **Blob Versioning:** Track image iterations and correction history with blob versions
-- **Container Organization:** Separate containers for images, videos, temp files, user data
-- **CDN Integration:** Azure CDN endpoints for fast global blob access
-- **Encryption:** Client-side encryption for sensitive blob content
-**Service Configuration:**
-- **Environment Variables:**
-  - `VITE_AZURE_STORAGE_ACCOUNT_NAME` - Production storage account
-  - `VITE_AZURE_STORAGE_ACCOUNT_KEY` - Storage account access key
-  - `VITE_AZURE_CLIENT_ID` - Service principal client ID
-  - `VITE_AZURE_CLIENT_SECRET` - Service principal secret
-  - `VITE_AZURE_TENANT_ID` - Azure AD tenant ID
-- **Container Names:**
-  - `uxp-images` - Generated and uploaded images
-  - `uxp-videos` - Generated video content
-  - `uxp-temp` - Temporary files with auto-cleanup
-  - `uxp-exports` - Premiere Pro export cache
-**Migration from FilesystemStorageService:**
-- **Interface Compatibility:** Implement same methods as FilesystemStorageService for drop-in replacement
-- **Data Migration:** Export existing Azurite blobs and import to Azure Storage
-- **Fallback Support:** Graceful degradation to local storage if Azure unavailable
-- **Performance Optimization:** Parallel uploads, resume capabilities, compression
-**Enhanced Error Handling:**
-- **Network Resilience:** Retry logic with exponential backoff for network failures
-- **Authentication Failures:** IMS token refresh and Azure AD re-authentication
-- **Storage Quotas:** Graceful handling of storage limits and billing alerts
-- **CORS Configuration:** Proper cross-origin setup for UXP panel access
-- **Rate Limiting:** Respect Azure Storage throttling limits
-**Integration Points:**
-- **IMS Service:** Azure AD token exchange for service principal authentication
-- **Gallery Store:** Update blob URLs to use SAS tokens instead of direct blob URLs
-- **Image Generation:** Store Firefly results directly to Azure with proper metadata
-- **Video Pipeline:** FAL.ai generated videos uploaded to Azure with lifecycle policies
-- **UXP Environment:** Handle authentication and network restrictions in UXP context
-**Development vs Production:**
-- **Local Development:** Continue using Azurite emulator for free local testing
-- **Production Deployment:** Real Azure Storage with proper security and performance
-- **Hybrid Mode:** Support both Azurite and Azure based on environment configuration
-- **Cost Management:** Development mode uses Azurite, production uses Azure with cost monitoring
-**Acceptance Criteria:**
-- Azure SDK successfully connects to production Azure Storage Account using service principal auth
-- All existing FilesystemStorageService functionality works with Azure SDK implementation
-- SAS token generation provides secure, time-limited access to blobs from UXP panel
-- Image and video uploads complete successfully with proper metadata and versioning
-- Container management (create, configure, cleanup) works correctly
-- Performance meets or exceeds current Azurite-based implementation
-- Error handling gracefully manages network issues, auth failures, and storage limits
-- Service can switch between Azurite (dev) and Azure (prod) based on environment config
-- Cost optimization features (blob tiers, lifecycle policies) configured appropriately
-
-**Coding Rules:**
-- Review Azure Blob Storage SDK documentation thoroughly before implementation
-- Use @azure/storage-blob v12 SDK with modern async/await patterns
-- Implement proper Azure AD authentication flow with IMS integration
-- Follow established service patterns from FireflyService and GeminiService
-- Ensure environment-aware configuration for seamless dev/prod switching
-- Do not over engineer - focus on core blob storage operations with proper security
-
-### T023.6: Integrate Gallery with Azure Storage Upload
-**Status:** To Do
-**Dependencies:** T023.5
-**Priority:** Critical
-**Estimate:** 60 minutes
-**Progress Note:** Gallery currently stores images in localStorage + memory blob URLs, not actual Azure Storage. Need to replace memory-based upload with real Azure SDK upload functionality.
-**Description:** Replace Gallery's memory-based image storage with actual Azure Blob Storage uploads
-**Deliverables:**
-- Update Gallery.tsx upload functionality to use AzureSDKBlobService
-- Replace memory blob URLs with Azure blob URLs from SAS tokens
-- Implement proper Azure persistence so images survive browser refresh
-- Add Azure blob URL generation for proper image serving
-- Update Gallery store to track Azure blob metadata instead of data URLs
-**Current Issue Analysis:**
-- Gallery shows "Azure Storage ready" but only stores images in localStorage as data URLs
-- Memory blob URLs (URL.createObjectURL) are session-only and not persistent
-- No actual Azure upload occurs during image generation or upload workflows
-- Images appear to persist due to localStorage but aren't in cloud storage
-**Integration Changes:**
-```typescript
-// Replace current memory-based approach:
-const blobUrl = URL.createObjectURL(blob); // Session-only
-localStorage.setItem('gallery', JSON.stringify(images)); // Local only
-
-// With Azure Storage integration:
-const azureBlob = await azureBlobService.uploadBlob(file, 'uxp-images', blobName);
-const sasUrl = await azureBlobService.generateBlobSASUrl('uxp-images', blobName, permissions, 3600);
-// Store SAS URL for persistent access across sessions
-```
-**Technical Implementation:**
-- **Replace Upload Functions:** Update Gallery upload handlers to call AzureSDKBlobService.uploadBlob()
-- **SAS URL Management:** Generate time-limited SAS URLs for secure blob access in Gallery display
-- **Blob URL Refresh:** Implement SAS token refresh when URLs expire (currently placeholder)
-- **Metadata Storage:** Store Azure blob metadata (container, blob name, SAS URL) in Gallery store
-- **Error Handling:** Graceful fallback to localStorage if Azure unavailable
-- **Progress Tracking:** Show upload progress for Azure blob operations
-**Updated Gallery Store Schema:**
-```typescript
-interface GalleryImage {
-  id: string;
-  prompt: string;
-  blobUrl: string; // Azure SAS URL instead of memory blob URL
-  azureMetadata?: {
-    containerName: string;
-    blobName: string;
-    sasUrl: string;
-    expiresAt: Date;
-  };
-  // Remove dataUrl field - no longer needed
-}
-```
-**Environment Considerations:**
-- **Development Mode:** Use memory blobs + localStorage for local testing
-- **Production Mode:** Use Azure Storage with real blob uploads and SAS URLs
-- **Hybrid Support:** Detect Azure availability and fallback gracefully
-- **Cost Management:** Monitor blob storage usage and implement cleanup policies
-**Acceptance Criteria:**
-- Gallery uploads actually create blobs in Azure Storage Account
-- Images persist across browser restarts using Azure blob URLs, not localStorage
-- SAS token refresh works when URLs expire (replace current placeholder)
-- Upload progress shows Azure blob operation status
-- Gallery store tracks Azure metadata instead of data URLs
-- Environment switching works between local/Azure modes
-- Error handling provides clear feedback for Azure failures
-- Performance acceptable for UXP panel usage patterns
-
-**Coding Rules:**
-- Use existing AzureSDKBlobService - do not recreate Azure integration
-- Replace memory blob usage in Gallery.tsx upload functions
-- Update Gallery store to track Azure metadata instead of data URLs
-- Implement SAS token refresh for expired blob URLs
-- Follow established error handling patterns from other services
-- Do not over engineer - focus on core upload to Azure functionality
-
-## Phase 7: Video Generation Pipeline
 
 ### T023: Implement FAL.ai Video Builder with First-Last-Frame API
 **Status:** To Do
@@ -1324,6 +1143,36 @@ class FalService {
 - Implement async/await patterns with proper error boundaries
 - Follow established service patterns from FireflyService and GeminiService
 - Do not over engineer - focus on core first-last-frame video generation workflow
+---
+
+### T023.5: Pivot Storage Pipeline to Bolt Hybrid Local FS
+**Status:** To Do
+**Dependencies:** T020.5
+**Priority:** High
+**Estimate:** 90 minutes
+**Progress Note:** Azure blob operations are blocking the POC; we need a local-only workflow using the existing Bolt UXP hybrid add-on while keeping the Azure code parked for future reactivation.
+**Description:** Temporarily disable Azure blob storage usage and route all generation outputs through Bolt UXP's C++ hybrid filesystem layer so Firefly assets save locally for the POC.
+**Deliverables:**
+- Azure blob service entry points (e.g., `AzureSDKBlobService.ts`, `BlobService.ts`, `GalleryStorageService.ts`) wrapped or commented so no cloud calls execute during the POC
+- Local storage helper built on Bolt UXP hybrid APIs that writes files to OS-specific user directories with folder discovery + creation
+- Generation pipeline updated to write prompt outputs and metadata to the local directory instead of Azure blobs
+- Firefly presigned URL downloader that fetches remote assets and persists them via the local storage helper
+- Configuration toggle documenting how to re-enable Azure once ready (env flag or service factory note)
+**Acceptance Criteria:**
+- Running the panel stores new generations in the local filesystem on both macOS and Windows without contacting Azure endpoints
+- Existing Azure service modules remain compilable but are effectively disabled via guards, ensuring future reactivation requires minimal effort
+- Firefly assets originating from presigned AWS URLs download locally and appear in the gallery with correct metadata and preview thumbnails after a panel reload
+- Documentation (inline comments or README snippet) explains the temporary local-storage flow and how to swap back to Azure
+**Simple Test:**
+1. Launch the panel with the `VITE_STORAGE_MODE=local` toggle (or documented equivalent).
+2. Generate an image via Firefly and confirm the file lands under the expected Bolt hybrid directory.
+3. Trigger a Firefly job that returns a presigned URL, download it through the new helper, and verify the file appears beside the direct generations.
+4. Restart the panel and confirm gallery entries and local files remain accessible without Azure connectivity.
+**Coding Rules:**
+- Keep Azure-related code intact but gate execution with clear conditional flags.
+- Reuse existing Bolt hybrid utilities under `src/hybrid` where possible before writing new wrappers.
+- Prefer straightforward file writes (no extra abstraction) to meet the POC timeline.
+- Update docs and comments sparingly—focus on accuracy over volume.
 ---
 
 ### T024: Create Video Upload and Import Pipeline

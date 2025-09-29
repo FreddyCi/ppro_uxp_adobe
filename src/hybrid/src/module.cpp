@@ -15,6 +15,12 @@
 #include <cstdio>
 #include <iostream>
 #include <vector>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -123,6 +129,185 @@ std::string exec(const char* cmd) {
         _pclose(pipe);
     #endif
     return result;
+}
+
+static const std::string kBase64Chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz"
+    "0123456789+/";
+
+inline bool IsBase64(unsigned char c) {
+    return (std::isalnum(c) || (c == '+') || (c == '/'));
+}
+
+std::vector<unsigned char> Base64Decode(const std::string& encoded) {
+    size_t in_len = encoded.size();
+    size_t i = 0;
+    size_t j = 0;
+    size_t in_ = 0;
+    unsigned char char_array_4[4], char_array_3[3];
+    std::vector<unsigned char> ret;
+
+    while (in_len-- && (encoded[in_] != '=') && IsBase64(static_cast<unsigned char>(encoded[in_]))) {
+        char_array_4[i++] = static_cast<unsigned char>(encoded[in_]);
+        ++in_;
+        if (i == 4) {
+            for (i = 0; i < 4; ++i) {
+                const auto idx = kBase64Chars.find(static_cast<char>(char_array_4[i]));
+                if (idx == std::string::npos) {
+                    return ret;
+                }
+                char_array_4[i] = static_cast<unsigned char>(idx);
+            }
+
+            char_array_3[0] = static_cast<unsigned char>((char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4));
+            char_array_3[1] = static_cast<unsigned char>(((char_array_4[1] & 0x0F) << 4) + ((char_array_4[2] & 0x3C) >> 2));
+            char_array_3[2] = static_cast<unsigned char>(((char_array_4[2] & 0x03) << 6) + char_array_4[3]);
+
+            for (i = 0; i < 3; ++i) {
+                ret.push_back(char_array_3[i]);
+            }
+            i = 0;
+        }
+    }
+
+    if (i) {
+        for (j = 0; j < i; ++j) {
+            const auto idx = kBase64Chars.find(static_cast<char>(char_array_4[j]));
+            if (idx == std::string::npos) {
+                break;
+            }
+            char_array_4[j] = static_cast<unsigned char>(idx);
+        }
+
+        char_array_3[0] = static_cast<unsigned char>((char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4));
+        char_array_3[1] = static_cast<unsigned char>(((char_array_4[1] & 0x0F) << 4) + ((char_array_4[2] & 0x3C) >> 2));
+        char_array_3[2] = static_cast<unsigned char>(((char_array_4[2] & 0x03) << 6) + char_array_4[3]);
+
+        for (j = 0; j < i - 1; ++j) {
+            ret.push_back(char_array_3[j]);
+        }
+    }
+
+    return ret;
+}
+
+std::string GetStringArgument(addon_env env, addon_value value) {
+    size_t length = 0;
+    Check(UxpAddonApis.uxp_addon_get_value_string_utf8(env, value, nullptr, 0, &length));
+
+    std::string result(length, '\0');
+    Check(UxpAddonApis.uxp_addon_get_value_string_utf8(env, value, result.data(), length + 1, &length));
+    result.resize(length);
+    return result;
+}
+
+std::filesystem::path ResolveDefaultStoragePath() {
+#ifdef _WIN32
+    const char* baseDir = std::getenv("USERPROFILE");
+    std::filesystem::path path = baseDir && *baseDir ? std::filesystem::path(baseDir) : std::filesystem::temp_directory_path();
+    path /= "Documents";
+#else
+    const char* baseDir = std::getenv("HOME");
+    std::filesystem::path path = baseDir && *baseDir ? std::filesystem::path(baseDir) : std::filesystem::temp_directory_path();
+    path /= "Documents";
+#endif
+    path /= "BoltUXP";
+    path /= "Generations";
+    return path;
+}
+
+addon_value GetDefaultStoragePath(addon_env env, addon_callback_info /*info*/) {
+    try {
+        const auto storagePath = ResolveDefaultStoragePath();
+        auto pathString = storagePath.u8string();
+
+        addon_value result = nullptr;
+        Check(UxpAddonApis.uxp_addon_create_string_utf8(env, pathString.c_str(), pathString.size(), &result));
+        return result;
+    } catch (...) {
+        return CreateErrorFromException(env);
+    }
+}
+
+addon_value EnsureDirectory(addon_env env, addon_callback_info info) {
+    try {
+        size_t argc = 1;
+        addon_value argv[1];
+        Check(UxpAddonApis.uxp_addon_get_cb_info(env, info, &argc, argv, nullptr, nullptr));
+
+        if (argc < 1) {
+            return CreateErrorFromException(env);
+        }
+
+        const std::string directory = GetStringArgument(env, argv[0]);
+        std::filesystem::path dirPath(directory);
+
+        std::error_code ec;
+        std::filesystem::create_directories(dirPath, ec);
+
+        const bool exists = std::filesystem::exists(dirPath);
+        addon_value result = nullptr;
+        Check(UxpAddonApis.uxp_addon_get_boolean(env, exists && !ec, &result));
+        return result;
+    } catch (...) {
+        return CreateErrorFromException(env);
+    }
+}
+
+addon_value WriteFile(addon_env env, addon_callback_info info) {
+    try {
+        size_t argc = 3;
+        addon_value argv[3];
+        Check(UxpAddonApis.uxp_addon_get_cb_info(env, info, &argc, argv, nullptr, nullptr));
+
+        if (argc < 2) {
+            return CreateErrorFromException(env);
+        }
+
+        const std::string filePathStr = GetStringArgument(env, argv[0]);
+        const std::string payload = GetStringArgument(env, argv[1]);
+
+        bool treatAsBase64 = false;
+        if (argc >= 3) {
+            Check(UxpAddonApis.uxp_addon_get_value_bool(env, argv[2], &treatAsBase64));
+        }
+
+        std::filesystem::path filePath(filePathStr);
+        const auto parent = filePath.parent_path();
+        if (!parent.empty()) {
+            std::error_code ec;
+            std::filesystem::create_directories(parent, ec);
+            if (ec) {
+                addon_value failure = nullptr;
+                Check(UxpAddonApis.uxp_addon_get_boolean(env, false, &failure));
+                return failure;
+            }
+        }
+
+        std::ofstream output(filePath, std::ios::binary | std::ios::out);
+        if (!output.is_open()) {
+            addon_value result = nullptr;
+            Check(UxpAddonApis.uxp_addon_get_boolean(env, false, &result));
+            return result;
+        }
+
+        if (treatAsBase64) {
+            const auto bytes = Base64Decode(payload);
+            output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        } else {
+            output.write(payload.data(), static_cast<std::streamsize>(payload.size()));
+        }
+
+        output.close();
+
+        const bool success = output.good() && std::filesystem::exists(filePath);
+        addon_value result = nullptr;
+        Check(UxpAddonApis.uxp_addon_get_boolean(env, success, &result));
+        return result;
+    } catch (...) {
+        return CreateErrorFromException(env);
+    }
 }
 
 addon_value ExecSync(addon_env env, addon_callback_info info)
@@ -328,6 +513,45 @@ addon_value Init(addon_env env, addon_value exports, const addon_apis& addonAPIs
         status = addonAPIs.uxp_addon_set_named_property(env, exports, "execSync", fn);
         if (status != addon_ok) {
             addonAPIs.uxp_addon_throw_error(env, NULL, "Unable to populate exports");
+        }
+    }
+
+    // ensureDirectory
+    {
+        status = addonAPIs.uxp_addon_create_function(env, NULL, 0, EnsureDirectory, NULL, &fn);
+        if (status != addon_ok) {
+            addonAPIs.uxp_addon_throw_error(env, NULL, "Unable to wrap ensureDirectory");
+        }
+
+        status = addonAPIs.uxp_addon_set_named_property(env, exports, "ensureDirectory", fn);
+        if (status != addon_ok) {
+            addonAPIs.uxp_addon_throw_error(env, NULL, "Unable to expose ensureDirectory");
+        }
+    }
+
+    // writeFile
+    {
+        status = addonAPIs.uxp_addon_create_function(env, NULL, 0, WriteFile, NULL, &fn);
+        if (status != addon_ok) {
+            addonAPIs.uxp_addon_throw_error(env, NULL, "Unable to wrap writeFile");
+        }
+
+        status = addonAPIs.uxp_addon_set_named_property(env, exports, "writeFile", fn);
+        if (status != addon_ok) {
+            addonAPIs.uxp_addon_throw_error(env, NULL, "Unable to expose writeFile");
+        }
+    }
+
+    // getDefaultStoragePath
+    {
+        status = addonAPIs.uxp_addon_create_function(env, NULL, 0, GetDefaultStoragePath, NULL, &fn);
+        if (status != addon_ok) {
+            addonAPIs.uxp_addon_throw_error(env, NULL, "Unable to wrap getDefaultStoragePath");
+        }
+
+        status = addonAPIs.uxp_addon_set_named_property(env, exports, "getDefaultStoragePath", fn);
+        if (status != addon_ok) {
+            addonAPIs.uxp_addon_throw_error(env, NULL, "Unable to expose getDefaultStoragePath");
         }
     }
 

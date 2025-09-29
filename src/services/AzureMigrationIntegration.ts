@@ -111,7 +111,7 @@ export class AzureMigrationIntegration {
             // Store Azure info in custom fields (extend metadata as needed)
             userId: result.metadata.userId, // Preserve existing field
             sessionId: `${result.metadata.sessionId || ''}-azure-migrated`,
-            timestamp: new Date() // Update timestamp
+            timestamp: Date.now() // Update timestamp
           },
           status: 'stored' as const
         }

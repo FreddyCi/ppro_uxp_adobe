@@ -30,6 +30,7 @@ import type {
 
 import type { IMSService } from '../ims/IMSService.js'
 import { SASTokenService, createSASTokenService } from './SASTokenService.js'
+import { isAzureEnabled } from '../storageMode.js'
 
 export class AzureSDKBlobService {
   private config: AzureSDKBlobConfig
@@ -1505,6 +1506,10 @@ export class AzureSDKBlobService {
 export function createAzureSDKBlobService(
   imsService?: IMSService
 ): AzureSDKBlobService {
+  if (!isAzureEnabled()) {
+    throw new Error('Azure storage is disabled via VITE_STORAGE_MODE=local')
+  }
+
   const config: AzureSDKBlobConfig = {
     // Storage account configuration
     storageAccountName:

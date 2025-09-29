@@ -174,7 +174,13 @@ export interface GenerationMetadata {
   timestamp: number
   
   // UXP persistence method
-  persistenceMethod?: 'blob' | 'dataUrl' | 'presigned'
+  persistenceMethod?: 'blob' | 'dataUrl' | 'presigned' | 'local'
+
+  // Local storage metadata
+  storageMode?: 'azure' | 'local'
+  localFilePath?: string
+  localMetadataPath?: string
+  savedAt?: string
 }
 
 // Service configuration

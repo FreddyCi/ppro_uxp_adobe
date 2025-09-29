@@ -5,6 +5,7 @@
  */
 
 import { createAzureSDKBlobService } from './AzureSDKBlobService.js'
+import { isAzureEnabled } from '../storageMode.js'
 import type { AzureBlobUploadResponse } from '../../types/azureBlob.js'
 
 // Define types locally to avoid circular imports
@@ -359,6 +360,8 @@ export function createGalleryStorageService(
 }
 
 // Export a default instance for use throughout the app
-export const galleryStorageService = createGalleryStorageService()
+export const galleryStorageService = isAzureEnabled()
+  ? createGalleryStorageService()
+  : null
 
 export default GalleryStorageService
