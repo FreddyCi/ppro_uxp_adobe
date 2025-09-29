@@ -15,7 +15,6 @@ const AppContent = () => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [activeTab, setActiveTab] = useState<'generate' | 'gallery'>('generate');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true); // Default to dark mode for UXP
-  const [isDeveloperMode, setIsDeveloperMode] = useState<boolean>(true);
   
   // Image generation form state
   const [prompt, setPrompt] = useState<string>('');
@@ -44,15 +43,7 @@ const AppContent = () => {
     document.documentElement.setAttribute('data-theme', !isDarkMode ? 'dark' : 'light');
   };
 
-  const toggleDeveloperMode = () => {
-    const nextValue = !isDeveloperMode;
-    setIsDeveloperMode(nextValue);
-    if (nextValue) {
-      showInfo('Developer Tools Enabled', 'IMS authentication controls are visible.');
-    } else {
-      showInfo('Developer Tools Hidden', 'IMS authentication controls are hidden from the workspace.');
-    }
-  };
+
 
   // Handle image generation
   const handleGenerateImage = async () => {
@@ -238,161 +229,7 @@ const AppContent = () => {
           <div className="content-area">
             {activeTab === 'generate' && (
               <>
-                {/* Authentication Card */}
-                {isDeveloperMode && (
-                  <article className="card">
-                    <header className="card-header">
-                      <h2 className="card-title">IMS Authentication</h2>
-                      <div className="text-detail">Adobe Identity Management</div>
-                    </header>
-                    
-                    <div className="card-body">
-                      <p className="mb-md">Test your connection to Adobe's Identity Management System.</p>
-                      
-                      <div className="button-group mb-md">
-                      {/* @ts-ignore */}
-                      <sp-action-button 
-                        onClick={testIMSAuthentication} 
-                        disabled={isAuthenticating}
-                      >
-                        <span>{isAuthenticating ? 'Authenticating...' : imsToken ? 'Refresh Token' : 'Login'}</span>
-                      {/* @ts-ignore */}
-                      </sp-action-button>
-                      
-                      {/* Clear Auth Button */}
-                      {/* @ts-ignore */}
-                      <sp-action-button 
-                        onClick={clearAuthState}
-                        variant="secondary"
-                        size="s"
-                      >
-                        <span>Clear</span>
-                      {/* @ts-ignore */}
-                      </sp-action-button>
-                      
-                      {/* Clean Images Button */}
-                      {/* @ts-ignore */}
-                      <sp-action-button 
-                        onClick={() => {
-                          const { cleanupInvalidBlobUrls } = useGenerationStore.getState().actions;
-                          cleanupInvalidBlobUrls();
-                          showInfo('Image Cleanup', 'Cleaned up invalid blob URLs');
-                        }}
-                        variant="secondary"
-                        size="s"
-                      >
-                        <span>Clean URLs</span>
-                      {/* @ts-ignore */}
-                      </sp-action-button>
 
-                      {/* Log Images Button */}
-                      {/* @ts-ignore */}
-                      <sp-action-button 
-                        onClick={() => {
-                          const { generationHistory } = useGenerationStore.getState();
-                          console.warn('📊 Current stored images:', {
-                            totalCount: generationHistory.length,
-                            images: generationHistory.map((gen: any) => ({
-                              id: gen.id,
-                              imageUrl: gen.imageUrl,
-                              downloadUrl: gen.downloadUrl,
-                              isBlobUrl: gen.imageUrl.startsWith('blob:'),
-                              isDataUrl: gen.imageUrl.startsWith('data:'),
-                              isPresignedUrl: gen.imageUrl.startsWith('https://pre-signed-firefly-prod'),
-                              urlType: gen.imageUrl.startsWith('blob:') ? 'blob' : 
-                                      gen.imageUrl.startsWith('data:') ? 'data' : 
-                                      gen.imageUrl.startsWith('http') ? 'presigned' : 'unknown',
-                              urlPreview: gen.imageUrl.substring(0, 50) + '...',
-                              downloadUrlPreview: gen.downloadUrl ? gen.downloadUrl.substring(0, 50) + '...' : 'none',
-                              persistenceMethod: gen.metadata?.persistenceMethod || 'unknown',
-                              timestamp: gen.timestamp,
-                              prompt: gen.metadata?.prompt || 'No prompt'
-                            }))
-                          });
-                          showInfo('Debug', 'Image details logged to console');
-                        }}
-                        variant="secondary"
-                        size="s"
-                      >
-                        <span>Log Images</span>
-                      {/* @ts-ignore */}
-                      </sp-action-button>
-
-                      {/* Switch to Presigned URLs Button */}
-                      {/* @ts-ignore */}
-                      <sp-action-button 
-                        onClick={() => {
-                          const store = useGenerationStore.getState();
-                          const { generationHistory } = store;
-                          
-                          // Update images to use downloadUrl (presigned URL) instead of processed URL
-                          const updatedHistory = generationHistory.map((gen: any) => {
-                            if (gen.downloadUrl && gen.downloadUrl !== gen.imageUrl) {
-                              console.warn('🔄 Switching to presigned URL for:', {
-                                prompt: gen.metadata?.prompt,
-                                from: gen.imageUrl.substring(0, 50) + '...',
-                                to: gen.downloadUrl.substring(0, 50) + '...'
-                              });
-                              return {
-                                ...gen,
-                                imageUrl: gen.downloadUrl, // Use presigned URL for display
-                                metadata: {
-                                  ...gen.metadata,
-                                  persistenceMethod: 'presigned'
-                                }
-                              };
-                            }
-                            return gen;
-                          });
-                          
-                          // Update the store with presigned URLs
-                          store.generationHistory = updatedHistory;
-                          
-                          showSuccess('Images Updated', 'Switched to presigned URLs for immediate viewing');
-                        }}
-                        variant="secondary"
-                        size="s"
-                      >
-                        <span>Use Presigned</span>
-                      {/* @ts-ignore */}
-                      </sp-action-button>
-                    </div>
-
-                    {/* Status Section */}
-                    <div className="status-section">
-                      <h3>Connection Status</h3>
-                      <p className={
-                        imsStatus.includes('✅') ? 'text-success' :
-                        imsStatus.includes('Error') ? 'text-error' :
-                        imsStatus.includes('Authenticating') ? 'text-warning' :
-                        'text-muted'
-                      }>
-                        {imsStatus}
-                      </p>
-                      
-                      {imsToken && (
-                        <div style={{ marginTop: '16px' }}>
-                          <h4 className="text-heading-small mb-sm">Authentication Details</h4>
-                          <details style={{ cursor: 'pointer' }}>
-                            <summary className="text-detail" style={{ cursor: 'pointer', marginBottom: '8px' }}>
-                              Show Full Token
-                            </summary>
-                            <div className="text-code" style={{ 
-                              wordBreak: 'break-all',
-                              whiteSpace: 'pre-wrap',
-                              maxHeight: '200px',
-                              overflow: 'auto',
-                              marginTop: '8px'
-                            }}>
-                              {imsToken}
-                            </div>
-                          </details>
-                        </div>
-                      )}
-                      </div>
-                    </div>
-                  </article>
-                )}
 
                 {/* Image Generation Card */}
                 <article className="card">
@@ -408,18 +245,7 @@ const AppContent = () => {
                         <div className="text-detail" style={{ marginLeft: '8px', color: 'var(--theme-warning)' }}>
                           Please authenticate to generate images
                         </div>
-                        {!isDeveloperMode && (
-                          /* @ts-ignore */
-                          <sp-button 
-                            variant="primary" 
-                            size="s" 
-                            onClick={() => setIsDeveloperMode(true)}
-                            style={{ marginLeft: '12px' }}
-                          >
-                            Show Dev Tools
-                          {/* @ts-ignore */}
-                          </sp-button>
-                        )}
+
                         {/* @ts-ignore */}
                         <sp-button variant="accent" size="s" onClick={testIMSAuthentication} style={{ marginLeft: '12px' }}>
                           Login
@@ -634,19 +460,7 @@ const AppContent = () => {
           <div className="text-detail">
             {isAuthenticating ? 'Authenticating...' : imsToken ? 'Authenticated' : 'Ready'}
           </div>
-          {/* Developer Tools Toggle */}
-          {/* @ts-ignore */}
-          <sp-action-button 
-            onClick={toggleDeveloperMode}
-            title={isDeveloperMode ? 'Hide IMS Controls' : 'Show IMS Controls'}
-            className={`developer-toggle ${isDeveloperMode ? 'active' : ''}`}
-            aria-pressed={isDeveloperMode}
-            variant="secondary"
-            size="s"
-          >
-            <span>{isDeveloperMode ? 'Developer On' : 'Developer Off'}</span>
-          {/* @ts-ignore */}
-          </sp-action-button>
+
           {/* Theme Toggle */}
           {/* @ts-ignore */}
           <sp-action-button 
