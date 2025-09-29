@@ -9,6 +9,7 @@ import { useGenerationStore } from "./store/generationStore";
 import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
 import "./layout.scss";
 import { v4 as uuidv4 } from 'uuid';
+import { LtxVideoService } from './services/ltx';
 
 const AppContent = () => {
   const [imsToken, setImsToken] = useState<string | null>(null);
@@ -160,7 +161,7 @@ const AppContent = () => {
       });
       
       // Import LTX service
-      const { LtxVideoService } = await import('./services/ltx');
+      // const { LtxVideoService } = await import('./services/ltx');
       
       // Create LTX service instance
       const ltxService = new LtxVideoService({

@@ -119,6 +119,8 @@ const manifest: UXP_Manifest = {
         "https://generativelanguage.googleapis.com", // Google Gemini API
         "https://fal.run", // Fal.ai API
         "https://uxppanelstorage.blob.core.windows.net", // Azure Blob Storage
+        "https://api.ltx.video", // LTX Video API
+        "https://api.ltx.video/v1", // LTX Video API v1 endpoint
         `ws://localhost:${extraPrefs.hotReloadPort}`, // Required for hot reload
       ],
     },
