@@ -704,4 +704,35 @@ export const useGalleryDisplayItems = () => {
   })
 }
 
+// Hydrate gallery items with temporary URLs for local files
+export async function loadGalleryItems(rawItems: GalleryItem[]): Promise<GalleryItem[]> {
+  return Promise.all(
+    rawItems.map(async it => {
+      // For corrected images with local storage
+      if ('storageMode' in it && it.storageMode === 'local' && 'localFilePath' in it && it.localFilePath) {
+        try {
+          const { toTempUrl } = await import('../utils/uxpFs')
+          const src = await toTempUrl(it.localFilePath)
+          return { ...it, correctedUrl: src, thumbnailUrl: src }
+        } catch (e) {
+          console.warn('Failed to create temporary URL for local corrected image', it.localFilePath, e)
+          return { ...it, broken: true }
+        }
+      }
+      // For generation results with local storage
+      else if ('metadata' in it && 'localPath' in it && it.localPath) {
+        try {
+          const { toTempUrl } = await import('../utils/uxpFs')
+          const src = await toTempUrl(it.localPath)
+          return { ...it, imageUrl: src }
+        } catch (e) {
+          console.warn('Failed to create temporary URL for local generated image', it.localPath, e)
+          return { ...it, broken: true }
+        }
+      }
+      return it // Cloud items already have durable URLs
+    })
+  )
+}
+
 export default useGalleryStore

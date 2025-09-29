@@ -391,13 +391,16 @@ export class GeminiService {
     try {
       const endpoint = `/v1beta/models/${this.config.model}:generateContent`
 
+      const resolvedMimeType =
+        mimeType && mimeType.startsWith('image/') ? mimeType : 'image/png'
+
       const requestBody = {
         contents: [
           {
             parts: [
               {
-                inline_data: {
-                  mime_type: mimeType,
+                inlineData: {
+                  mimeType: resolvedMimeType,
                   data: imageBase64,
                 },
               },
@@ -491,6 +494,7 @@ export class GeminiService {
     let localMetadataPath: string | undefined
     let storageMode: 'local' | 'azure' = 'azure'
     let persistenceMethod: 'blob' | 'dataUrl' | 'presigned' | 'local' = 'blob'
+    let correctedUrl = blobUrl // Default to blob URL for immediate display
 
     // Try to save locally if local storage is enabled
     if (isLocalStorageMode()) {
@@ -525,6 +529,24 @@ export class GeminiService {
           storageMode = 'local'
           persistenceMethod = 'local'
 
+          // For local files, use temporary URL instead of blob URL
+          try {
+            const { toTempUrl } = await import('../../utils/uxpFs')
+            correctedUrl = await toTempUrl(saveResult.filePath)
+            console.warn(
+              '💾 Gemini: Created temporary URL for local corrected image',
+              {
+                id: imageId,
+                filename: filename,
+                tempUrl: correctedUrl,
+                filePath: saveResult.filePath,
+              }
+            )
+          } catch (tempUrlError) {
+            console.error('❌ Gemini: Failed to create temporary URL, falling back to blob URL:', tempUrlError)
+            // Keep blob URL as fallback
+          }
+
           console.warn(
             '💾 Gemini: Saved corrected image locally',
             {
@@ -550,6 +572,7 @@ export class GeminiService {
         id: imageId,
         filename: filename,
         size: blob.size,
+        correctedUrl: correctedUrl,
         blobUrl: blobUrl,
         localFilePath: localFilePath,
         storageMode: storageMode,
@@ -560,8 +583,8 @@ export class GeminiService {
     const correctedImage: CorrectedImage = {
       id: imageId,
       originalUrl: '', // Will be set by calling code
-      correctedUrl: blobUrl, // Use blob URL for immediate display
-      thumbnailUrl: blobUrl, // Use same URL for thumbnail
+      correctedUrl: correctedUrl, // Use temporary URL for local files, blob URL for others
+      thumbnailUrl: correctedUrl, // Use same URL for thumbnail
       corrections,
       metadata: {
         corrections,
@@ -580,7 +603,7 @@ export class GeminiService {
         },
       },
       timestamp: new Date(),
-      blobUrl: blobUrl, // Store blob URL for persistence and download
+      blobUrl: blobUrl, // Keep blob URL for fallback and download
       filename,
       storageLocation: storageMode === 'local' ? 'local' : 'memory',
       localFilePath: localFilePath,
