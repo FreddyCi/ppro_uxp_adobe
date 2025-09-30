@@ -7,10 +7,15 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { createIMSService, type IIMSService } from '../services/ims/IMSService'
+import type { IMSTokenValidation } from '../types/ims'
+
+// Authentication status state machine
+export type AuthStatus = 'idle' | 'checking' | 'authenticated' | 'unauthenticated' | 'error'
 
 // Store interface matching task requirements
 export interface AuthStore {
   // Core auth state
+  status: AuthStatus
   accessToken: string | null
   tokenExpiry: Date | null
   isAuthenticated: boolean
@@ -20,6 +25,7 @@ export interface AuthStore {
   // Additional state for better UX
   userId: string | null
   lastLoginAttempt: Date | null
+  lastCheckedAt: number | null
   refreshCount: number
   
   // Service connections status
@@ -40,6 +46,7 @@ export interface AuthStore {
     clearError(): void
     checkAuthStatus(): boolean
     scheduleTokenRefresh(): void
+    setStatus(status: AuthStatus, token?: string | null, error?: string | null): void
   }
 }
 
@@ -81,6 +88,7 @@ const createUXPStorage = () => {
 
 // Initial state
 const initialState = {
+  status: 'idle' as AuthStatus,
   accessToken: null,
   tokenExpiry: null,
   isAuthenticated: false,
@@ -88,6 +96,7 @@ const initialState = {
   error: null,
   userId: null,
   lastLoginAttempt: null,
+  lastCheckedAt: null,
   refreshCount: 0,
   services: {
     firefly: {
@@ -123,6 +132,19 @@ const ensureDateObject = (date: Date | string | null): Date | null => {
   return date instanceof Date ? date : new Date(date)
 }
 
+// Utility function to decode JWT expiry
+const decodeExp = (jwt: string): number | null => {
+  try {
+    const [, payload] = jwt.split('.')
+    if (!payload) return null
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
+    return typeof json.exp === 'number' ? json.exp * 1000 : null
+  } catch (error) {
+    console.warn('Failed to decode JWT expiry:', error)
+    return null
+  }
+}
+
 // IMS service instance
 let imsService: IIMSService | null = null
 
@@ -151,51 +173,58 @@ export const useAuthStore = create<AuthStore>()(
          */
         async login(): Promise<void> {
           const store = get()
-          
+
           // Prevent concurrent login attempts
-          if (store.isLoading) {
+          if (store.status === 'checking') {
             return
           }
 
-          set({ 
-            isLoading: true, 
-            error: null, 
-            lastLoginAttempt: new Date() 
-          })
+          // Set status to checking
+          store.actions.setStatus('checking')
 
           try {
             const ims = getIMSService()
             const accessToken = await ims.getAccessToken()
-            const tokenInfo = ims.getTokenInfo()
+
+            // Try to validate token (non-blocking - fall back to local decode)
+            let validation: IMSTokenValidation = { valid: true }
+            try {
+              validation = await ims.validateToken(accessToken)
+            } catch (validationError) {
+              console.warn('⚠️ Token validation failed (non-critical):', validationError)
+              // Keep validation as valid with local fallback
+            }
+
+            if (!validation.valid) {
+              store.actions.setStatus('unauthenticated', null, 'Token validation failed')
+              throw new Error('Token validation failed')
+            }
+
+            // Decode token expiry from JWT
+            const expMs = decodeExp(accessToken)
+            const tokenExpiry = expMs ? new Date(expMs) : null
 
             set({
+              status: 'authenticated',
               accessToken,
-              tokenExpiry: ensureDateObject(tokenInfo.expiresAt),
+              tokenExpiry,
               isAuthenticated: true,
               isLoading: false,
               error: null,
               userId: 'ims-user', // Could be extracted from token if needed
+              lastCheckedAt: Date.now(),
               refreshCount: 0
             })
 
             // Start auto-refresh timer
             store.actions.scheduleTokenRefresh()
 
-            // Authentication successful
+            console.log('✅ IMS authentication successful')
 
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Authentication failed'
-            
-            set({
-              accessToken: null,
-              tokenExpiry: null,
-              isAuthenticated: false,
-              isLoading: false,
-              error: errorMessage,
-              userId: null
-            })
-
-            console.error('Authentication failed:', errorMessage)
+            store.actions.setStatus('error', null, errorMessage)
+            console.error('❌ IMS authentication failed:', errorMessage)
             throw error
           }
         },
@@ -220,7 +249,7 @@ export const useAuthStore = create<AuthStore>()(
             actions: get().actions // Preserve actions
           })
 
-          // User logged out
+          console.log('🔄 User logged out')
         },
 
         /**
@@ -228,44 +257,41 @@ export const useAuthStore = create<AuthStore>()(
          */
         async refreshToken(): Promise<void> {
           const store = get()
-          
-          if (store.isLoading) {
+
+          if (store.status === 'checking') {
             return
           }
 
-          set({ isLoading: true, error: null })
+          store.actions.setStatus('checking')
 
           try {
             const ims = getIMSService()
             const accessToken = await ims.refreshToken()
-            const tokenInfo = ims.getTokenInfo()
+
+            // Decode token expiry from JWT
+            const expMs = decodeExp(accessToken)
+            const tokenExpiry = expMs ? new Date(expMs) : null
 
             set({
+              status: 'authenticated',
               accessToken,
-              tokenExpiry: ensureDateObject(tokenInfo.expiresAt),
+              tokenExpiry,
               isAuthenticated: true,
               isLoading: false,
               error: null,
+              lastCheckedAt: Date.now(),
               refreshCount: store.refreshCount + 1
             })
 
             // Reschedule next refresh
             store.actions.scheduleTokenRefresh()
 
-            // Token refreshed successfully
+            console.log('🔄 Token refreshed successfully')
 
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Token refresh failed'
-            
-            set({
-              accessToken: null,
-              tokenExpiry: null,
-              isAuthenticated: false,
-              isLoading: false,
-              error: errorMessage
-            })
-
-            console.error('Token refresh failed:', errorMessage)
+            store.actions.setStatus('error', null, errorMessage)
+            console.error('❌ Token refresh failed:', errorMessage)
             throw error
           }
         },
@@ -306,35 +332,24 @@ export const useAuthStore = create<AuthStore>()(
         /**
          * Check if user is currently authenticated
          */
-        /**
-         * Check if the current authentication is valid
-         */
         checkAuthStatus(): boolean {
           const store = get()
-          
-          if (!store.accessToken || !store.tokenExpiry) {
-            return false
+
+          // If we're in an authenticated state, verify the token is still valid
+          if (store.status === 'authenticated' && store.accessToken && store.tokenExpiry) {
+            const now = new Date()
+            const expiryWithBuffer = new Date(store.tokenExpiry.getTime() - 60000) // 1 minute buffer
+
+            if (now >= expiryWithBuffer) {
+              // Token expired, trigger refresh in background
+              store.actions.refreshToken().catch(console.error)
+              return false
+            }
+
+            return true
           }
 
-          // Ensure tokenExpiry is a Date object (handle deserialization from localStorage)
-          const tokenExpiry = ensureDateObject(store.tokenExpiry)
-          
-          if (!tokenExpiry) {
-            return false
-          }
-
-          // Check if token is expired (with 1 minute buffer)
-          const now = new Date()
-          const expiryWithBuffer = new Date(tokenExpiry.getTime() - 60000) // 1 minute buffer
-          
-          if (now >= expiryWithBuffer) {
-            // Token expired, attempting refresh
-            // Trigger refresh in background
-            store.actions.refreshToken().catch(console.error)
-            return false
-          }
-
-          return true
+          return false
         },
 
         /**
@@ -368,6 +383,23 @@ export const useAuthStore = create<AuthStore>()(
             // Token needs immediate refresh
             store.actions.refreshToken().catch(console.error)
           }
+        },
+
+        /**
+         * Set authentication status with optional token and error
+         */
+        setStatus(status: AuthStatus, token?: string | null, error?: string | null): void {
+          const now = Date.now()
+          set({
+            status,
+            accessToken: token !== undefined ? token : get().accessToken,
+            isAuthenticated: status === 'authenticated',
+            isLoading: status === 'checking',
+            error: error !== undefined ? error : (status === 'error' ? get().error : null),
+            lastCheckedAt: now,
+            // Clear token expiry if unauthenticated or error
+            tokenExpiry: (status === 'unauthenticated' || status === 'error') ? null : get().tokenExpiry
+          })
         }
       }
     }),
@@ -377,10 +409,12 @@ export const useAuthStore = create<AuthStore>()(
       
       // Only persist essential auth data
       partialize: (state) => ({
+        status: state.status,
         accessToken: state.accessToken,
         tokenExpiry: state.tokenExpiry,
         isAuthenticated: state.isAuthenticated,
         userId: state.userId,
+        lastCheckedAt: state.lastCheckedAt,
         refreshCount: state.refreshCount,
         // Don't persist loading states or errors
         // Don't persist service connections (they should reconnect on startup)
@@ -446,6 +480,51 @@ if (typeof window !== 'undefined') {
     if (refreshTimer) {
       clearTimeout(refreshTimer)
     }
+  })
+}
+
+// Export shared IMS service getter for use by other services
+export const getSharedIMSService = (): IIMSService => {
+  return getIMSService()
+}
+
+// Centralized authentication function to prevent race conditions
+let _ensuring: Promise<void> | null = null
+
+export async function ensureAuthenticated(): Promise<void> {
+  if (_ensuring) return _ensuring
+
+  _ensuring = (async () => {
+    const store = useAuthStore.getState()
+    if (store.status === 'authenticated') return
+
+    // Trigger login/test flow
+    await store.actions.login()
+
+    const finalStore = useAuthStore.getState()
+    if (finalStore.status !== 'authenticated') {
+      throw new Error('IMS sign-in required')
+    }
+
+    // Authentication successful - services will be created by individual components
+  })().finally(() => { _ensuring = null })
+
+  return _ensuring
+}
+
+// Toast suppression for auth errors
+let lastAuthToast = 0
+const AUTH_TOAST_COOLDOWN = 10000 // 10 seconds
+
+export function showAuthRequiredOnce(message: string = 'Please sign in with your Adobe account before generating Dream Machine videos.'): void {
+  const now = Date.now()
+  if (now - lastAuthToast < AUTH_TOAST_COOLDOWN) return
+  lastAuthToast = now
+
+  // Import toast helpers dynamically to avoid circular imports
+  import('../components').then(({ useToastHelpers }) => {
+    const { showError } = useToastHelpers.getState()
+    showError('Authentication Required', message)
   })
 }
 

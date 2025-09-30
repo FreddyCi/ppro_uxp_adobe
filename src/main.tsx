@@ -21,7 +21,7 @@ import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, Re
 import { createAzureSDKBlobService } from './services/blob/AzureSDKBlobService';
 import { createSASTokenService } from './services/blob/SASTokenService';
 import axios from 'axios';
-import { useAuthStore, useIsAuthenticated, getIMSServiceInstance } from './store/authStore';
+import { useAuthStore, useIsAuthenticated, getIMSServiceInstance, getSharedIMSService, ensureAuthenticated } from './store/authStore';
 
 // Helper function to upload blob using SAS token (bypasses Azure SDK issues)
 async function uploadBlobWithSAS(
@@ -138,17 +138,32 @@ const AppContent = () => {
 
   const getAzureBlobService = () => {
     if (!azureBlobServiceRef.current) {
-      const imsService = getIMSServiceInstance();
+      const imsService = getSharedIMSService();
       azureBlobServiceRef.current = createAzureSDKBlobService(imsService);
     }
     return azureBlobServiceRef.current;
   };
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      azureBlobServiceRef.current = null;
-    }
-  }, [isAuthenticated]);
+    const checkAuthAndClearService = async () => {
+      await ensureAuthenticated();
+      if (!isAuthenticated) {
+        azureBlobServiceRef.current = null;
+      }
+    };
+    checkAuthAndClearService();
+  }, []);
+
+  useEffect(() => {
+    const checkAuthAndCreateService = async () => {
+      await ensureAuthenticated();
+      if (isAuthenticated && !azureBlobServiceRef.current) {
+        // Recreate Azure service with authenticated IMS service
+        azureBlobServiceRef.current = createAzureSDKBlobService(getSharedIMSService());
+      }
+    };
+    checkAuthAndCreateService();
+  }, []);
 
   const hostName = (uxp.host.name as string).toLowerCase();
 
@@ -438,9 +453,10 @@ const AppContent = () => {
       return;
     }
 
+    // Ensure user is authenticated before proceeding
+    await ensureAuthenticated();
     if (!isAuthenticated) {
-      showError('Authentication Required', 'Please sign in with your Adobe account before generating Dream Machine videos.');
-      return;
+      return; // ensureAuthenticated handles the error toast
     }
 
     // Input validation
@@ -550,9 +566,12 @@ const AppContent = () => {
         }
 
         if (!isAuthenticated) {
-          const message = 'Sign in with Adobe IMS to upload keyframe assets to Azure before using Luma.';
-          showError('Authentication Required', message);
-          throw new Error(message);
+          await ensureAuthenticated();
+          if (!isAuthenticated) {
+            const message = 'Sign in with Adobe IMS to upload keyframe assets to Azure before using Luma.';
+            showError('Authentication Required', message);
+            throw new Error(message);
+          }
         }
 
         if (!contentItem.folderToken || !contentItem.relativePath) {
@@ -803,9 +822,10 @@ const AppContent = () => {
       return;
     }
 
+    // Ensure user is authenticated before proceeding
+    await ensureAuthenticated();
     if (!isAuthenticated) {
-      showError('Authentication Required', 'Please sign in with your Adobe account before reframing Dream Machine videos.');
-      return;
+      return; // ensureAuthenticated handles the error toast
     }
 
     setIsGeneratingLuma(true);
@@ -1020,6 +1040,7 @@ const AppContent = () => {
   useEffect(() => {
     const rehydrateBlobUrls = async () => {
       // Only run rehydration if user is authenticated
+      await ensureAuthenticated();
       if (!isAuthenticated) {
         console.log('🔄 Skipping blob URL rehydration - user not authenticated');
         return;
@@ -1080,7 +1101,7 @@ const AppContent = () => {
     if (activeTab === 'gallery') {
       rehydrateBlobUrls();
     }
-  }, [activeTab, isAuthenticated]); // Re-run when activeTab or authentication status changes
+  }, [activeTab]); // Re-run when activeTab changes
 
   // Clear any lingering auth dialogs and reset state
   const clearAuthState = () => {
