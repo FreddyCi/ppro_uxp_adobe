@@ -4,13 +4,21 @@
  * Uses Zustand for state management with UXP-compatible local storage persistence
  */
 
+import { useCallback } from 'react'
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import { useShallow } from 'zustand/react/shallow'
 import type { GenerationResult } from '../types/firefly'
 import type { CorrectedImage } from '../types/gemini'
 import type { VideoMetadata } from '../types/blob'
+import type { ContentItem, ContentType } from '../types/content'
+import {
+  convertGenerationResultToContentItem,
+  convertCorrectedImageToContentItem,
+  convertVideoMetadataToContentItem
+} from '../types/content'
 import { storage } from 'uxp'
-import { toTempUrl } from '../utils/uxpFs'
+import { refreshContentItemUrls } from '../utils/blobUrlLifecycle'
 
 // Utility function to convert blob to base64 data URL
 async function blobToDataUrl(blob: Blob): Promise<string> {
@@ -85,10 +93,8 @@ export interface GalleryImageWithAzure extends GenerationResult {
 
 // Store interface for gallery management
 export interface GalleryStore {
-  // Content collections - enhanced with Azure metadata
-  images: GalleryImageWithAzure[]
-  correctedImages: CorrectedImage[]
-  videos: VideoMetadata[]
+  // Unified content collection
+  contentItems: ContentItem[]
 
   // Selection and view state
   selectedItems: string[]
@@ -100,7 +106,7 @@ export interface GalleryStore {
   filterTags: string[]
   searchQuery: string
   dateRange: { start?: Date; end?: Date }
-  typeFilter: 'all' | 'generated' | 'corrected' | 'videos'
+  typeFilter: 'all' | 'generated' | 'corrected' | 'videos' | 'images'
 
   // Pagination
   currentPage: number
@@ -114,18 +120,10 @@ export interface GalleryStore {
 
   // Actions
   actions: {
-    // Content management - enhanced for Azure
-    addImage: (image: GalleryImageWithAzure) => void
-    addCorrectedImage: (image: CorrectedImage) => void
-    addVideo: (video: VideoMetadata) => void
-    removeImage: (id: string) => void
-    removeCorrectedImage: (id: string) => void
-    removeVideo: (id: string) => void
-    updateImage: (id: string, updates: Partial<GalleryImageWithAzure>) => void
-    updateImageAzureMetadata: (
-      id: string,
-      azureMetadata: AzureBlobMetadata
-    ) => void
+    // Content management - unified
+    addContentItem: (item: ContentItem) => void
+    removeContentItem: (id: string) => void
+    updateContentItem: (id: string, updates: Partial<ContentItem>) => void
 
     // Selection management
     selectItems: (ids: string[], append?: boolean) => void
@@ -147,7 +145,7 @@ export interface GalleryStore {
     setSearchQuery: (query: string) => void
     setDateRange: (range: { start?: Date; end?: Date }) => void
     setTypeFilter: (
-      filter: 'all' | 'generated' | 'corrected' | 'videos'
+      filter: 'all' | 'generated' | 'corrected' | 'videos' | 'images'
     ) => void
     clearFilters: () => void
 
@@ -167,18 +165,14 @@ export interface GalleryStore {
     setLoading: (loading: boolean) => void
     setError: (error: string | null) => void
   }
-}
-
-// UXP-compatible storage implementation with localStorage
+}// UXP-compatible storage implementation with localStorage
 const createUXPStorage = () => {
   return createJSONStorage(() => localStorage)
 }
 
 // Initial state
 const initialState = {
-  images: [],
-  correctedImages: [],
-  videos: [],
+  contentItems: [],
   selectedItems: [],
   viewMode: 'grid' as const,
   sortBy: 'newest' as const,
@@ -195,52 +189,51 @@ const initialState = {
   lastRefresh: null,
 }
 
-// Union type for all gallery items
-type GalleryItem = GalleryImageWithAzure | CorrectedImage | VideoMetadata
-
 // Helper function to get all items based on type filter
-const getAllItems = (
-  state: Pick<
-    GalleryStore,
-    'images' | 'correctedImages' | 'videos' | 'typeFilter'
-  >
-): GalleryItem[] => {
+export const getAllItems = (
+  state: Pick<GalleryStore, 'contentItems' | 'typeFilter'>
+): ContentItem[] => {
   switch (state.typeFilter) {
     case 'generated':
-      return state.images
+      return state.contentItems.filter(item =>
+        item.contentType === 'generated-image' || item.contentType === 'uploaded-image'
+      )
     case 'corrected':
-      return state.correctedImages
+      return state.contentItems.filter(item => item.contentType === 'corrected-image')
     case 'videos':
-      return state.videos
+      return state.contentItems.filter(item =>
+        item.contentType === 'video' || item.contentType === 'uploaded-video'
+      )
+    case 'images':
+      return state.contentItems.filter(item =>
+        ['generated-image', 'corrected-image', 'uploaded-image'].includes(item.contentType)
+      )
     case 'all':
     default:
-      return [...state.images, ...state.correctedImages, ...state.videos]
+      return state.contentItems
   }
 }
 
 // Helper function to filter items based on search and filters
-const filterItems = (
-  items: GalleryItem[],
+export const filterItems = (
+  items: ContentItem[],
   state: Pick<GalleryStore, 'searchQuery' | 'filterTags' | 'dateRange'>
-): GalleryItem[] => {
+): ContentItem[] => {
   let filtered = items
 
   // Search query filter
   if (state.searchQuery.trim()) {
     const query = state.searchQuery.toLowerCase()
     filtered = filtered.filter(item => {
-      // Search in prompt/title based on item type
-      let searchText = ''
-      if ('metadata' in item && item.metadata) {
-        // For GenerationResult, metadata has prompt
-        if ('prompt' in item.metadata) {
-          searchText = item.metadata.prompt
-        }
+      // Search based on content type
+      let searchText = item.filename || item.originalName
+
+      // For generated images, search in prompt
+      if (item.contentType === 'generated-image') {
+        const genData = item.content as import('../types/content').GeneratedImageData
+        searchText = genData.prompt || searchText
       }
-      // For VideoMetadata, search in filename or originalName
-      if ('originalName' in item) {
-        searchText = item.originalName || searchText
-      }
+
       return searchText.toLowerCase().includes(query)
     })
   }
@@ -259,9 +252,7 @@ const filterItems = (
   // Tags filter
   if (state.filterTags.length > 0) {
     filtered = filtered.filter(item => {
-      // For VideoMetadata and similar types that extend BaseMetadata
-      const itemTags = 'tags' in item ? item.tags || [] : []
-      return state.filterTags.every(tag => itemTags.includes(tag))
+      return state.filterTags.every(tag => item.tags.includes(tag))
     })
   }
 
@@ -269,11 +260,11 @@ const filterItems = (
 }
 
 // Helper function to sort items
-const sortItems = (
-  items: GalleryItem[],
+export const sortItems = (
+  items: ContentItem[],
   sortBy: GalleryStore['sortBy'],
   sortOrder: GalleryStore['sortOrder']
-): GalleryItem[] => {
+): ContentItem[] => {
   const sorted = [...items].sort((a, b) => {
     let aValue: string | number | Date
     let bValue: string | number | Date
@@ -286,18 +277,19 @@ const sortItems = (
         break
       case 'prompt':
         // Get search text for sorting
-        aValue = ''
-        bValue = ''
-        if ('metadata' in a && a.metadata && 'prompt' in a.metadata) {
-          aValue = a.metadata.prompt || ''
-        } else if ('originalName' in a) {
-          aValue = a.originalName || ''
+        aValue = a.filename || a.originalName || ''
+        bValue = b.filename || b.originalName || ''
+
+        // For generated images, use prompt
+        if (a.contentType === 'generated-image') {
+          const genData = a.content as import('../types/content').GeneratedImageData
+          aValue = genData.prompt || aValue
         }
-        if ('metadata' in b && b.metadata && 'prompt' in b.metadata) {
-          bValue = b.metadata.prompt || ''
-        } else if ('originalName' in b) {
-          bValue = b.originalName || ''
+        if (b.contentType === 'generated-image') {
+          const genData = b.content as import('../types/content').GeneratedImageData
+          bValue = genData.prompt || bValue
         }
+
         aValue = (aValue as string).toLowerCase()
         bValue = (bValue as string).toLowerCase()
         break
@@ -307,10 +299,9 @@ const sortItems = (
         bValue = 0
         break
       case 'size':
-        // Default to 0 for size comparison
-        aValue = 0
-        bValue = 0
-        // Note: Size sorting can be implemented when metadata interfaces are clarified
+        // Use file size for sorting
+        aValue = a.size || 0
+        bValue = b.size || 0
         break
       default:
         return 0
@@ -336,106 +327,33 @@ export const useGalleryStore = create<GalleryStore>()(
       ...initialState,
 
       actions: {
-        // Content management
-        addImage(image: GalleryImageWithAzure): void {
+        // Unified content management
+        addContentItem(item: ContentItem): void {
           set(state => {
-            // No automatic quota checking - manual cleanup only
-
-            const newImages = [image, ...state.images]
+            const newContentItems = [item, ...state.contentItems]
             return {
-              images: newImages,
-              totalItems: getAllItems({ ...state, images: newImages }).length,
+              contentItems: newContentItems,
+              totalItems: getAllItems({ ...state, contentItems: newContentItems }).length,
             }
           })
         },
 
-        addCorrectedImage(image: CorrectedImage): void {
+        removeContentItem(id: string): void {
           set(state => {
-            // No automatic quota checking - manual cleanup only
-
-            const newCorrectedImages = [image, ...state.correctedImages]
+            const newContentItems = state.contentItems.filter(item => item.id !== id)
+            const newSelectedItems = state.selectedItems.filter(itemId => itemId !== id)
             return {
-              correctedImages: newCorrectedImages,
-              totalItems: getAllItems({
-                ...state,
-                correctedImages: newCorrectedImages,
-              }).length,
-            }
-          })
-        },
-
-        addVideo(video: VideoMetadata): void {
-          set(state => {
-            const newVideos = [video, ...state.videos]
-            return {
-              videos: newVideos,
-              totalItems: getAllItems({ ...state, videos: newVideos }).length,
-            }
-          })
-        },
-
-        removeImage(id: string): void {
-          set(state => {
-            const newImages = state.images.filter(img => img.id !== id)
-            const newSelectedItems = state.selectedItems.filter(
-              itemId => itemId !== id
-            )
-            return {
-              images: newImages,
+              contentItems: newContentItems,
               selectedItems: newSelectedItems,
-              totalItems: getAllItems({ ...state, images: newImages }).length,
+              totalItems: getAllItems({ ...state, contentItems: newContentItems }).length,
             }
           })
         },
 
-        removeCorrectedImage(id: string): void {
-          set(state => {
-            const newCorrectedImages = state.correctedImages.filter(
-              img => img.id !== id
-            )
-            const newSelectedItems = state.selectedItems.filter(
-              itemId => itemId !== id
-            )
-            return {
-              correctedImages: newCorrectedImages,
-              selectedItems: newSelectedItems,
-              totalItems: getAllItems({
-                ...state,
-                correctedImages: newCorrectedImages,
-              }).length,
-            }
-          })
-        },
-
-        removeVideo(id: string): void {
-          set(state => {
-            const newVideos = state.videos.filter(video => video.id !== id)
-            const newSelectedItems = state.selectedItems.filter(
-              itemId => itemId !== id
-            )
-            return {
-              videos: newVideos,
-              selectedItems: newSelectedItems,
-              totalItems: getAllItems({ ...state, videos: newVideos }).length,
-            }
-          })
-        },
-
-        updateImage(id: string, updates: Partial<GalleryImageWithAzure>): void {
+        updateContentItem(id: string, updates: Partial<ContentItem>): void {
           set(state => ({
-            images: state.images.map(img =>
-              img.id === id ? { ...img, ...updates } : img
-            ),
-          }))
-        },
-
-        updateImageAzureMetadata(
-          id: string,
-          azureMetadata: AzureBlobMetadata
-        ): void {
-          set(state => ({
-            images: state.images.map(img =>
-              img.id === id ? { ...img, azureMetadata } : img
+            contentItems: state.contentItems.map(item =>
+              item.id === id ? { ...item, ...updates } : item
             ),
           }))
         },
@@ -452,7 +370,7 @@ export const useGalleryStore = create<GalleryStore>()(
         selectAll(): void {
           const state = get()
           const allItems = getAllItems(state)
-          const allIds = allItems.map((item: GalleryItem) => item.id)
+          const allIds = allItems.map(item => item.id)
           set({ selectedItems: allIds })
         },
 
@@ -473,9 +391,7 @@ export const useGalleryStore = create<GalleryStore>()(
           set({ viewMode: mode })
         },
 
-        setSortBy(
-          sort: 'newest' | 'oldest' | 'prompt' | 'rating' | 'size'
-        ): void {
+        setSortBy(sort: 'newest' | 'oldest' | 'prompt' | 'rating' | 'size'): void {
           set({ sortBy: sort, currentPage: 1 })
         },
 
@@ -512,9 +428,7 @@ export const useGalleryStore = create<GalleryStore>()(
           set({ dateRange: range, currentPage: 1 })
         },
 
-        setTypeFilter(
-          filter: 'all' | 'generated' | 'corrected' | 'videos'
-        ): void {
+        setTypeFilter(filter: 'all' | 'generated' | 'corrected' | 'videos' | 'images'): void {
           const state = get()
           set({
             typeFilter: filter,
@@ -547,14 +461,9 @@ export const useGalleryStore = create<GalleryStore>()(
         deleteSelected(): void {
           const state = get()
           const { selectedItems } = state
-
           selectedItems.forEach(id => {
-            // Try to remove from each collection
-            state.actions.removeImage(id)
-            state.actions.removeCorrectedImage(id)
-            state.actions.removeVideo(id)
+            this.removeContentItem(id)
           })
-
           set({ selectedItems: [] })
         },
 
@@ -567,18 +476,17 @@ export const useGalleryStore = create<GalleryStore>()(
           }
         },
 
-        tagSelected(_tags: string[]): void {
-          // TODO: Update GenerationResult type to include tags property
-          // const state = get()
-          // const { selectedItems } = state
-          // // Update images with new tags
-          // set((currentState) => ({
-          //   images: currentState.images.map(img =>
-          //     selectedItems.includes(img.id)
-          //       ? { ...img, tags: [...(img.tags || []), ...tags] }
-          //       : img
-          //   )
-          // }))
+        tagSelected(tags: string[]): void {
+          const state = get()
+          const { selectedItems } = state
+          // Update content items with new tags
+          set(state => ({
+            contentItems: state.contentItems.map(item =>
+              selectedItems.includes(item.id)
+                ? { ...item, tags: [...new Set([...item.tags, ...tags])] }
+                : item
+            ),
+          }))
         },
 
         // Data management
@@ -614,9 +522,130 @@ export const useGalleryStore = create<GalleryStore>()(
             console.warn(`🔄 Starting sync with ${syncedItems.length} raw items from scan`)
 
             if (syncedItems.length > 0) {
-              // Convert images to base64 data URLs for reliable display
+              // Convert legacy CorrectedImage items to unified ContentItem format
+              const contentItems = syncedItems.map(item => {
+                // Determine content type based on metadata
+                let contentType: ContentType = 'corrected-image' // default
+
+                // Check raw metadata properties (not typed)
+                const rawMetadata = item.metadata as any
+                if (item.filename?.includes('ltx-') || rawMetadata?.model === 'ltx-video') {
+                  contentType = 'video'
+                } else if (item.filename?.includes('luma-') || (rawMetadata?.model && rawMetadata.model.includes('ray'))) {
+                  contentType = 'video'
+                } else if (item.filename?.includes('gemini-corrected')) {
+                  contentType = 'corrected-image'
+                } else if (rawMetadata?.contentType === 'video') {
+                  contentType = 'video'
+                } else if (rawMetadata?.contentType === 'generated-image') {
+                  contentType = 'generated-image'
+                }
+
+                // Create ContentItem based on detected type
+                if (contentType === 'video') {
+                  return {
+                    // Base metadata
+                    id: item.id,
+                    filename: item.filename,
+                    originalName: item.filename,
+                    mimeType: 'video/mp4', // Assume MP4 for videos
+                    size: 0, // Size not available in legacy metadata
+                    tags: [],
+                    timestamp: item.timestamp,
+                    userId: undefined,
+                    sessionId: undefined,
+
+                    // Type and display
+                    contentType: 'video',
+                    displayUrl: '', // Will be set by base64 conversion
+                    thumbnailUrl: item.thumbnailUrl || '', // Use stored thumbnail
+                    blobUrl: item.blobUrl,
+                    localPath: item.localFilePath,
+                    localMetadataPath: item.localMetadataPath,
+
+                    // Content data for video
+                    content: {
+                      type: 'video',
+                      videoUrl: '', // Will be set by base64 conversion
+                      duration: rawMetadata?.processingTime || 0, // Approximate duration
+                      fps: 30, // Default FPS
+                      resolution: { width: 1920, height: 1080 }, // Default resolution
+                      codec: 'h264',
+                      hasAudio: true,
+                      audioCodec: 'aac'
+                    },
+
+                    // Storage
+                    storageMode: 'local',
+                    persistenceMethod: 'local',
+                    folderToken: item.folderToken,
+                    relativePath: item.relativePath,
+
+                    // Status
+                    status: 'ready'
+                  } as ContentItem
+                } else if (contentType === 'generated-image') {
+                  return {
+                    // Base metadata
+                    id: item.id,
+                    filename: item.filename,
+                    originalName: item.filename,
+                    mimeType: 'image/jpeg',
+                    size: 0,
+                    tags: [],
+                    timestamp: item.timestamp,
+                    userId: undefined,
+                    sessionId: undefined,
+
+                    // Type and display
+                    contentType: 'generated-image',
+                    displayUrl: '', // Will be set by base64 conversion
+                    thumbnailUrl: item.thumbnailUrl || '',
+                    blobUrl: item.blobUrl,
+                    localPath: item.localFilePath,
+                    localMetadataPath: item.localMetadataPath,
+
+                    // Content data for generated image
+                    content: {
+                      type: 'generated-image',
+                      imageUrl: '',
+                      seed: rawMetadata?.seed || 0,
+                      generationMetadata: {
+                        prompt: rawMetadata?.operationsApplied?.join(' ') || 'Generated image',
+                        contentType: 'image/jpeg',
+                        resolution: { width: 1024, height: 1024 },
+                        fileSize: 0,
+                        timestamp: item.timestamp.getTime(), // Convert Date to number
+                        userId: '',
+                        sessionId: '',
+                        filename: item.filename,
+                        seed: rawMetadata?.seed || 0,
+                        jobId: item.id,
+                        model: rawMetadata?.model || 'unknown',
+                        version: rawMetadata?.version || 'v1'
+                      },
+                      prompt: rawMetadata?.operationsApplied?.join(' ') || 'Generated image',
+                      size: { width: 1024, height: 1024 }
+                    },
+
+                    // Storage
+                    storageMode: 'local',
+                    persistenceMethod: 'local',
+                    folderToken: item.folderToken,
+                    relativePath: item.relativePath,
+
+                    // Status
+                    status: 'ready'
+                  } as ContentItem
+                } else {
+                  // Default to corrected image
+                  return convertCorrectedImageToContentItem(item)
+                }
+              })
+
+              // Convert images/videos to base64 data URLs for reliable display
               const base64ConvertedItems = await Promise.all(
-                syncedItems.map(async (item) => {
+                contentItems.map(async (item) => {
                   try {
                     let dataUrl = ''
 
@@ -629,7 +658,7 @@ export const useGalleryStore = create<GalleryStore>()(
                       console.log('✅ Converted blob to base64 data URL:', dataUrl.substring(0, 50) + '...')
                     }
                     // Try to load from local file path
-                    else if (item.localFilePath) {
+                    else if (item.localPath) {
                       console.log('🔄 Converting local file to base64 for:', item.filename)
                       // Load the file using UXP filesystem
                       const fs = storage.localFileSystem
@@ -652,49 +681,58 @@ export const useGalleryStore = create<GalleryStore>()(
 
                     // Only return the item if conversion succeeded
                     if (dataUrl) {
-                      return {
-                        ...item,
-                        correctedUrl: dataUrl,
-                        thumbnailUrl: dataUrl,
+                      if (item.contentType === 'video') {
+                        return {
+                          ...item,
+                          displayUrl: dataUrl,
+                          thumbnailUrl: item.thumbnailUrl || dataUrl, // Use dataUrl as thumbnail if none exists
+                          content: {
+                            ...item.content,
+                            videoUrl: dataUrl
+                          }
+                        }
+                      } else {
+                        return {
+                          ...item,
+                          displayUrl: dataUrl,
+                          thumbnailUrl: item.thumbnailUrl || dataUrl
+                        }
                       }
                     } else {
                       console.warn('⚠️ Skipping item due to failed base64 conversion:', item.filename)
                       return null
                     }
                   } catch (error) {
-                    console.warn('❌ Failed to convert image to base64:', item.filename, error)
+                    console.warn('❌ Failed to convert item to base64:', item.filename, error)
                     return null
                   }
                 })
               )
 
               // Filter out null items (failed conversions)
-              const validConvertedItems = base64ConvertedItems.filter((item): item is NonNullable<typeof item> => item !== null) as CorrectedImage[]
+              const validConvertedItems = base64ConvertedItems.filter((item): item is NonNullable<typeof item> => item !== null)
               console.warn(`📊 After base64 conversion: ${validConvertedItems.length} valid items`)
 
               // Add new items to gallery, avoiding duplicates
               const state = get()
-              const existingIds = new Set([
-                ...state.images.map(img => img.id),
-                ...state.correctedImages.map(img => img.id)
-              ])
+              const existingIds = new Set(state.contentItems.map(item => item.id))
               console.warn(`🆔 Existing IDs in gallery:`, Array.from(existingIds))
 
-              const newCorrectedImages = validConvertedItems.filter(item => !existingIds.has(item.id))
-              console.warn(`➕ New items to add: ${newCorrectedImages.length}`)
-              newCorrectedImages.forEach((item, index) => {
-                console.warn(`  ${index + 1}. ${item.filename} (ID: ${item.id})`)
+              const newContentItems = validConvertedItems.filter(item => !existingIds.has(item.id))
+              console.warn(`➕ New items to add: ${newContentItems.length}`)
+              newContentItems.forEach((item, index) => {
+                console.warn(`  ${index + 1}. ${item.filename} (ID: ${item.id}, Type: ${item.contentType})`)
               })
 
-              if (newCorrectedImages.length > 0) {
+              if (newContentItems.length > 0) {
                 set((state: GalleryStore) => ({
-                  correctedImages: [...newCorrectedImages, ...state.correctedImages],
+                  contentItems: [...newContentItems, ...state.contentItems],
                   totalItems: getAllItems({
                     ...state,
-                    correctedImages: [...newCorrectedImages, ...state.correctedImages]
+                    contentItems: [...newContentItems, ...state.contentItems]
                   }).length,
                 }))
-                console.warn(`✅ Synced ${newCorrectedImages.length} local files to gallery with base64 URLs`)
+                console.warn(`✅ Synced ${newContentItems.length} local files to gallery with base64 URLs`)
               } else {
                 console.warn('ℹ️ No new local files to sync')
               }
@@ -720,9 +758,7 @@ export const useGalleryStore = create<GalleryStore>()(
 
         clearAll(): void {
           set({
-            images: [],
-            correctedImages: [],
-            videos: [],
+            contentItems: [],
             selectedItems: [],
             totalItems: 0,
             currentPage: 1,
@@ -742,11 +778,9 @@ export const useGalleryStore = create<GalleryStore>()(
       name: 'gallery-storage', // localStorage key
       storage: createUXPStorage(),
 
-      // Persist essential data with quota management for corrected images
+      // Persist essential data with quota management for content items
       partialize: state => ({
-        images: state.images,
-        correctedImages: state.correctedImages, // Re-enabled with quota management
-        videos: state.videos,
+        contentItems: state.contentItems,
         viewMode: state.viewMode,
         sortBy: state.sortBy,
         sortOrder: state.sortOrder,
@@ -787,15 +821,21 @@ export const useGalleryStore = create<GalleryStore>()(
 
 // Convenience hooks for specific state slices
 export const useGalleryImages = () => {
-  return useGalleryStore(state => state.images)
+  return useGalleryStore(state => state.contentItems.filter(item =>
+    item.contentType === 'generated-image' || item.contentType === 'uploaded-image'
+  ))
 }
 
 export const useGalleryCorrectedImages = () => {
-  return useGalleryStore(state => state.correctedImages)
+  return useGalleryStore(state => state.contentItems.filter(item =>
+    item.contentType === 'corrected-image'
+  ))
 }
 
 export const useGalleryVideos = () => {
-  return useGalleryStore(state => state.videos)
+  return useGalleryStore(state => state.contentItems.filter(item =>
+    item.contentType === 'video' || item.contentType === 'uploaded-video'
+  ))
 }
 
 export const useGallerySelection = () => {
@@ -854,151 +894,29 @@ export const useGalleryError = () => {
   return useGalleryStore(state => state.error)
 }
 
-// Hook to get filtered and sorted items for display
+// Hook to get raw data for display computation
 export const useGalleryDisplayItems = () => {
-  return useGalleryStore(state => {
-    const allItems = getAllItems(state)
-    const filtered = filterItems(allItems, state)
-    const sorted = sortItems(filtered, state.sortBy, state.sortOrder)
-
-    // Apply pagination
-    const startIndex = (state.currentPage - 1) * state.itemsPerPage
-    const endIndex = startIndex + state.itemsPerPage
-    const paginatedItems = sorted.slice(startIndex, endIndex)
-
-    return {
-      items: paginatedItems,
-      totalItems: sorted.length,
-      currentPage: state.currentPage,
-      totalPages: Math.ceil(sorted.length / state.itemsPerPage),
-    }
-  })
-}
-
-// Hydrate gallery items with temporary URLs for local files
-export async function loadGalleryItems(rawItems: GalleryItem[]): Promise<GalleryItem[]> {
-  return Promise.all(
-    rawItems.map(async it => {
-      // Skip hydration if item already has a data URL (from base64 conversion)
-      if (('correctedUrl' in it && it.correctedUrl?.startsWith('data:')) ||
-          ('thumbnailUrl' in it && it.thumbnailUrl?.startsWith('data:')) ||
-          ('imageUrl' in it && it.imageUrl?.startsWith('data:'))) {
-        console.log('Skipping hydration for item with existing data URL:', it.id)
-        return it
-      }
-
-      // For corrected images with local storage
-      if ('storageMode' in it && it.storageMode === 'local' && 'folderToken' in it && 'relativePath' in it && it.folderToken && it.relativePath) {
-        try {
-          const src = await toTempUrl(it.folderToken, it.relativePath, undefined, it.localFilePath);
-          return { ...it, correctedUrl: src, thumbnailUrl: src }
-        } catch (e) {
-          console.warn('Failed to create temporary URL for local corrected image', it.relativePath, e)
-          // Fall back to blob URL if available
-          if ('blobUrl' in it && it.blobUrl) {
-            console.warn('Using blob URL fallback for corrected image', it.relativePath)
-            return { ...it, correctedUrl: it.blobUrl, thumbnailUrl: it.blobUrl }
-          }
-          return { ...it, broken: true }
-        }
-      }
-      // For items with localFilePath but no folderToken/relativePath (fallback)
-      else if ('localFilePath' in it && it.localFilePath && 'storageMode' in it && it.storageMode === 'local') {
-        try {
-          const src = await toTempUrl(undefined, undefined, undefined, it.localFilePath);
-          return { ...it, correctedUrl: src, thumbnailUrl: src, imageUrl: src }
-        } catch (e) {
-          console.warn('Failed to create temporary URL for local file using localFilePath', it.localFilePath, e)
-          // Fall back to blob URL if available
-          if ('blobUrl' in it && it.blobUrl) {
-            console.warn('Using blob URL fallback for local file', it.localFilePath)
-            return { ...it, correctedUrl: it.blobUrl, thumbnailUrl: it.blobUrl, imageUrl: it.blobUrl }
-          }
-          return { ...it, broken: true }
-        }
-      }
-      // For generation results with local storage
-      else if ('metadata' in it && it.metadata && 'storageMode' in it.metadata && it.metadata.storageMode === 'local' && 'folderToken' in it.metadata && 'relativePath' in it.metadata && it.metadata.folderToken && it.metadata.relativePath) {
-        try {
-          // Resolve proper MIME type for blob creation
-          let mimeType = it.metadata.contentType;
-          if (mimeType === 'video') {
-            // Infer specific video MIME type from file extension
-            const extension = it.metadata.relativePath.split('.').pop()?.toLowerCase();
-            switch (extension) {
-              case 'mp4':
-                mimeType = 'video/mp4';
-                break;
-              case 'webm':
-                mimeType = 'video/webm';
-                break;
-              case 'avi':
-                mimeType = 'video/avi';
-                break;
-              case 'mov':
-                mimeType = 'video/quicktime';
-                break;
-              case 'mkv':
-                mimeType = 'video/x-matroska';
-                break;
-              case 'm4v':
-                mimeType = 'video/x-m4v';
-                break;
-              default:
-                mimeType = 'video/mp4'; // Default fallback
-            }
-          }
-          const src = await toTempUrl(it.metadata.folderToken, it.metadata.relativePath, mimeType, it.metadata.localFilePath);
-          return { ...it, imageUrl: src };
-        } catch (e) {
-          console.warn('Failed to create temporary URL for local generated image', it.metadata.relativePath, e)
-          return { ...it, broken: true }
-        }
-      }
-      // For generation results with localFilePath but no folderToken/relativePath (fallback)
-      else if ('metadata' in it && it.metadata && 'storageMode' in it.metadata && it.metadata.storageMode === 'local' && 'localFilePath' in it.metadata && it.metadata.localFilePath) {
-        try {
-          // Resolve proper MIME type for blob creation
-          let mimeType = it.metadata.contentType;
-          if (mimeType === 'video') {
-            // Infer specific video MIME type from file extension
-            const extension = it.metadata.localFilePath.split('.').pop()?.toLowerCase();
-            switch (extension) {
-              case 'mp4':
-                mimeType = 'video/mp4';
-                break;
-              case 'webm':
-                mimeType = 'video/webm';
-                break;
-              case 'avi':
-                mimeType = 'video/avi';
-                break;
-              case 'mov':
-                mimeType = 'video/quicktime';
-                break;
-              case 'mkv':
-                mimeType = 'video/x-matroska';
-                break;
-              case 'm4v':
-                mimeType = 'video/x-m4v';
-                break;
-              default:
-                mimeType = 'video/mp4'; // Default fallback
-            }
-          }
-          const src = await toTempUrl(undefined, undefined, mimeType, it.metadata.localFilePath);
-          return { ...it, imageUrl: src };
-        } catch (e) {
-          console.warn('Failed to create temporary URL for local generated image using localFilePath', it.metadata.localFilePath, e)
-          return { ...it, broken: true }
-        }
-      }
-      return it // Cloud items already have durable URLs
-    })
+  return useGalleryStore(
+    useShallow(
+      useCallback(
+        (state) => ({
+          contentItems: state.contentItems,
+          typeFilter: state.typeFilter,
+          searchQuery: state.searchQuery,
+          filterTags: state.filterTags,
+          dateRange: state.dateRange,
+          sortBy: state.sortBy,
+          sortOrder: state.sortOrder,
+          currentPage: state.currentPage,
+          itemsPerPage: state.itemsPerPage
+        }),
+        []
+      )
+    )
   )
 }
 
-// Scan local storage directory for metadata files and load corrected images
+// Scan local storage directory for metadata files and load all generations
 async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
   const fs = storage.localFileSystem
   const syncedItems: CorrectedImage[] = []
@@ -1052,12 +970,24 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
           hasRelativePath: !!metadata.relativePath,
           hasBlobUrl: !!metadata.blobUrl,
           hasCorrectedUrl: !!metadata.correctedUrl,
+          contentType: metadata.contentType,
           id: metadata.id
         })
 
-        // Check if this is a Gemini-corrected image
-        if (metadata.filename && metadata.filename.includes('gemini-corrected')) {
-          console.warn(`✅ Found Gemini-corrected image: ${metadata.filename}`)
+        // Check if this is a supported generation type (Gemini-corrected, LTX video, Luma video, or other generations)
+        const isSupportedGeneration = (
+          metadata.filename && (
+            metadata.filename.includes('gemini-corrected') || // Gemini corrections
+            metadata.filename.includes('ltx-') || // LTX videos
+            metadata.filename.includes('luma-') || // Luma videos
+            metadata.contentType === 'video' || // Any video content
+            metadata.contentType === 'generated-image' || // Firefly images
+            metadata.contentType === 'corrected-image' // Gemini corrections
+          )
+        )
+
+        if (isSupportedGeneration) {
+          console.warn(`✅ Found supported generation: ${metadata.filename} (${metadata.contentType || 'unknown type'})`)
 
           // Skip if we don't have the required metadata for display
           if (!metadata.relativePath && !metadata.blobUrl && !metadata.correctedUrl) {
@@ -1066,7 +996,7 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
           }
 
           // Use consistent ID based on filename if metadata doesn't have one
-          const consistentId = metadata.id || `corrected-${metadata.filename}`
+          const consistentId = metadata.id || `generation-${metadata.filename}`
 
           // Skip if we've already processed this ID in this sync
           if (processedIds.has(consistentId)) {
@@ -1077,29 +1007,29 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
           console.warn(`🆔 Using ID: ${consistentId} for ${metadata.filename}`)
           processedIds.add(consistentId)
 
-          // Create default corrections if not present in metadata
+          // Create default corrections if not present in metadata (for Gemini)
           const defaultCorrections = {
             lineCleanup: true,
             enhanceDetails: true,
             noiseReduction: true,
           };
 
-          // Create CorrectedImage from metadata
+          // Create CorrectedImage from metadata (this will be converted to ContentItem later)
           const correctedImage: CorrectedImage = {
             id: consistentId,
             originalUrl: metadata.originalUrl || '',
             correctedUrl: '', // Will be set by loadGalleryItems
-            thumbnailUrl: '', // Will be set by loadGalleryItems
+            thumbnailUrl: metadata.thumbnailUrl || '', // Use stored thumbnail if available
             corrections: metadata.corrections || defaultCorrections,
             metadata: {
               corrections: metadata.corrections || defaultCorrections,
               originalSize: metadata.originalSize || { width: 0, height: 0, aspectRatio: 1 },
               correctedSize: metadata.correctedSize || { width: 0, height: 0, aspectRatio: 1 },
-              model: metadata.model || 'gemini-2.5-flash-image-preview',
-              version: metadata.version || 'v1beta',
+              model: metadata.model || (metadata.filename?.includes('ltx') ? 'ltx-video' : metadata.filename?.includes('luma') ? 'luma-dream-machine' : 'unknown'),
+              version: metadata.version || 'v1',
               processingTime: metadata.processingTime || 0,
               timestamp: new Date(metadata.timestamp || metadata.savedAt || Date.now()),
-              operationsApplied: metadata.operationsApplied || ['lineCleanup', 'enhanceDetails', 'noiseReduction'],
+              operationsApplied: metadata.operationsApplied || ['generation'],
               resourceUsage: metadata.resourceUsage || { computeTime: 0, memoryUsed: 0 },
             },
             timestamp: new Date(metadata.timestamp || metadata.savedAt || Date.now()),
@@ -1115,16 +1045,16 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
           }
 
           syncedItems.push(correctedImage)
-          console.warn(`➕ Added corrected image to sync list: ${metadata.filename}`)
+          console.warn(`➕ Added generation to sync list: ${metadata.filename} (${metadata.contentType || 'unknown'})`)
         } else {
-          console.warn(`⏭️ Skipping non-Gemini file: ${metadata.filename || metadataFile.name}`)
+          console.warn(`⏭️ Skipping unsupported file: ${metadata.filename || metadataFile.name} (${metadata.contentType || 'no content type'})`)
         }
       } catch (error) {
         console.warn('❌ Failed to parse metadata file:', metadataFile.name, error)
       }
     }
 
-    console.warn(`📊 Final sync result: ${syncedItems.length} corrected images found`)
+    console.warn(`📊 Final sync result: ${syncedItems.length} generations found`)
     syncedItems.forEach((item, index) => {
       console.warn(`  ${index + 1}. ${item.filename} (ID: ${item.id})`)
     })
@@ -1162,5 +1092,3 @@ async function scanForMetadataFiles(folder: any): Promise<any[]> {
   console.warn(`📊 Folder scan complete: ${metadataFiles.length} JSON files found in ${folder.name || folder.nativePath}`)
   return metadataFiles
 }
-
-export default useGalleryStore

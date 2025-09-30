@@ -1,13 +1,143 @@
 // @ts-ignore
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useGenerationStore } from '../../store/generationStore';
-import { useGalleryStore, loadGalleryItems } from '../../store/galleryStore';
+import { useGalleryStore, useGalleryDisplayItems } from '../../store/galleryStore';
 import { createIMSService } from '../../services/ims/IMSService';
 import type { IMSService as IMSServiceClass } from '../../services/ims/IMSService';
 import { GeminiService } from '../../services/gemini';
 import type { CorrectionParams } from '../../types/gemini';
 import { useToastHelpers } from '../../hooks/useToast';
+import type { ContentItem } from '../../types/content';
 import './Gallery.scss';
+
+// Helper functions for gallery filtering and sorting
+const getAllItems = (
+  state: { contentItems: ContentItem[]; typeFilter: string }
+): ContentItem[] => {
+  switch (state.typeFilter) {
+    case 'generated':
+      return state.contentItems.filter(item =>
+        item.contentType === 'generated-image' || item.contentType === 'uploaded-image'
+      )
+    case 'corrected':
+      return state.contentItems.filter(item => item.contentType === 'corrected-image')
+    case 'videos':
+      return state.contentItems.filter(item =>
+        item.contentType === 'video' || item.contentType === 'uploaded-video'
+      )
+    case 'images':
+      return state.contentItems.filter(item =>
+        ['generated-image', 'corrected-image', 'uploaded-image'].includes(item.contentType)
+      )
+    case 'all':
+    default:
+      return state.contentItems
+  }
+}
+
+const filterItems = (
+  items: ContentItem[],
+  state: { searchQuery: string; filterTags: string[]; dateRange: { start?: Date; end?: Date } }
+): ContentItem[] => {
+  let filtered = items
+
+  // Search query filter
+  if (state.searchQuery.trim()) {
+    const query = state.searchQuery.toLowerCase()
+    filtered = filtered.filter(item => {
+      // Search based on content type
+      let searchText = item.filename || item.originalName
+
+      // For generated images, search in prompt
+      if (item.contentType === 'generated-image') {
+        const genData = item.content as any
+        searchText = genData.prompt || searchText
+      }
+
+      return searchText.toLowerCase().includes(query)
+    })
+  }
+
+  // Date range filter
+  if (state.dateRange.start || state.dateRange.end) {
+    filtered = filtered.filter(item => {
+      const itemDate = new Date(item.timestamp)
+      const afterStart =
+        !state.dateRange.start || itemDate >= state.dateRange.start
+      const beforeEnd = !state.dateRange.end || itemDate <= state.dateRange.end
+      return afterStart && beforeEnd
+    })
+  }
+
+  // Tags filter
+  if (state.filterTags.length > 0) {
+    filtered = filtered.filter(item => {
+      return state.filterTags.every(tag => item.tags.includes(tag))
+    })
+  }
+
+  return filtered
+}
+
+const sortItems = (
+  items: ContentItem[],
+  sortBy: string,
+  sortOrder: string
+): ContentItem[] => {
+  const sorted = [...items].sort((a, b) => {
+    let aValue: string | number | Date
+    let bValue: string | number | Date
+
+    switch (sortBy) {
+      case 'newest':
+      case 'oldest':
+        aValue = new Date(a.timestamp).getTime()
+        bValue = new Date(b.timestamp).getTime()
+        break
+      case 'prompt':
+        // Get search text for sorting
+        aValue = a.filename || a.originalName || ''
+        bValue = b.filename || b.originalName || ''
+
+        // For generated images, use prompt
+        if (a.contentType === 'generated-image') {
+          const genData = a.content as any
+          aValue = genData.prompt || aValue
+        }
+        if (b.contentType === 'generated-image') {
+          const genData = b.content as any
+          bValue = genData.prompt || bValue
+        }
+
+        aValue = (aValue as string).toLowerCase()
+        bValue = (bValue as string).toLowerCase()
+        break
+      case 'rating':
+        // Rating is optional property, default to 0
+        aValue = 0
+        bValue = 0
+        break
+      case 'size':
+        // Use file size for sorting
+        aValue = a.size || 0
+        bValue = b.size || 0
+        break
+      default:
+        return 0
+    }
+
+    if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1
+    if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1
+    return 0
+  })
+
+  // For 'oldest' sort, reverse the array after sorting by timestamp
+  if (sortBy === 'oldest') {
+    return sorted.reverse()
+  }
+
+  return sorted
+}
 
 function inferMimeType(filePath: string, fallback: string = 'image/jpeg'): string {
   const extension = filePath.split('.').pop()?.toLowerCase() || '';
@@ -183,7 +313,7 @@ interface ImageData {
   parentId?: string;
   downloadUrl?: string;
   localFilePath?: string;
-  storageMode?: 'azure' | 'local';
+  storageMode?: 'azure' | 'local' | 'memory';
   persistenceMethod?: 'blob' | 'dataUrl' | 'presigned' | 'local';
   // Video support
   isVideo?: boolean;
@@ -196,140 +326,82 @@ interface ImageData {
 interface GalleryProps {}
 
 export const Gallery = () => {
-  // Get real images from generation store
-  const { generationHistory } = useGenerationStore();
-  const generationActions = useGenerationStore(state => state.actions);
-  const correctedImages = useGalleryStore(state => state.correctedImages);
-  const galleryActions = useGalleryStore(state => state.actions);
-  const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
+  // Get raw data from gallery store
+  const {
+    contentItems,
+    typeFilter,
+    searchQuery: storeSearchQuery,
+    filterTags,
+    dateRange,
+    sortBy,
+    sortOrder,
+    currentPage,
+    itemsPerPage
+  } = useGalleryDisplayItems()
 
-  // State for hydrated corrected images
-  const [hydratedCorrectedImages, setHydratedCorrectedImages] = useState(correctedImages);
+  const galleryActions = useGalleryStore(state => state.actions)
+  const { showSuccess, showError, showInfo, showWarning } = useToastHelpers()
 
-  // State for hydrated generation results
-  const [hydratedGenerationResults, setHydratedGenerationResults] = useState(generationHistory);
+  // Compute filtered and sorted items using useMemo
+  const sortedItems = useMemo(() => {
+    const allItems = getAllItems({ contentItems, typeFilter })
+    const filtered = filterItems(allItems, { searchQuery: storeSearchQuery, filterTags, dateRange })
+    return sortItems(filtered, sortBy, sortOrder)
+  }, [contentItems, typeFilter, storeSearchQuery, filterTags, dateRange, sortBy, sortOrder])
 
-  // Hydrate corrected images on mount and when correctedImages change
-  useEffect(() => {
-    const hydrateImages = async () => {
-      try {
-        const hydrated = await loadGalleryItems(correctedImages);
-        setHydratedCorrectedImages(hydrated as typeof correctedImages);
-      } catch (error) {
-        console.error('Failed to hydrate corrected images:', error);
-        setHydratedCorrectedImages(correctedImages); // Fallback to original
-      }
-    };
+  // Apply pagination to sorted items
+  const displayItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    return sortedItems.slice(startIndex, endIndex)
+  }, [sortedItems, currentPage, itemsPerPage])
 
-    hydrateImages();
-  }, [correctedImages]);
+  const totalItems = sortedItems.length
+  const totalPages = Math.ceil(totalItems / itemsPerPage)
 
-  // Hydrate generation results on mount and when generationHistory changes
-  useEffect(() => {
-    const hydrateGenerationResults = async () => {
-      try {
-        // Create a mock array that looks like corrected images for hydration
-        const mockItems = generationHistory.map(result => ({
-          id: result.id,
-          correctedUrl: result.imageUrl,
-          thumbnailUrl: result.imageUrl,
-          localFilePath: result.localPath,
-          storageMode: result.metadata?.storageMode,
-          persistenceMethod: result.metadata?.persistenceMethod,
-          folderToken: result.metadata?.folderToken,
-          relativePath: result.metadata?.relativePath,
-          timestamp: result.timestamp,
-        }));
-
-        const hydrated = await loadGalleryItems(mockItems as any);
-        
-        // Map back to generation results with updated URLs
-        const updatedResults = generationHistory.map((result, index) => {
-          const hydratedItem = hydrated[index] as any; // Cast to any to access correctedUrl
-          if (hydratedItem && result.metadata?.storageMode === 'local' && result.metadata?.persistenceMethod === 'local') {
-            const hydratedUrl = hydratedItem.imageUrl || hydratedItem.correctedUrl;
-            return {
-              ...result,
-              imageUrl: hydratedUrl || result.imageUrl,
-              videoUrl: result.contentType === 'video' ? (hydratedUrl || result.videoUrl) : result.videoUrl,
-            };
-          }
-          return result;
-        });
-
-        setHydratedGenerationResults(updatedResults);
-      } catch (error) {
-        console.error('Failed to hydrate generation results:', error);
-        setHydratedGenerationResults(generationHistory); // Fallback to original
-      }
-    };
-
-    hydrateGenerationResults();
-  }, [generationHistory]);
+  // Get generation store for legacy compatibility
+  const { generationHistory } = useGenerationStore()
+  const generationActions = useGenerationStore(state => state.actions)
 
   const geminiService = useMemo(() => {
     const imsService = createIMSService();
     return new GeminiService(imsService as unknown as IMSServiceClass);
   }, []);
   
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [contentType, setContentType] = useState('All');
-  const [aspectRatio, setAspectRatio] = useState('All');
-  const [dateRange, setDateRange] = useState('All time');
-  const [sortBy, setSortBy] = useState('Newest');
+  // Filter states (local UI state)
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+  const [localContentType, setLocalContentType] = useState('All');
+  const [localAspectRatio, setLocalAspectRatio] = useState('All');
+  const [localDateRange, setLocalDateRange] = useState('All time');
+  const [localSortBy, setLocalSortBy] = useState('Newest');
   
-  // Convert generation results to gallery format
-  const storeImages = useMemo(() => {
-    return hydratedGenerationResults.map((result) => ({
-      id: result.id,
-      url: result.contentType === 'video' ? (result.videoUrl || result.imageUrl) : result.imageUrl,
-      prompt: result.metadata?.prompt || 'Untitled generation',
-      contentType: result.contentType === 'video' ? 'video' : (result.metadata?.contentClass || 'art').toLowerCase(),
-      aspectRatio: 'square', // Default since we're generating square images
-      createdAt: new Date(result.timestamp),
-      tags: (result.metadata?.prompt || '')
-        .split(' ')
-        .filter(Boolean)
-        .slice(0, 3),
-      source: 'generated' as const,
-      downloadUrl: result.downloadUrl,
-      localFilePath: result.localPath || result.metadata?.localFilePath,
-      storageMode: result.metadata?.storageMode,
-      persistenceMethod: result.metadata?.persistenceMethod,
-      // Video support
-      isVideo: result.contentType === 'video',
-      videoUrl: result.videoUrl,
-      duration: result.duration,
-      fps: result.fps,
-      resolution: result.resolution,
-    }));
-  }, [hydratedGenerationResults]);
-
-  const correctedGalleryImages = useMemo(() => {
-    return hydratedCorrectedImages.map(image => ({
-      id: image.id,
-      url: image.correctedUrl, // Use hydrated URL
-      prompt:
-        image.metadata?.corrections?.customPrompt ||
-        image.metadata?.operationsApplied?.join(', ') ||
-        'Gemini correction',
-      contentType: 'corrected',
-      aspectRatio: 'square',
-      createdAt: new Date(image.timestamp),
-      tags: image.metadata?.operationsApplied?.slice(0, 3) || [],
-      source: 'corrected' as const,
-      parentId: image.parentGenerationId,
-      localFilePath: image.localFilePath || image.correctedUrl,
-      storageMode: image.storageMode,
-      persistenceMethod: image.persistenceMethod,
-    }));
-  }, [hydratedCorrectedImages]);
-
-  // Use only real images from the generation store
+  // Convert unified ContentItems to gallery format for display
   const imagesToUse = useMemo(() => {
-    return [...storeImages, ...correctedGalleryImages];
-  }, [storeImages, correctedGalleryImages]);
+    return displayItems.map((item: ContentItem) => ({
+      id: item.id,
+      url: item.thumbnailUrl || item.displayUrl, // Use thumbnail for gallery view
+      prompt: item.contentType === 'generated-image' 
+        ? (item.content as any).prompt || 'Generated image'
+        : item.contentType === 'corrected-image'
+        ? (item.content as any).correctionMetadata?.operationsApplied?.join(', ') || 'Corrected image'
+        : item.filename || 'Content',
+      contentType: item.contentType,
+      aspectRatio: 'square', // Default since we're generating square images
+      createdAt: item.timestamp,
+      tags: item.tags,
+      source: item.contentType.includes('corrected') ? 'corrected' as const : 'generated' as const,
+      downloadUrl: item.contentType === 'generated-image' ? (item.content as any).downloadUrl : undefined,
+      localFilePath: item.localPath,
+      storageMode: item.storageMode,
+      persistenceMethod: item.persistenceMethod,
+      // Video support
+      isVideo: item.contentType === 'video' || item.contentType === 'uploaded-video',
+      videoUrl: item.contentType === 'video' ? (item.content as any).videoUrl : undefined,
+      duration: item.contentType === 'video' ? (item.content as any).duration : undefined,
+      fps: item.contentType === 'video' ? (item.content as any).fps : undefined,
+      resolution: item.contentType === 'video' ? (item.content as any).resolution : undefined,
+    }));
+  }, [displayItems]);
 
   const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
@@ -341,33 +413,38 @@ export const Gallery = () => {
   const [correctionPrompt, setCorrectionPrompt] = useState('');
   const [isCorrecting, setIsCorrecting] = useState(false);
 
-  // Filter and sort images
+  // Filter and sort images (using local state for UI filters)
   const filteredImages = useMemo(() => {
     let filtered = imagesToUse.filter((image: ImageData) => {
       // Search filter
-      if (searchQuery && !image.prompt.toLowerCase().includes(searchQuery.toLowerCase()) && 
-          !image.tags.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase()))) {
+      if (localSearchQuery && !image.prompt.toLowerCase().includes(localSearchQuery.toLowerCase()) && 
+          !image.tags.some((tag: string) => tag.toLowerCase().includes(localSearchQuery.toLowerCase()))) {
         return false;
       }
 
       // Content type filter
-      if (contentType !== 'All') {
-        if (contentType === 'Corrected' && image.source !== 'corrected') {
+      if (localContentType !== 'All') {
+        if (localContentType === 'Corrected' && !image.contentType.includes('corrected')) {
           return false;
         }
-
-        if (contentType !== 'Corrected' && image.contentType !== contentType.toLowerCase()) {
+        if (localContentType === 'Videos' && !image.contentType.includes('video')) {
+          return false;
+        }
+        if (localContentType === 'Art' && image.contentType !== 'generated-image') {
+          return false;
+        }
+        if (localContentType === 'Photo' && image.contentType !== 'uploaded-image') {
           return false;
         }
       }
 
       // Aspect ratio filter
-      if (aspectRatio !== 'All' && image.aspectRatio !== aspectRatio.toLowerCase()) {
+      if (localAspectRatio !== 'All' && image.aspectRatio !== localAspectRatio.toLowerCase()) {
         return false;
       }
 
       // Date range filter (simplified)
-      if (dateRange !== 'All time') {
+      if (localDateRange !== 'All time') {
         const now = new Date();
         const imageDate = new Date(image.createdAt);
         
@@ -376,22 +453,22 @@ export const Gallery = () => {
         
         const daysDiff = (now.getTime() - imageDate.getTime()) / (1000 * 3600 * 24);
         
-        if (dateRange === '7 days' && daysDiff > 7) return false;
-        if (dateRange === '30 days' && daysDiff > 30) return false;
-        if (dateRange === '90 days' && daysDiff > 90) return false;
+        if (localDateRange === '7 days' && daysDiff > 7) return false;
+        if (localDateRange === '30 days' && daysDiff > 30) return false;
+        if (localDateRange === '90 days' && daysDiff > 90) return false;
       }
 
       return true;
     });
 
     // Sort images
-    if (sortBy === 'Newest') {
+    if (localSortBy === 'Newest') {
       filtered.sort((a: ImageData, b: ImageData) => {
         const dateA = new Date(a.createdAt).getTime();
         const dateB = new Date(b.createdAt).getTime();
         return dateB - dateA;
       });
-    } else if (sortBy === 'Oldest') {
+    } else if (localSortBy === 'Oldest') {
       filtered.sort((a: ImageData, b: ImageData) => {
         const dateA = new Date(a.createdAt).getTime();
         const dateB = new Date(b.createdAt).getTime();
@@ -400,7 +477,7 @@ export const Gallery = () => {
     }
 
     return filtered;
-  }, [searchQuery, contentType, aspectRatio, dateRange, sortBy]);
+  }, [localSearchQuery, localContentType, localAspectRatio, localDateRange, localSortBy]);
 
   const handleApplyFilters = () => {
     // Filters are already applied via useMemo
@@ -408,11 +485,11 @@ export const Gallery = () => {
   };
 
   const handleClearFilters = () => {
-    setSearchQuery('');
-    setContentType('All');
-    setAspectRatio('All');
-    setDateRange('All time');
-    setSortBy('Newest');
+    setLocalSearchQuery('');
+    setLocalContentType('All');
+    setLocalAspectRatio('All');
+    setLocalDateRange('All time');
+    setLocalSortBy('Newest');
   };
 
   const handleClearLocalImages = useCallback(() => {
@@ -622,7 +699,49 @@ export const Gallery = () => {
         timestamp: new Date(),
       };
 
-      galleryActions.addCorrectedImage(enhancedImage);
+      // Convert to unified ContentItem format
+      const contentItem: ContentItem = {
+        // Base metadata
+        id: enhancedImage.id,
+        filename: enhancedImage.filename || `correction_${enhancedImage.id}.jpg`,
+        originalName: enhancedImage.filename || `correction_${enhancedImage.id}.jpg`,
+        mimeType: 'image/jpeg',
+        size: enhancedImage.metadata?.correctedSize?.width * enhancedImage.metadata?.correctedSize?.height || 0,
+        tags: [],
+        timestamp: enhancedImage.timestamp,
+        userId: undefined,
+        sessionId: undefined,
+
+        // Type and display
+        contentType: 'corrected-image',
+        displayUrl: enhancedImage.correctedUrl,
+        thumbnailUrl: enhancedImage.thumbnailUrl,
+        blobUrl: enhancedImage.blobUrl,
+        localPath: enhancedImage.localFilePath,
+        localMetadataPath: enhancedImage.localMetadataPath,
+
+        // Content data for corrected image
+        content: {
+          type: 'corrected-image',
+          originalUrl: enhancedImage.originalUrl,
+          correctedUrl: enhancedImage.correctedUrl,
+          corrections: params,
+          correctionMetadata: enhancedImage.metadata,
+          parentGenerationId: enhancedImage.parentGenerationId,
+          azureMetadata: enhancedImage.azureMetadata
+        },
+
+        // Storage
+        storageMode: enhancedImage.storageMode || 'local',
+        persistenceMethod: enhancedImage.persistenceMethod || 'local',
+        folderToken: enhancedImage.folderToken,
+        relativePath: enhancedImage.relativePath,
+
+        // Status
+        status: 'ready'
+      };
+
+      galleryActions.addContentItem(contentItem);
 
       console.warn('🖼️ Gemini: Added corrected image to gallery store', {
         id: enhancedImage.id,
@@ -676,8 +795,8 @@ export const Gallery = () => {
           {/* @ts-ignore */}
           <sp-textfield
             placeholder="Search by prompt..."
-            value={searchQuery}
-            onInput={(e: any) => setSearchQuery(e.target.value)}
+            value={localSearchQuery}
+            onInput={(e: any) => setLocalSearchQuery(e.target.value)}
           >
           {/* @ts-ignore */}
           </sp-textfield>
@@ -688,8 +807,8 @@ export const Gallery = () => {
           <label className="filter-label">Content Type</label>
           {/* @ts-ignore */}
           <sp-picker
-            value={contentType}
-            onChange={(e: any) => setContentType(e.target.value)}
+            value={localContentType}
+            onChange={(e: any) => setLocalContentType(e.target.value)}
           >
             {/* @ts-ignore */}
             <sp-menu slot="options">
@@ -699,6 +818,8 @@ export const Gallery = () => {
               <sp-menu-item value="Art">Art</sp-menu-item>
               {/* @ts-ignore */}
               <sp-menu-item value="Photo">Photo</sp-menu-item>
+              {/* @ts-ignore */}
+              <sp-menu-item value="Videos">Videos</sp-menu-item>
               {/* @ts-ignore */}
               <sp-menu-item value="Corrected">Corrected</sp-menu-item>
             {/* @ts-ignore */}
@@ -712,8 +833,8 @@ export const Gallery = () => {
           <label className="filter-label">Aspect Ratio</label>
           {/* @ts-ignore */}
           <sp-picker
-            value={aspectRatio}
-            onChange={(e: any) => setAspectRatio(e.target.value)}
+            value={localAspectRatio}
+            onChange={(e: any) => setLocalAspectRatio(e.target.value)}
           >
             {/* @ts-ignore */}
             <sp-menu slot="options">
@@ -736,8 +857,8 @@ export const Gallery = () => {
           <label className="filter-label">Date Range</label>
           {/* @ts-ignore */}
           <sp-picker
-            value={dateRange}
-            onChange={(e: any) => setDateRange(e.target.value)}
+            value={localDateRange}
+            onChange={(e: any) => setLocalDateRange(e.target.value)}
           >
             {/* @ts-ignore */}
             <sp-menu slot="options">
@@ -778,8 +899,8 @@ export const Gallery = () => {
             <span className="sort-label">Sort by:</span>
             {/* @ts-ignore */}
             <sp-picker
-              value={sortBy}
-              onChange={(e: any) => setSortBy(e.target.value)}
+              value={localSortBy}
+              onChange={(e: any) => setLocalSortBy(e.target.value)}
               size="s"
             >
               {/* @ts-ignore */}
@@ -955,7 +1076,7 @@ export const Gallery = () => {
                     <span className="item-duration">{image.duration}s</span>
                   )}
                 </div>
-                {image.source === 'generated' && !image.isVideo && (
+                {image.source === 'generated' && image.contentType === 'generated-image' && (
                   <div className="item-actions">
                     {/* @ts-ignore */}
                     <sp-button

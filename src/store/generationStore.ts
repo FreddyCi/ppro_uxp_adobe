@@ -34,6 +34,8 @@ import type {
   FireflyRequest
 } from '../types/firefly'
 import { v4 as uuidv4 } from 'uuid'
+import { useGalleryStore } from './galleryStore'
+import { convertGenerationResultToContentItem } from '../types/content'
 
 // Store interface matching task requirements
 export interface GenerationStore {
@@ -196,6 +198,15 @@ export const useGenerationStore = create<GenerationStore>()(
               selectedImage: result // Auto-select the new generation
             }
           })
+
+          // Also add to unified gallery store
+          try {
+            const contentItem = convertGenerationResultToContentItem(result)
+            useGalleryStore.getState().actions.addContentItem(contentItem)
+            console.warn('Added generation result to unified gallery store:', result.id)
+          } catch (error) {
+            console.error('Failed to add generation result to gallery store:', error)
+          }
         },
 
         /**
@@ -239,6 +250,14 @@ export const useGenerationStore = create<GenerationStore>()(
               selectedImage: newSelected
             }
           })
+
+          // Also remove from unified gallery store
+          try {
+            useGalleryStore.getState().actions.removeContentItem(id)
+            console.warn('Removed generation result from unified gallery store:', id)
+          } catch (error) {
+            console.error('Failed to remove generation result from gallery store:', error)
+          }
         },
 
         /**
@@ -316,6 +335,20 @@ export const useGenerationStore = create<GenerationStore>()(
               totalGenerations: 0
             }
           })
+
+          // Also clear generation items from unified gallery store
+          try {
+            const galleryState = useGalleryStore.getState()
+            const generationItems = galleryState.contentItems.filter(item => 
+              item.contentType === 'generated-image' || item.contentType === 'video'
+            )
+            generationItems.forEach(item => {
+              galleryState.actions.removeContentItem(item.id)
+            })
+            console.warn('Cleared generation items from unified gallery store')
+          } catch (error) {
+            console.error('Failed to clear generation items from gallery store:', error)
+          }
         },
 
         /**

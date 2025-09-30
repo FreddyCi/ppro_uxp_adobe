@@ -1,5 +1,6 @@
 import type { GenerationMetadata } from '../../types/firefly'
 import { isLocalMode } from '../storageMode'
+import { extractThumbnailFromBlob } from '../../utils/videoThumbnails'
 
 const LOCAL_MODE = isLocalMode()
 
@@ -159,6 +160,7 @@ export interface LocalSaveResult {
   baseFolder?: string
   folderToken?: string | null
   displayPath?: string
+  thumbnailUrl?: string
 }
 
 class LocalBoltStorage {
@@ -200,6 +202,19 @@ class LocalBoltStorage {
       throw new Error(`[BoltStorage] Failed to write binary file: ${filePath}`)
     }
 
+    // Generate thumbnail for video content
+    let thumbnailUrl: string | undefined
+    if (options.metadata.contentType === 'video') {
+      try {
+        console.log('[BoltStorage] Generating video thumbnail...')
+        thumbnailUrl = await extractThumbnailFromBlob(options.blob, 1.0, 320, 180)
+        console.log('[BoltStorage] Video thumbnail generated successfully')
+      } catch (error) {
+        console.warn('[BoltStorage] Failed to generate video thumbnail:', error)
+        // Continue without thumbnail - not a fatal error
+      }
+    }
+
     const metadataPayload = {
       ...options.metadata,
       storageMode: 'local' as const,
@@ -208,7 +223,8 @@ class LocalBoltStorage {
       savedAt: new Date().toISOString(),
       filename: safeFilename,
       filePath,
-      relativePath: joinPath('/', dateFolder, safeFilename)
+      relativePath: joinPath('/', dateFolder, safeFilename),
+      thumbnailUrl // Include generated thumbnail
     }
 
     const metadataPath = joinPath(separator, directory, `${safeFilename}.json`)
@@ -221,7 +237,8 @@ class LocalBoltStorage {
       provider: 'bolt',
       baseFolder: directory,
       folderToken: null,
-      displayPath: filePath
+      displayPath: filePath,
+      thumbnailUrl // Return thumbnail URL in result
     }
   }
 
@@ -376,6 +393,19 @@ class UxpLocalStorage {
     }
     await file.write(arrayBuffer)
 
+    // Generate thumbnail for video content
+    let thumbnailUrl: string | undefined
+    if (options.metadata.contentType === 'video') {
+      try {
+        console.log('[UXPLocalStorage] Generating video thumbnail...')
+        thumbnailUrl = await extractThumbnailFromBlob(options.blob, 1.0, 320, 180)
+        console.log('[UXPLocalStorage] Video thumbnail generated successfully')
+      } catch (error) {
+        console.warn('[UXPLocalStorage] Failed to generate video thumbnail:', error)
+        // Continue without thumbnail - not a fatal error
+      }
+    }
+
     const metadataPayload = {
       ...options.metadata,
       storageMode: 'local' as const,
@@ -385,7 +415,8 @@ class UxpLocalStorage {
       filename: safeFilename,
       filePath: this.buildDisplayPath(separator, folderPath, dateFolder, safeFilename),
       folderToken: this.getStoredToken(),
-      relativePath: joinPath('/', dateFolder, safeFilename)
+      relativePath: joinPath('/', dateFolder, safeFilename),
+      thumbnailUrl // Include generated thumbnail
     }
 
     const metadataFile = await targetFolder.createFile?.(`${safeFilename}.json`, { overwrite: true })
@@ -411,7 +442,8 @@ class UxpLocalStorage {
       provider: 'uxp',
       baseFolder: folderPath ?? undefined,
       folderToken: this.getStoredToken(),
-      displayPath: filePath
+      displayPath: filePath,
+      thumbnailUrl // Return thumbnail URL in result
     }
   }
 
