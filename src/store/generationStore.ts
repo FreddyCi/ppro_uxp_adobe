@@ -68,6 +68,7 @@ export interface GenerationStore {
     removeGeneration: (id: string) => void
     clearHistory: () => void
     cleanupInvalidBlobUrls: () => void
+    recreateBlobUrls: () => void
     duplicateGeneration: (id: string) => void
     setError: (error: string | null) => void
     clearError: () => void
