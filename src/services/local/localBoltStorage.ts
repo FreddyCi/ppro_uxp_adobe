@@ -317,6 +317,11 @@ class LocalBoltStorage {
   }
 
   private getFallbackBasePath(): string {
+    // Check for custom local content path from environment variable
+    if (typeof process !== 'undefined' && process?.env?.LOCAL_CONTENT_PATH) {
+      return process.env.LOCAL_CONTENT_PATH
+    }
+
     const isWindows = typeof navigator !== 'undefined' && navigator.userAgent?.includes('Windows')
 
     if (isWindows && typeof process !== 'undefined' && process?.env?.USERPROFILE) {
