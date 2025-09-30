@@ -292,6 +292,34 @@ class UxpLocalStorage {
     this.localFileSystem = this.resolveLocalFileSystem()
   }
 
+  async promptForFolderSelection(): Promise<{
+    folderToken: string | null
+    folderPath: string | null
+  } | null> {
+    if (!this.isAvailable()) {
+      return null
+    }
+
+    // Reset cached promise to force folder selection dialog
+    this.folderPromise = null
+
+    const folder = await this.promptForFolder()
+    if (!folder) {
+      return null
+    }
+
+    const folderPath = this.getFolderPath(folder)
+    const token = this.getStoredToken()
+
+    // Cache the selected folder for subsequent read/write operations
+    this.folderPromise = Promise.resolve(folder)
+
+    return {
+      folderToken: token,
+      folderPath,
+    }
+  }
+
   private resolveLocalFileSystem(): any | null {
     try {
       const requireFn = (globalThis as unknown as { require?: (moduleId: string) => any }).require
@@ -605,4 +633,31 @@ export async function saveGenerationLocally(
   }
 
   return null
+}
+
+export function getConfiguredLocalFolderInfo(): {
+  folderToken: string | null
+  folderPath: string | null
+} {
+  return {
+    folderToken: readPersistentValue(FOLDER_TOKEN_STORAGE_KEY),
+    folderPath: readPersistentValue(FOLDER_PATH_STORAGE_KEY),
+  }
+}
+
+export async function promptForLocalFolderSelection(): Promise<{
+  folderToken: string | null
+  folderPath: string | null
+} | null> {
+  if (!localUxpStorage?.isAvailable()) {
+    console.warn('[LocalStorage] UXP filesystem unavailable; cannot prompt for folder selection')
+    return null
+  }
+
+  try {
+    return await localUxpStorage.promptForFolderSelection()
+  } catch (error) {
+    console.warn('[LocalStorage] Failed to prompt for local folder selection:', error)
+    return null
+  }
 }

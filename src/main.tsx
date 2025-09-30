@@ -6,7 +6,7 @@ import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
 import { FireflyService } from "./services/firefly";
 import { useGenerationStore } from "./store/generationStore";
-import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery } from "./components";
+import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery, LocalIngestPanel } from "./components";
 import "./layout.scss";
 import { v4 as uuidv4 } from 'uuid';
 import { saveGenerationLocally } from './services/local/localBoltStorage';
@@ -18,7 +18,7 @@ const AppContent = () => {
   const [imsToken, setImsToken] = useState<string | null>(null);
   const [imsStatus, setImsStatus] = useState<string>('Not authenticated');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [activeTab, setActiveTab] = useState<'generate' | 'gallery'>('generate');
+  const [activeTab, setActiveTab] = useState<'generate' | 'gallery' | 'ingest'>('generate');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true); // Default to dark mode for UXP
   
   // Image generation form state
@@ -627,6 +627,12 @@ const AppContent = () => {
           >
             Gallery
           </div>
+          <div 
+            className={`uxp-tab ${activeTab === 'ingest' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ingest')}
+          >
+            Premiere Ingest
+          </div>
         </div>
 
         {/* Primary Content */}
@@ -652,7 +658,7 @@ const AppContent = () => {
                           size="s"
                           onClick={() => setGenerationMode('firefly')}
                         >
-                          Firefly Image Gen
+                          Firefly
                         {/* @ts-ignore */}
                         </sp-button>
                         {/* @ts-ignore */}
@@ -661,7 +667,7 @@ const AppContent = () => {
                           size="s"
                           onClick={() => setGenerationMode('ltx')}
                         >
-                          LTX Video
+                          LTX
                         {/* @ts-ignore */}
                         </sp-button>
                           {/* @ts-ignore */}
@@ -670,7 +676,7 @@ const AppContent = () => {
                             size="s"
                             onClick={() => setGenerationMode('luma')}
                           >
-                            Luma Dream Machine
+                            Luma
                           {/* @ts-ignore */}
                           </sp-button>
                       {/* @ts-ignore */}
@@ -1201,6 +1207,10 @@ const AppContent = () => {
                   </div>
                 </article>
               )
+            )}
+
+            {activeTab === 'ingest' && (
+              <LocalIngestPanel />
             )}
           </div>
         </section>

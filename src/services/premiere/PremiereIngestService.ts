@@ -127,6 +127,17 @@ export class PremiereIngestService {
       placementState.tickTime,
       markerTemplates
     )
+    const renameAction = this.buildRenameAction(projectItem as ProjectItem, options.displayName)
+    const metadataActionResult = await this.buildProjectMetadataAction(
+      ppro,
+      projectItem as ProjectItem,
+      options.metadata,
+      options.displayName ?? projectItem.name
+    )
+
+    if (metadataActionResult.warning) {
+      warnings.push(metadataActionResult.warning)
+    }
 
     const sequenceEditor = ppro.SequenceEditor.getEditor(sequence)
     const mode: TimelineInsertMode = options.placement?.mode ?? 'insert'
@@ -150,7 +161,13 @@ export class PremiereIngestService {
             )
 
         compoundAction.addAction(action)
+        if (renameAction) {
+          compoundAction.addAction(renameAction)
+        }
         markerActions.forEach(markerAction => compoundAction.addAction(markerAction))
+        if (metadataActionResult.action) {
+          compoundAction.addAction(metadataActionResult.action)
+        }
       }, options.undoLabel ?? 'Bolt: Insert Local Clip')
     })
 
@@ -310,6 +327,135 @@ export class PremiereIngestService {
     }
 
     return actions
+  }
+
+  private buildRenameAction(projectItem: ProjectItem, displayName?: string | null): Action | null {
+    if (!displayName || displayName.trim().length === 0) {
+      return null
+    }
+
+    if (projectItem.name === displayName) {
+      return null
+    }
+
+    try {
+      if (typeof projectItem.createSetNameAction === 'function') {
+        return projectItem.createSetNameAction(displayName)
+      }
+    } catch (error) {
+      console.warn('[PremiereIngestService] Unable to create rename action:', error)
+    }
+
+    return null
+  }
+
+  private async buildProjectMetadataAction(
+    ppro: premierepro,
+    projectItem: ProjectItem,
+    metadata: Record<string, unknown> | undefined,
+    displayName?: string
+  ): Promise<{ action: Action | null; warning?: string }> {
+    if (!metadata || Object.keys(metadata).length === 0) {
+      return { action: null }
+    }
+
+    const comment = this.buildProjectMetadataComment(metadata, displayName)
+    if (!comment) {
+      return { action: null }
+    }
+
+    try {
+      const xml = this.buildProjectMetadataXml(comment)
+      const action = await ppro.Metadata.createSetProjectMetadataAction(projectItem, xml, [
+        'Column.Intrinsic.Comment',
+        'Column.PropertyText.Comment',
+      ])
+
+      return { action }
+    } catch (error) {
+      const warning = '[PremiereIngestService] Unable to prepare project metadata action: ' + (error instanceof Error ? error.message : String(error))
+      console.warn(warning)
+      return { action: null, warning }
+    }
+  }
+
+  private buildProjectMetadataComment(metadata: Record<string, unknown>, displayName?: string): string | null {
+    const parts: string[] = []
+
+    if (displayName) {
+      parts.push(`Clip: ${displayName}`)
+    }
+
+    const promptRaw = metadata['prompt']
+    const prompt = typeof promptRaw === 'string' ? promptRaw : undefined
+    if (prompt) {
+      parts.push(`Prompt: ${prompt}`)
+    }
+
+    const modelRaw = metadata['model']
+    const model = typeof modelRaw === 'string' ? modelRaw : undefined
+    if (model) {
+      parts.push(`Model: ${model}`)
+    }
+
+    const seedValue = metadata['seed']
+    if (typeof seedValue === 'number') {
+      parts.push(`Seed: ${seedValue}`)
+    } else if (Array.isArray(seedValue) && seedValue.length > 0 && typeof seedValue[0] === 'number') {
+      parts.push(`Seeds: ${(seedValue as number[]).join(', ')}`)
+    }
+
+    const duration = metadata['duration']
+    if (typeof duration === 'number' && Number.isFinite(duration)) {
+      parts.push(`Duration: ${duration.toFixed(2)}s`)
+    }
+
+    const timestamp = metadata['timestamp']
+    if (typeof timestamp === 'number') {
+      parts.push(`Generated: ${new Date(timestamp).toLocaleString()}`)
+    }
+
+    const persistenceRaw = metadata['persistenceMethod']
+    const persistence = typeof persistenceRaw === 'string' ? persistenceRaw : undefined
+    if (persistence) {
+      parts.push(`Persistence: ${persistence}`)
+    }
+
+    const storageModeRaw = metadata['storageMode']
+    const storageMode = typeof storageModeRaw === 'string' ? storageModeRaw : undefined
+    if (storageMode) {
+      parts.push(`Storage: ${storageMode}`)
+    }
+
+    if (parts.length === 0) {
+      return this.stringifyMetadata(metadata) ?? null
+    }
+
+    return parts.join('\n')
+  }
+
+  private buildProjectMetadataXml(comment: string): string {
+    const escapedComment = this.escapeXml(comment)
+
+    return `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>` +
+      `<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core">` +
+      `<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+      `<rdf:Description rdf:about="" xmlns:premierePrivateProjectMetaData="http://ns.adobe.com/premierePrivateProjectMetaData/1.0/">` +
+      `<premierePrivateProjectMetaData:Column.Intrinsic.Comment>${escapedComment}</premierePrivateProjectMetaData:Column.Intrinsic.Comment>` +
+      `<premierePrivateProjectMetaData:Column.PropertyText.Comment>${escapedComment}</premierePrivateProjectMetaData:Column.PropertyText.Comment>` +
+      `</rdf:Description>` +
+      `</rdf:RDF>` +
+      `</x:xmpmeta>` +
+      `<?xpacket end="w"?>`
+  }
+
+  private escapeXml(input: string): string {
+    return input
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
   }
 
   private async importIntoProject(project: Project, clipPath: string): Promise<boolean> {
