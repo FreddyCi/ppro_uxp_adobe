@@ -14,7 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { saveGenerationLocally } from './services/local/localBoltStorage';
 import { LtxVideoService } from './services/ltx';
 import { LumaVideoService } from './services/luma';
-import type { LumaGenerationRequest, LumaVideoModel } from './types/luma';
+import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, ReframeVideoModel } from './types/luma';
 
 const AppContent = () => {
   const [imsToken, setImsToken] = useState<string | null>(null);
@@ -52,8 +52,10 @@ const AppContent = () => {
   const [lumaLoop, setLumaLoop] = useState<boolean>(false);
   const [lumaFirstFrameItem, setLumaFirstFrameItem] = useState<ContentItem | null>(null);
   const [lumaLastFrameItem, setLumaLastFrameItem] = useState<ContentItem | null>(null);
+  const [lumaMode, setLumaMode] = useState<'keyframes' | 'reframe'>('keyframes');
+  const [lumaReframeVideoItem, setLumaReframeVideoItem] = useState<ContentItem | null>(null);
   const [showGalleryPicker, setShowGalleryPicker] = useState<boolean>(false);
-  const [galleryPickerTarget, setGalleryPickerTarget] = useState<'first' | 'last' | null>(null);
+  const [galleryPickerTarget, setGalleryPickerTarget] = useState<'first' | 'last' | 'both' | 'reframe-video' | null>(null);
   const [isGeneratingLuma, setIsGeneratingLuma] = useState<boolean>(false);
   
   // Get toast helpers
@@ -371,8 +373,8 @@ const AppContent = () => {
         duration: lumaDuration,
         resolution: lumaResolution,
         loop: lumaLoop,
-        first_frame: lumaFirstFrameItem ? lumaFirstFrameItem.filename : undefined,
-        last_frame: lumaLastFrameItem ? lumaLastFrameItem.filename : undefined,
+        frame0: lumaFirstFrameItem ? lumaFirstFrameItem.filename : undefined,
+        frame1: lumaLastFrameItem ? lumaLastFrameItem.filename : undefined,
       });
 
       const lumaService = new LumaVideoService({
@@ -387,21 +389,29 @@ const AppContent = () => {
         duration: lumaDuration,
         resolution: lumaResolution,
         loop: lumaLoop,
-        ...(lumaFirstFrameItem && {
-          first_frame: {
-            type: 'image' as const,
-            url: lumaFirstFrameItem.displayUrl
-          }
-        }),
-        ...(lumaLastFrameItem && {
-          last_frame: {
-            type: 'image' as const,
-            url: lumaLastFrameItem.displayUrl
-          }
-        }),
+        keyframes: {
+          ...(lumaFirstFrameItem && {
+            frame0: {
+              type: 'image' as const,
+              url: lumaFirstFrameItem.blobUrl || lumaFirstFrameItem.displayUrl
+            }
+          }),
+          ...(lumaLastFrameItem && {
+            frame1: {
+              type: 'image' as const,
+              url: lumaLastFrameItem.blobUrl || lumaLastFrameItem.displayUrl
+            }
+          }),
+        },
       };
 
-      console.log('🚀 Sending Luma Dream Machine request:', lumaRequest);
+      console.log('🚀 Sending Luma Dream Machine request:', {
+        ...lumaRequest,
+        frame0_url: lumaFirstFrameItem?.blobUrl || lumaFirstFrameItem?.displayUrl,
+        frame1_url: lumaLastFrameItem?.blobUrl || lumaLastFrameItem?.displayUrl,
+        frame0_type: lumaFirstFrameItem?.blobUrl ? 'blobUrl' : 'displayUrl',
+        frame1_type: lumaLastFrameItem?.blobUrl ? 'blobUrl' : 'displayUrl',
+      });
 
       const result = await lumaService.generateVideo(lumaRequest);
       console.log('✅ Luma Dream Machine generation completed:', result);
@@ -546,6 +556,193 @@ const AppContent = () => {
     } catch (error: any) {
       console.error('❌ Luma Dream Machine video generation failed:', error);
       showError('Video Generation Failed', error?.message || 'An unexpected error occurred.');
+    } finally {
+      setIsGeneratingLuma(false);
+    }
+  };
+
+  const handleReframeLumaVideo = async () => {
+    if (!lumaPrompt.trim()) {
+      showWarning('Missing Prompt', 'Please enter a description for the reframed video.');
+      return;
+    }
+
+    if (!lumaReframeVideoItem) {
+      showWarning('Missing Video', 'Please select a video to reframe.');
+      return;
+    }
+
+    setIsGeneratingLuma(true);
+
+    try {
+      showInfo('Reframming Video', `Changing aspect ratio of "${lumaReframeVideoItem.filename}" to ${lumaAspectRatio}`);
+
+      console.log('🎞️ Starting Luma Dream Machine video reframing...');
+      console.log('📝 Luma reframe parameters:', {
+        prompt: lumaPrompt,
+        model: lumaModel,
+        aspect_ratio: lumaAspectRatio,
+        sourceVideo: lumaReframeVideoItem.filename,
+        sourceUrl: lumaReframeVideoItem.displayUrl,
+      });
+
+      const lumaService = new LumaVideoService({
+        pollIntervalMs: 5_000,
+        maxPollAttempts: 120,
+      });
+
+      const reframeRequest: LumaReframeVideoRequest = {
+        generation_type: 'reframe_video',
+        media: {
+          url: lumaReframeVideoItem.displayUrl || lumaReframeVideoItem.blobUrl || ''
+        },
+        model: lumaModel as ReframeVideoModel,
+        prompt: lumaPrompt,
+        aspect_ratio: lumaAspectRatio,
+      };
+
+      console.log('🚀 Sending Luma Dream Machine reframe request:', reframeRequest);
+
+      const result = await lumaService.reframeVideo(reframeRequest);
+      console.log('✅ Luma Dream Machine reframe completed:', result);
+
+      const computedSeed = Math.floor(Math.random() * 999999);
+
+      console.log('💾 Saving Luma Dream Machine reframed video to local storage...');
+      const localSaveResult = await saveGenerationLocally({
+        blob: result.blob,
+        metadata: {
+          prompt: result.metadata.prompt || lumaPrompt,
+          seed: computedSeed,
+          jobId: result.metadata.id,
+          model: result.metadata.model || lumaModel,
+          version: 'Dream Machine 1.1.0',
+          timestamp: Date.now(),
+          filename: result.filename,
+          contentType: result.contentType,
+          fileSize: result.blob.size,
+          duration: undefined, // Will be determined from original video
+          fps: undefined,
+          resolution: undefined, // Will be determined from aspect ratio
+          persistenceMethod: 'local' as const,
+          storageMode: 'local' as const,
+        },
+        filename: result.filename,
+      });
+
+      if (!localSaveResult) {
+        console.warn('⚠️ Local save failed, falling back to data URL');
+
+        const arrayBuffer = await result.blob.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        const base64 = btoa(String.fromCharCode(...bytes));
+        const videoUrl = `data:${result.contentType};base64,${base64}`;
+
+        const videoGenerationResult = {
+          id: uuidv4(),
+          imageUrl: '',
+          videoUrl,
+          videoBlob: result.blob,
+          seed: computedSeed,
+          contentType: 'video' as const,
+          duration: undefined,
+          fps: undefined,
+          resolution: undefined,
+          metadata: {
+            prompt: result.metadata.prompt || lumaPrompt,
+            seed: computedSeed,
+            jobId: result.metadata.id,
+            model: result.metadata.model || lumaModel,
+            version: 'Dream Machine 1.1.0',
+            timestamp: Date.now(),
+            filename: result.filename,
+            contentType: result.contentType,
+            fileSize: result.blob.size,
+            duration: undefined,
+            fps: undefined,
+            resolution: undefined,
+            persistenceMethod: 'dataUrl' as const,
+            storageMode: 'local' as const,
+          },
+          timestamp: Date.now(),
+          status: 'generated' as const,
+          blobUrl: videoUrl,
+          localPath: result.filename,
+        };
+
+        addGeneration(videoGenerationResult);
+
+        showSuccess(
+          'Video Reframed',
+          `Reframed "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB) - saved in memory only`
+        );
+
+        console.log('🎥 Reframed video added to gallery store (data URL fallback):', {
+          id: videoGenerationResult.id,
+          videoUrl,
+          filename: result.filename,
+          size: result.blob.size,
+        });
+      } else {
+        console.log('✅ Luma Dream Machine reframed video saved locally:', localSaveResult);
+
+        const videoGenerationResult = {
+          id: uuidv4(),
+          imageUrl: '',
+          videoUrl: '',
+          videoBlob: result.blob,
+          seed: computedSeed,
+          contentType: 'video' as const,
+          duration: undefined,
+          fps: undefined,
+          resolution: undefined,
+          metadata: {
+            prompt: result.metadata.prompt || lumaPrompt,
+            seed: computedSeed,
+            jobId: result.metadata.id,
+            model: result.metadata.model || lumaModel,
+            version: 'Dream Machine 1.1.0',
+            timestamp: Date.now(),
+            filename: result.filename,
+            contentType: result.contentType,
+            fileSize: result.blob.size,
+            duration: undefined,
+            fps: undefined,
+            resolution: undefined,
+            persistenceMethod: 'local' as const,
+            storageMode: 'local' as const,
+            folderToken: localSaveResult.folderToken ?? null,
+            localFilePath: localSaveResult.filePath,
+            localMetadataPath: localSaveResult.metadataPath,
+            savedAt: new Date().toISOString(),
+            localPersistenceProvider: localSaveResult.provider,
+            localBaseFolder: localSaveResult.baseFolder,
+            relativePath: localSaveResult.relativePath,
+          },
+          timestamp: Date.now(),
+          status: 'generated' as const,
+          localPath: localSaveResult.filePath,
+        };
+
+        addGeneration(videoGenerationResult);
+
+        showSuccess(
+          'Video Reframed',
+          `Reframed "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB) - saved to ${localSaveResult.displayPath || localSaveResult.filePath}`
+        );
+
+        console.log('🎥 Reframed video added to gallery store (local file):', {
+          id: videoGenerationResult.id,
+          localPath: localSaveResult.filePath,
+          relativePath: localSaveResult.relativePath,
+          filename: result.filename,
+          size: result.blob.size,
+        });
+      }
+
+    } catch (error: any) {
+      console.error('❌ Luma Dream Machine video reframing failed:', error);
+      showError('Video Reframing Failed', error?.message || 'An unexpected error occurred.');
     } finally {
       setIsGeneratingLuma(false);
     }
@@ -1035,6 +1232,42 @@ const AppContent = () => {
                           </div>
                         </div>
 
+                        {/* Mode Selection */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Mode</sp-label>
+                          <div className="text-detail mb-sm">Choose generation mode</div>
+                          {/* @ts-ignore */}
+                          <sp-radio-group 
+                            value={lumaMode}
+                            className="content-type-group"
+                            onChange={(e: any) => {
+                              setLumaMode(e.target.value);
+                              // Clear selections when switching modes
+                              if (e.target.value === 'reframe') {
+                                setLumaFirstFrameItem(null);
+                                setLumaLastFrameItem(null);
+                              } else {
+                                setLumaReframeVideoItem(null);
+                              }
+                            }}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-radio value="keyframes">
+                              <span className="radio-label">First Frame Last Frame</span>
+                              <div className="radio-description text-detail">Generate video with start/end images</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                            {/* @ts-ignore */}
+                            <sp-radio value="reframe">
+                              <span className="radio-label">Reframe</span>
+                              <div className="radio-description text-detail">Change aspect ratio of existing video</div>
+                            {/* @ts-ignore */}
+                            </sp-radio>
+                          {/* @ts-ignore */}
+                          </sp-radio-group>
+                        </div>
+
                         {/* Model */}
                         <div className="form-group">
                           {/* @ts-ignore */}
@@ -1061,206 +1294,347 @@ const AppContent = () => {
                           </sp-picker>
                         </div>
 
-                        {/* Aspect Ratio */}
-                        <div className="form-group">
-                          {/* @ts-ignore */}
-                          <sp-label className="form-label">Aspect Ratio</sp-label>
-                          <div className="text-detail mb-sm">Select the composition</div>
-                          {/* @ts-ignore */}
-                          <sp-radio-group 
-                            value={lumaAspectRatio}
-                            className="content-type-group"
-                            onChange={(e: any) => setLumaAspectRatio(e.target.value)}
-                          >
-                            {/* @ts-ignore */}
-                            <sp-radio value="16:9">
-                              <span className="radio-label">16:9</span>
-                              <div className="radio-description text-detail">Widescreen</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                            {/* @ts-ignore */}
-                            <sp-radio value="9:16">
-                              <span className="radio-label">9:16</span>
-                              <div className="radio-description text-detail">Vertical</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                            {/* @ts-ignore */}
-                            <sp-radio value="1:1">
-                              <span className="radio-label">1:1</span>
-                              <div className="radio-description text-detail">Square</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                            {/* @ts-ignore */}
-                            <sp-radio value="21:9">
-                              <span className="radio-label">21:9</span>
-                              <div className="radio-description text-detail">Ultra-wide</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                          {/* @ts-ignore */}
-                          </sp-radio-group>
-                        </div>
+                        {lumaMode === 'keyframes' ? (
+                          <>
+                            {/* Aspect Ratio */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-label className="form-label">Aspect Ratio</sp-label>
+                              <div className="text-detail mb-sm">Select the composition</div>
+                              {/* @ts-ignore */}
+                              <sp-radio-group 
+                                value={lumaAspectRatio}
+                                className="content-type-group"
+                                onChange={(e: any) => setLumaAspectRatio(e.target.value)}
+                              >
+                                {/* @ts-ignore */}
+                                <sp-radio value="16:9">
+                                  <span className="radio-label">16:9</span>
+                                  <div className="radio-description text-detail">Widescreen</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="9:16">
+                                  <span className="radio-label">9:16</span>
+                                  <div className="radio-description text-detail">Vertical</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="1:1">
+                                  <span className="radio-label">1:1</span>
+                                  <div className="radio-description text-detail">Square</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="21:9">
+                                  <span className="radio-label">21:9</span>
+                                  <div className="radio-description text-detail">Ultra-wide</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                              {/* @ts-ignore */}
+                              </sp-radio-group>
+                            </div>
 
-                        {/* Duration */}
-                        <div className="form-group">
-                          {/* @ts-ignore */}
-                          <sp-label className="form-label">Duration</sp-label>
-                          <div className="text-detail mb-sm">Clip length</div>
-                          {/* @ts-ignore */}
-                          <sp-radio-group 
-                            value={lumaDuration}
-                            className="fps-group"
-                            onChange={(e: any) => setLumaDuration(e.target.value)}
-                          >
-                            {/* @ts-ignore */}
-                            <sp-radio value="5s">
-                              <span className="radio-label">5 seconds</span>
-                              <div className="radio-description text-detail">Quick loop</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                            {/* @ts-ignore */}
-                            <sp-radio value="9s">
-                              <span className="radio-label">9 seconds</span>
-                              <div className="radio-description text-detail">Longer motion</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                          {/* @ts-ignore */}
-                          </sp-radio-group>
-                        </div>
+                            {/* Duration */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-label className="form-label">Duration</sp-label>
+                              <div className="text-detail mb-sm">Clip length</div>
+                              {/* @ts-ignore */}
+                              <sp-radio-group 
+                                value={lumaDuration}
+                                className="fps-group"
+                                onChange={(e: any) => setLumaDuration(e.target.value)}
+                              >
+                                {/* @ts-ignore */}
+                                <sp-radio value="5s">
+                                  <span className="radio-label">5 seconds</span>
+                                  <div className="radio-description text-detail">Quick loop</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="9s">
+                                  <span className="radio-label">9 seconds</span>
+                                  <div className="radio-description text-detail">Longer motion</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                              {/* @ts-ignore */}
+                              </sp-radio-group>
+                            </div>
 
-                        {/* Resolution */}
-                        <div className="form-group">
-                          {/* @ts-ignore */}
-                          <sp-label className="form-label">Resolution</sp-label>
-                          <div className="text-detail mb-sm">Output size</div>
-                          {/* @ts-ignore */}
-                          <sp-radio-group 
-                            value={lumaResolution}
-                            className="resolution-group"
-                            onChange={(e: any) => setLumaResolution(e.target.value)}
-                          >
-                            {/* @ts-ignore */}
-                            <sp-radio value="540p">
-                              <span className="radio-label">540p</span>
-                              <div className="radio-description text-detail">Lightweight preview</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                            {/* @ts-ignore */}
-                            <sp-radio value="720p">
-                              <span className="radio-label">720p</span>
-                              <div className="radio-description text-detail">HD</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                            {/* @ts-ignore */}
-                            <sp-radio value="1080p">
-                              <span className="radio-label">1080p</span>
-                              <div className="radio-description text-detail">Full HD</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                            {/* @ts-ignore */}
-                            <sp-radio value="4k">
-                              <span className="radio-label">4K</span>
-                              <div className="radio-description text-detail">Ultra HD</div>
-                            {/* @ts-ignore */}
-                            </sp-radio>
-                          {/* @ts-ignore */}
-                          </sp-radio-group>
-                        </div>
+                            {/* Resolution */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-label className="form-label">Resolution</sp-label>
+                              <div className="text-detail mb-sm">Output size</div>
+                              {/* @ts-ignore */}
+                              <sp-radio-group 
+                                value={lumaResolution}
+                                className="resolution-group"
+                                onChange={(e: any) => setLumaResolution(e.target.value)}
+                              >
+                                {/* @ts-ignore */}
+                                <sp-radio value="540p">
+                                  <span className="radio-label">540p</span>
+                                  <div className="radio-description text-detail">Lightweight preview</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="720p">
+                                  <span className="radio-label">720p</span>
+                                  <div className="radio-description text-detail">HD</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="1080p">
+                                  <span className="radio-label">1080p</span>
+                                  <div className="radio-description text-detail">Full HD</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="4k">
+                                  <span className="radio-label">4K</span>
+                                  <div className="radio-description text-detail">Ultra HD</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                              {/* @ts-ignore */}
+                              </sp-radio-group>
+                            </div>
 
-                        {/* Loop */}
-                        <div className="form-group">
-                          {/* @ts-ignore */}
-                          <sp-checkbox 
-                            checked={lumaLoop}
-                            onChange={(e: any) => setLumaLoop(Boolean(e.target.checked))}
-                          >
-                            Loop video when playing
-                          {/* @ts-ignore */}
-                          </sp-checkbox>
-                        </div>
-
-                        {/* First Frame Image */}
-                        <div className="form-group">
-                          {/* @ts-ignore */}
-                          <sp-label className="form-label">First Frame Image (Optional)</sp-label>
-                          <div className="text-detail mb-sm">Select an image from your gallery for the video start</div>
-                          {lumaFirstFrameItem ? (
-                            <div className="selected-image-preview">
-                              <img
-                                src={lumaFirstFrameItem.displayUrl}
-                                alt="First frame"
-                                className="preview-image"
-                                style={{ maxWidth: '100px', maxHeight: '100px', objectFit: 'cover' }}
-                              />
-                              <div className="preview-info">
-                                <div className="text-detail">{lumaFirstFrameItem.filename}</div>
+                            {/* Quick Frame Selection */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-label className="form-label">Quick Selection</sp-label>
+                              <div className="text-detail mb-sm">Select both first and last frame images at once</div>
+                              <div className="image-selection-buttons">
                                 {/* @ts-ignore */}
                                 <sp-button
-                                  variant="secondary"
-                                  size="s"
-                                  onClick={() => setLumaFirstFrameItem(null)}
+                                  variant="primary"
+                                  size="m"
+                                  onClick={() => {
+                                    // Open gallery picker for selecting both frames
+                                    setGalleryPickerTarget('both');
+                                    setShowGalleryPicker(true);
+                                  }}
+                                  disabled={lumaFirstFrameItem !== null && lumaLastFrameItem !== null}
                                 >
-                                  Remove
+                                  {lumaFirstFrameItem && lumaLastFrameItem ? 'Frames Selected' : 'Select First & Last Frame'}
                                 {/* @ts-ignore */}
                                 </sp-button>
+                                {(lumaFirstFrameItem || lumaLastFrameItem) && (
+                                  /* @ts-ignore */
+                                  <sp-button
+                                    variant="secondary"
+                                    size="m"
+                                    onClick={() => {
+                                      setLumaFirstFrameItem(null);
+                                      setLumaLastFrameItem(null);
+                                    }}
+                                  >
+                                    Clear All Frames
+                                  {/* @ts-ignore */}
+                                  </sp-button>
+                                )}
                               </div>
                             </div>
-                          ) : (
-                            /* @ts-ignore */
-                            <sp-button
-                              variant="secondary"
-                              size="m"
-                              onClick={() => {
-                                setGalleryPickerTarget('first');
-                                setShowGalleryPicker(true);
-                              }}
-                            >
-                              Choose from Gallery
-                            {/* @ts-ignore */}
-                            </sp-button>
-                          )}
-                        </div>
 
-                        {/* Last Frame Image */}
-                        <div className="form-group">
-                          {/* @ts-ignore */}
-                          <sp-label className="form-label">Last Frame Image (Optional)</sp-label>
-                          <div className="text-detail mb-sm">Select an image from your gallery for the video end</div>
-                          {lumaLastFrameItem ? (
-                            <div className="selected-image-preview">
-                              <img
-                                src={lumaLastFrameItem.displayUrl}
-                                alt="Last frame"
-                                className="preview-image"
-                                style={{ maxWidth: '100px', maxHeight: '100px', objectFit: 'cover' }}
-                              />
-                              <div className="preview-info">
-                                <div className="text-detail">{lumaLastFrameItem.filename}</div>
-                                {/* @ts-ignore */}
-                                <sp-button
-                                  variant="secondary"
-                                  size="s"
-                                  onClick={() => setLumaLastFrameItem(null)}
-                                >
-                                  Remove
-                                {/* @ts-ignore */}
-                                </sp-button>
-                              </div>
+                            {/* First Frame Image */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-label className="form-label">First Frame Image (Optional)</sp-label>
+                              <div className="text-detail mb-sm">Select an image from your gallery for the video start</div>
+                              {lumaFirstFrameItem ? (
+                                <div className="selected-image-preview">
+                                  <img
+                                    src={lumaFirstFrameItem.displayUrl || undefined}
+                                    alt="First frame"
+                                    className="preview-image"
+                                    style={{ maxWidth: '100px', maxHeight: '100px', objectFit: 'cover' }}
+                                  />
+                                  <div className="preview-info">
+                                    <div className="text-detail">{lumaFirstFrameItem.filename}</div>
+                                    {!lumaFirstFrameItem.blobUrl && (
+                                      <div className="text-detail" style={{ color: 'var(--theme-warning)', fontSize: '11px' }}>
+                                        ⚠️ May not be accessible to Luma API
+                                      </div>
+                                    )}
+                                    {/* @ts-ignore */}
+                                    <sp-button
+                                      variant="secondary"
+                                      size="s"
+                                      onClick={() => setLumaFirstFrameItem(null)}
+                                    >
+                                      Remove
+                                    {/* @ts-ignore */}
+                                    </sp-button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="image-selection-buttons">
+                                  {/* @ts-ignore */}
+                                  <sp-button
+                                    variant="secondary"
+                                    size="m"
+                                    onClick={() => {
+                                      setGalleryPickerTarget('first');
+                                      setShowGalleryPicker(true);
+                                    }}
+                                  >
+                                    Choose First Frame from Gallery
+                                  {/* @ts-ignore */}
+                                  </sp-button>
+                                </div>
+                              )}
                             </div>
-                          ) : (
-                            /* @ts-ignore */
-                            <sp-button
-                              variant="secondary"
-                              size="m"
-                              onClick={() => {
-                                setGalleryPickerTarget('last');
-                                setShowGalleryPicker(true);
-                              }}
-                            >
-                              Choose from Gallery
-                            {/* @ts-ignore */}
-                            </sp-button>
-                          )}
-                        </div>
+
+                            {/* Last Frame Image */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-label className="form-label">Last Frame Image (Optional)</sp-label>
+                              <div className="text-detail mb-sm">Select an image from your gallery for the video end</div>
+                              {lumaLastFrameItem ? (
+                                <div className="selected-image-preview">
+                                  <img
+                                    src={lumaLastFrameItem.displayUrl || undefined}
+                                    alt="Last frame"
+                                    className="preview-image"
+                                    style={{ maxWidth: '100px', maxHeight: '100px', objectFit: 'cover' }}
+                                  />
+                                  <div className="preview-info">
+                                    <div className="text-detail">{lumaLastFrameItem.filename}</div>
+                                    {/* @ts-ignore */}
+                                    <sp-button
+                                      variant="secondary"
+                                      size="s"
+                                      onClick={() => setLumaLastFrameItem(null)}
+                                    >
+                                      Remove
+                                    {/* @ts-ignore */}
+                                    </sp-button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="image-selection-buttons">
+                                  {/* @ts-ignore */}
+                                  <sp-button
+                                    variant="secondary"
+                                    size="m"
+                                    onClick={() => {
+                                      setGalleryPickerTarget('last');
+                                      setShowGalleryPicker(true);
+                                    }}
+                                  >
+                                    Choose Last Frame from Gallery
+                                  {/* @ts-ignore */}
+                                  </sp-button>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            {/* Reframe Video Selection */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-label className="form-label">Video to Reframe *</sp-label>
+                              <div className="text-detail mb-sm">Select a video from your gallery to change its aspect ratio</div>
+                              {lumaReframeVideoItem ? (
+                                <div className="selected-video-preview">
+                                  <video
+                                    src={lumaReframeVideoItem.displayUrl || undefined}
+                                    className="preview-video"
+                                    style={{ maxWidth: '200px', maxHeight: '150px', objectFit: 'cover' }}
+                                    controls
+                                  />
+                                  <div className="preview-info">
+                                    <div className="text-detail">{lumaReframeVideoItem.filename}</div>
+                                    {/* @ts-ignore */}
+                                    <sp-button
+                                      variant="secondary"
+                                      size="s"
+                                      onClick={() => setLumaReframeVideoItem(null)}
+                                    >
+                                      Remove
+                                    {/* @ts-ignore */}
+                                    </sp-button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="video-selection-buttons">
+                                  {/* @ts-ignore */}
+                                  <sp-button
+                                    variant="secondary"
+                                    size="m"
+                                    onClick={() => {
+                                      setGalleryPickerTarget('reframe-video');
+                                      setShowGalleryPicker(true);
+                                    }}
+                                  >
+                                    Choose Video from Gallery
+                                  {/* @ts-ignore */}
+                                  </sp-button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Reframe Aspect Ratio */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-label className="form-label">Target Aspect Ratio *</sp-label>
+                              <div className="text-detail mb-sm">Choose the new aspect ratio for the video</div>
+                              {/* @ts-ignore */}
+                              <sp-radio-group 
+                                value={lumaAspectRatio}
+                                className="content-type-group"
+                                onChange={(e: any) => setLumaAspectRatio(e.target.value)}
+                              >
+                                {/* @ts-ignore */}
+                                <sp-radio value="1:1">
+                                  <span className="radio-label">1:1</span>
+                                  <div className="radio-description text-detail">Square</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="16:9">
+                                  <span className="radio-label">16:9</span>
+                                  <div className="radio-description text-detail">Widescreen</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="9:16">
+                                  <span className="radio-label">9:16</span>
+                                  <div className="radio-description text-detail">Vertical</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="4:3">
+                                  <span className="radio-label">4:3</span>
+                                  <div className="radio-description text-detail">Traditional</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="3:4">
+                                  <span className="radio-label">3:4</span>
+                                  <div className="radio-description text-detail">Portrait</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="21:9">
+                                  <span className="radio-label">21:9</span>
+                                  <div className="radio-description text-detail">Ultra-wide</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="9:21">
+                                  <span className="radio-label">9:21</span>
+                                  <div className="radio-description text-detail">Ultra-tall</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                              {/* @ts-ignore */}
+                              </sp-radio-group>
+                            </div>
+                          </>
+                        )}
 
                         {/* Generate Button */}
                         <div className="form-actions">
@@ -1269,10 +1643,14 @@ const AppContent = () => {
                             variant="accent" 
                             size="m"
                             className="generate-button"
-                            onClick={handleGenerateLumaVideo}
-                            disabled={isGeneratingLuma || !lumaPrompt.trim()}
+                            onClick={lumaMode === 'reframe' ? handleReframeLumaVideo : handleGenerateLumaVideo}
+                            disabled={
+                              isGeneratingLuma || 
+                              !lumaPrompt.trim() || 
+                              (lumaMode === 'reframe' && !lumaReframeVideoItem)
+                            }
                           >
-                            {isGeneratingLuma ? 'Generating...' : 'Generate Video'}
+                            {isGeneratingLuma ? 'Generating...' : lumaMode === 'reframe' ? 'Reframe Video' : 'Generate Video'}
                           {/* @ts-ignore */}
                           </sp-button>
                         </div>
@@ -1329,7 +1707,14 @@ const AppContent = () => {
           }} />
           <div className="gallery-picker-dialog">
             <div className="gallery-picker-header">
-              <h3>Select Image from Gallery</h3>
+              <h3>
+                {galleryPickerTarget === 'both' 
+                  ? `Select ${!lumaFirstFrameItem ? 'First' : 'Last'} Frame Image`
+                  : galleryPickerTarget === 'reframe-video'
+                  ? 'Select Video to Reframe'
+                  : 'Select Image from Gallery'
+                }
+              </h3>
               {/* @ts-ignore */}
               <sp-button
                 variant="secondary"
@@ -1345,11 +1730,26 @@ const AppContent = () => {
             </div>
             <div className="gallery-picker-content">
               <GalleryPicker
+                target={galleryPickerTarget}
                 onSelect={(item: ContentItem) => {
                   if (galleryPickerTarget === 'first') {
                     setLumaFirstFrameItem(item);
                   } else if (galleryPickerTarget === 'last') {
                     setLumaLastFrameItem(item);
+                  } else if (galleryPickerTarget === 'reframe-video') {
+                    setLumaReframeVideoItem(item);
+                  } else if (galleryPickerTarget === 'both') {
+                    // For 'both' selection, alternate between first and last
+                    if (!lumaFirstFrameItem) {
+                      setLumaFirstFrameItem(item);
+                      // If last frame is also not set, keep picker open for second selection
+                      if (!lumaLastFrameItem) {
+                        showInfo('First Frame Selected', 'Now select the last frame image');
+                        return; // Keep picker open
+                      }
+                    } else if (!lumaLastFrameItem) {
+                      setLumaLastFrameItem(item);
+                    }
                   }
                   setShowGalleryPicker(false);
                   setGalleryPickerTarget(null);
@@ -1404,7 +1804,8 @@ const AppContent = () => {
 };
 
 // Gallery Picker Component
-const GalleryPicker = ({ onSelect, onCancel }: {
+const GalleryPicker = ({ target, onSelect, onCancel }: {
+  target: 'first' | 'last' | 'both' | 'reframe-video' | null;
   onSelect: (item: ContentItem) => void;
   onCancel: () => void;
 }) => {
@@ -1412,7 +1813,9 @@ const GalleryPicker = ({ onSelect, onCancel }: {
   const galleryImages = useGalleryStore(
     useShallow((state) =>
       state.contentItems.filter(item =>
-        ['generated-image', 'corrected-image', 'uploaded-image'].includes(item.contentType)
+        target === 'reframe-video'
+          ? ['video', 'uploaded-video'].includes(item.contentType)
+          : ['generated-image', 'corrected-image', 'uploaded-image'].includes(item.contentType)
       )
     )
   );
@@ -1421,7 +1824,9 @@ const GalleryPicker = ({ onSelect, onCancel }: {
     <div className="gallery-picker">
       {galleryImages.length === 0 ? (
         <div className="gallery-empty">
-          <div className="text-detail">No images in gallery</div>
+          <div className="text-detail">
+            {target === 'reframe-video' ? 'No videos in gallery' : 'No images in gallery'}
+          </div>
           {/* @ts-ignore */}
           <sp-button variant="secondary" onClick={onCancel}>
             Cancel
@@ -1437,11 +1842,17 @@ const GalleryPicker = ({ onSelect, onCancel }: {
                 className="gallery-item"
                 onClick={() => onSelect(item)}
               >
-                <img
-                  src={item.displayUrl}
-                  alt={item.filename}
-                  className="gallery-thumbnail"
-                />
+                {item.displayUrl ? (
+                  <img
+                    src={item.displayUrl}
+                    alt={item.filename}
+                    className="gallery-thumbnail"
+                  />
+                ) : (
+                  <div className="gallery-thumbnail-placeholder">
+                    <div className="text-detail">No preview</div>
+                  </div>
+                )}
                 <div className="gallery-item-info">
                   <div className="text-detail">{item.filename}</div>
                 </div>

@@ -27,13 +27,23 @@ export type LumaVideoResolution =
 
 export type LumaVideoDuration = '5s' | '9s' | string
 
+export type ReframeVideoModel = 'ray-2' | 'ray-flash-2'
+
 export interface LumaConcept {
   key: string
 }
 
-export interface LumaImageReference {
-  type: 'image'
-  url: string
+export interface LumaKeyframe {
+  type: 'generation' | 'image'
+  url?: string
+  id?: string
+}
+
+export interface LumaKeyframes {
+  frame0?: LumaKeyframe
+  frame1?: LumaKeyframe
+  frame2?: LumaKeyframe
+  frame3?: LumaKeyframe
 }
 
 export interface LumaGenerationRequest {
@@ -41,14 +51,34 @@ export interface LumaGenerationRequest {
   prompt?: string
   aspect_ratio?: LumaAspectRatio
   loop?: boolean
-  first_frame?: LumaImageReference
-  last_frame?: LumaImageReference
-  keyframes?: Record<string, unknown>
+  keyframes?: LumaKeyframes
   callback_url?: string
   model: LumaVideoModel
   resolution?: LumaVideoResolution
   duration?: LumaVideoDuration
   concepts?: LumaConcept[]
+}
+
+export interface LumaReframeVideoRequest {
+  generation_type: 'reframe_video'
+  media: {
+    url: string
+  }
+  first_frame?: {
+    url: string
+  }
+  model: ReframeVideoModel
+  prompt?: string
+  aspect_ratio: LumaAspectRatio
+  grid_position_x?: number
+  grid_position_y?: number
+  x_start?: number
+  x_end?: number
+  y_start?: number
+  y_end?: number
+  resized_width?: number
+  resized_height?: number
+  callback_url?: string
 }
 
 export interface LumaGenerationAssets {
@@ -59,7 +89,7 @@ export interface LumaGenerationAssets {
 
 export interface LumaGenerationResponse {
   id: string
-  generation_type?: 'video' | 'image'
+  generation_type?: 'video' | 'image' | 'reframe_video'
   state: LumaGenerationState
   failure_reason?: string | null
   created_at?: string
@@ -85,12 +115,35 @@ export interface LumaVideoGenerationMetadata {
   totalElapsedMs: number
 }
 
+export interface LumaReframeVideoMetadata {
+  id: string
+  state: LumaGenerationState
+  prompt?: string
+  model?: string
+  aspectRatio?: string
+  createdAt?: string
+  completedAt?: string
+  failureReason?: string | null
+  request?: unknown
+  pollingAttempts: number
+  pollingIntervalMs: number
+  totalElapsedMs: number
+}
+
 export interface LumaVideoGenerationResult {
   blob: Blob
   contentType: string
   filename: string
   generation: LumaGenerationResponse
   metadata: LumaVideoGenerationMetadata
+}
+
+export interface LumaReframeVideoResult {
+  blob: Blob
+  contentType: string
+  filename: string
+  generation: LumaGenerationResponse
+  metadata: LumaReframeVideoMetadata
 }
 
 export interface LumaVideoGenerationOptions {

@@ -1132,6 +1132,17 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
       display: block;
     }
 
+    .gallery-thumbnail-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--theme-bg-layer-2);
+      border: 1px dashed var(--theme-border-subtle);
+      color: var(--theme-highlight);
+    }
+
     .gallery-item-info {
       position: absolute;
       bottom: 0;
@@ -1160,8 +1171,15 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
 }
 
 /* =============================================================================
-   Selected Image Preview
+   Image Selection UI
    ============================================================================= */
+
+.image-selection-buttons {
+  display: flex;
+  gap: $space-200;
+  align-items: center;
+  flex-wrap: wrap;
+}
 
 .selected-image-preview {
   display: flex;

@@ -13,6 +13,9 @@ import type {
   LumaVideoModel,
   LumaVideoGenerationMetadata,
   LumaGenerationState,
+  LumaReframeVideoRequest,
+  LumaReframeVideoResult,
+  LumaReframeVideoMetadata,
 } from '../../types/luma'
 
 export interface LumaVideoServiceConfig {
@@ -144,9 +147,85 @@ export class LumaVideoService {
     }
   }
 
+  /**
+   * Complete Dream Machine flow for reframing a video.
+   */
+  async reframeVideo(
+    request: LumaReframeVideoRequest,
+    options: LumaVideoGenerationOptions = {}
+  ): Promise<LumaReframeVideoResult> {
+    if (!this.validateConfig()) {
+      throw new LumaVideoServiceError('Luma Dream Machine API key is missing', 401)
+    }
+
+    const payload: LumaReframeVideoRequest = {
+      ...request,
+      generation_type: 'reframe_video',
+    }
+
+    if (!payload.model) {
+      throw new LumaVideoServiceError('Luma Dream Machine model is required', 400)
+    }
+
+    if (!payload.media?.url) {
+      throw new LumaVideoServiceError('Luma Dream Machine media URL is required for reframe', 400)
+    }
+
+    if (!payload.aspect_ratio) {
+      throw new LumaVideoServiceError('Luma Dream Machine aspect ratio is required for reframe', 400)
+    }
+
+    const startedAt = Date.now()
+    const creation = await this.createReframeGeneration(payload, options.signal)
+    const waited = await this.waitForCompletion(creation.id, options.signal)
+
+    const videoUrl = waited.generation.assets?.video
+    if (!videoUrl) {
+      throw new LumaVideoServiceError('Luma Dream Machine reframe generation did not include a video asset', 502, waited.generation)
+    }
+
+    const download = await this.downloadVideoAsset(videoUrl, options.signal)
+    const filename = options.filename ?? this.buildReframeFilename(payload.prompt, waited.generation, download.contentType)
+
+    const metadata: LumaReframeVideoMetadata = {
+      id: waited.generation.id,
+      state: waited.generation.state as LumaGenerationState,
+      prompt: payload.prompt ?? this.extractPrompt(waited.generation),
+      model: waited.generation.model ?? payload.model,
+      aspectRatio: payload.aspect_ratio,
+      createdAt: waited.generation.created_at,
+      completedAt: new Date().toISOString(),
+      failureReason: waited.generation.failure_reason ?? null,
+      request: waited.generation.request ?? payload,
+      pollingAttempts: waited.attempts,
+      pollingIntervalMs: this.pollIntervalMs,
+      totalElapsedMs: Date.now() - startedAt,
+    }
+
+    return {
+      blob: download.blob,
+      contentType: download.contentType,
+      filename,
+      generation: waited.generation,
+      metadata,
+    }
+  }
+
   private async createGeneration(payload: LumaGenerationRequest, signal?: AbortSignal): Promise<LumaGenerationResponse> {
     return this.request<LumaGenerationResponse>(
       '/generations/video',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+      signal
+    )
+  }
+
+  private async createReframeGeneration(payload: LumaReframeVideoRequest, signal?: AbortSignal): Promise<LumaGenerationResponse> {
+    return this.request<LumaGenerationResponse>(
+      '/generations/video/reframe',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -421,6 +500,20 @@ export class LumaVideoService {
     const idFragment = generation.id.slice(0, 8)
 
     return `${basePrompt || 'luma-video'}-${idFragment}-${timestamp}.${extension}`
+  }
+
+  private buildReframeFilename(prompt: string | undefined, generation: LumaGenerationResponse, contentType: string): string {
+    const extension = this.deriveExtension(contentType)
+    const basePrompt = (prompt || this.extractPrompt(generation) || 'luma-reframe')
+      .replace(/[^a-z0-9-_]+/gi, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase()
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const idFragment = generation.id.slice(0, 8)
+
+    return `${basePrompt || 'luma-reframe'}-${idFragment}-${timestamp}.${extension}`
   }
 
   private deriveExtension(contentType: string): string {

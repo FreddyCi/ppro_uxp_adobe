@@ -3,7 +3,7 @@ openapi: 3.1.0
 info:
     title: Dream Machine API
     summary: A RESTful API for interacting with the Dream Machine
-    description: Generate videos using Dream Machine.
+    description: Generate videos using Dream Machine. Supports text-to-video, image-to-video, video extension, interpolation, and more with models including Ray 2 Flash, Ray 2, and Ray 1.6.
     termsOfService: https://lumalabs.ai/legal/tos
     contact:
         name: Luma AI, Inc.
@@ -180,26 +180,26 @@ components:
                 - ray-2
                 - ray-flash-2
             default: ray-1-6
-            example: ray-1-6
-            description: The video model used for the generation
+            example: ray-2
+            description: The video model used for the generation (Ray 2 Flash for fastest generation, Ray 2 for balanced quality/speed, Ray 1.6 for high quality)
 
         VideoModelOutputResolution:
-            anyOf:
-                - type: string
-                  enum:
-                      - 540p
-                      - 720p
-                      - 1080p
-                      - 4k
-                - type: string
+            type: string
+            enum:
+                - 540p
+                - 720p
+                - 1080p
+                - 4k
+            description: The resolution of the generation
+            example: 720p
 
         VideoModelOutputDuration:
-            anyOf:
-                - type: string
-                  enum:
-                      - 5s
-                      - 9s
-                - type: string
+            type: string
+            enum:
+                - 5s
+                - 9s
+            description: The duration of the generation
+            example: 5s
 
         Concept:
             type: object
@@ -213,7 +213,7 @@ components:
 
         GenerationRequest:
             type: object
-            description: The generation request object
+            description: The generation request object for creating videos from text, images, or extending existing videos
             properties:
                 generation_type:
                     type: string
@@ -241,7 +241,7 @@ components:
                 callback_url:
                     type: string
                     format: uri
-                    description: The callback URL of the generation, a POST request with Generation object will be sent to the callback URL when the generation is dreaming, completed, or failed
+                    description: The callback URL of the generation, a POST request with Generation object will be sent to the callback URL when the generation is dreaming, completed, or failed. It will get status updates and the video url when completed. Expected to be called multiple times for status updates.
                 model:
                     $ref: '#/components/schemas/VideoModel'
                     description: The model used for the generation
@@ -261,93 +261,118 @@ components:
             examples:
                 - summary: Text to video
                   value:
-                      prompt: 'A serene lake surrounded by mountains at sunset'
+                      prompt: 'an old lady laughing underwater, wearing a scuba diving suit'
+                      model: 'ray-2'
+                - summary: Text to video with options
+                  value:
+                      prompt: 'an old lady laughing underwater, wearing a scuba diving suit'
+                      model: 'ray-2'
+                      resolution: '720p'
+                      duration: '5s'
+                - summary: Text to video with loop and aspect ratio
+                  value:
+                      prompt: 'an old lady laughing underwater, wearing a scuba diving suit'
+                      model: 'ray-2'
                       aspect_ratio: '16:9'
                       loop: true
                 - summary: Image to video
                   value:
-                      prompt: 'A serene lake surrounded by mountains at sunset'
-                      aspect_ratio: '16:9'
-                      loop: false
+                      prompt: 'A tiger walking in snow'
+                      model: 'ray-2'
                       keyframes:
                           frame0:
-                              type: image
-                              url: 'https://example.com/image.jpg'
-                - summary: Image to video end frame
+                              type: 'image'
+                              url: 'https://storage.cdn-luma.com/dream_machine/7e4fe07f-1dfd-4921-bc97-4bcf5adea39a/video_0_thumb.jpg'
+                - summary: Image to video with options
                   value:
-                      prompt: 'A serene lake surrounded by mountains at sunset'
-                      aspect_ratio: '16:9'
-                      loop: false
-                      keyframes:
-                          frame1:
-                              type: image
-                              url: 'https://example.com/image.jpg'
-                - summary: Image to video keyframes
-                  value:
-                      prompt: 'A serene lake surrounded by mountains at sunset'
-                      aspect_ratio: '16:9'
+                      prompt: 'A tiger walking in snow'
+                      model: 'ray-2'
                       keyframes:
                           frame0:
-                              type: image
-                              url: 'https://example.com/image.jpg'
+                              type: 'image'
+                              url: 'https://storage.cdn-luma.com/dream_machine/7e4fe07f-1dfd-4921-bc97-4bcf5adea39a/video_0_thumb.jpg'
+                      loop: false
+                      aspect_ratio: '16:9'
+                - summary: Image to video with end frame
+                  value:
+                      prompt: 'A tiger walking in snow'
+                      model: 'ray-2'
+                      keyframes:
                           frame1:
-                              type: image
-                              url: 'https://example.com/image.jpg'
+                              type: 'image'
+                              url: 'https://storage.cdn-luma.com/dream_machine/7e4fe07f-1dfd-4921-bc97-4bcf5adea39a/video_0_thumb.jpg'
+                      loop: false
+                      aspect_ratio: '16:9'
+                - summary: Image to video with start and end frames
+                  value:
+                      prompt: 'A tiger walking in snow'
+                      model: 'ray-2'
+                      keyframes:
+                          frame0:
+                              type: 'image'
+                              url: 'https://storage.cdn-luma.com/dream_machine/7e4fe07f-1dfd-4921-bc97-4bcf5adea39a/video_0_thumb.jpg'
+                          frame1:
+                              type: 'image'
+                              url: 'https://storage.cdn-luma.com/dream_machine/7e4fe07f-1dfd-4921-bc97-4bcf5adea39a/video_0_thumb.jpg'
+                      loop: false
+                      aspect_ratio: '16:9'
                 - summary: Extend video
                   value:
-                      prompt: 'A serene lake surrounded by mountains at sunset'
-                      aspect_ratio: '16:9'
-                      loop: true
+                      prompt: 'The tiger rolls around'
+                      model: 'ray-2'
                       keyframes:
                           frame0:
-                              type: generation
+                              type: 'generation'
                               id: '123e4567-e89b-12d3-a456-426614174000'
-                - summary: Extend video reverse
+                - summary: Reverse extend video
                   value:
-                      prompt: 'A serene lake surrounded by mountains at sunset'
-                      aspect_ratio: '16:9'
+                      prompt: 'The tiger rolls around'
+                      model: 'ray-2'
                       keyframes:
                           frame1:
-                              type: generation
+                              type: 'generation'
                               id: '123e4567-e89b-12d3-a456-426614174000'
-                - summary: Interpolate image to video
+                - summary: Extend video with end frame
                   value:
-                      prompt: 'A serene lake surrounded by mountains at sunset'
-                      aspect_ratio: '16:9'
+                      prompt: 'The tiger rolls around'
+                      model: 'ray-2'
                       keyframes:
                           frame0:
-                              type: image
-                              url: 'https://example.com/image.jpg'
-                          frame1:
-                              type: generation
+                              type: 'generation'
                               id: '123e4567-e89b-12d3-a456-426614174000'
-                - summary: First and last frame with images
+                          frame1:
+                              type: 'image'
+                              url: 'https://storage.cdn-luma.com/dream_machine/7e4fe07f-1dfd-4921-bc97-4bcf5adea39a/video_0_thumb.jpg'
+                - summary: Reverse extend video with start frame
                   value:
-                      prompt: 'A serene lake surrounded by mountains at sunset'
-                      aspect_ratio: '16:9'
-                      loop: false
-                      first_frame:
-                          type: image
-                          url: 'https://example.com/start-image.jpg'
-                      last_frame:
-                          type: image
-                          url: 'https://example.com/end-image.jpg'
-                - summary: First frame only with image
+                      prompt: 'The tiger rolls around'
+                      model: 'ray-2'
+                      keyframes:
+                          frame0:
+                              type: 'image'
+                              url: 'https://storage.cdn-luma.com/dream_machine/7e4fe07f-1dfd-4921-bc97-4bcf5adea39a/video_0_thumb.jpg'
+                          frame1:
+                              type: 'generation'
+                              id: '123e4567-e89b-12d3-a456-426614174000'
+                - summary: Interpolate between videos
                   value:
-                      prompt: 'A serene lake surrounded by mountains at sunset'
-                      aspect_ratio: '16:9'
-                      loop: false
-                      first_frame:
-                          type: image
-                          url: 'https://example.com/start-image.jpg'
-                - summary: Last frame only with image
+                      prompt: 'The tiger rolls around'
+                      model: 'ray-2'
+                      keyframes:
+                          frame0:
+                              type: 'generation'
+                              id: '123e4567-e89b-12d3-a456-426614174000'
+                          frame1:
+                              type: 'generation'
+                              id: '123e4567-e89b-12d-3a456-426614174001'
+                - summary: Using concepts
                   value:
-                      prompt: 'A serene lake surrounded by mountains at sunset'
-                      aspect_ratio: '16:9'
-                      loop: false
-                      last_frame:
-                          type: image
-                          url: 'https://example.com/end-image.jpg'
+                      prompt: 'a car'
+                      model: 'ray-2'
+                      resolution: '720p'
+                      duration: '5s'
+                      concepts:
+                          - key: 'dolly_zoom'
 
         Media:
             type: object
@@ -576,6 +601,10 @@ components:
                 model:
                     type: string
                     description: The model used for the generation
+                version:
+                    type: string
+                    description: The version of the generation
+                    example: v1.6
                 request:
                     oneOf:
                         - $ref: '#/components/schemas/GenerationRequest'
@@ -594,6 +623,7 @@ components:
                 assets:
                     video: 'https://example.com/video.mp4'
                 model: 'ray-1-6'
+                version: 'v1.6'
                 request:
                     prompt: 'A serene lake surrounded by mountains at sunset'
                     aspect_ratio: '16:9'
@@ -1035,6 +1065,33 @@ paths:
                                 type: array
                                 items:
                                     type: string
+                default:
+                    description: Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+
+    /generations/camera_motion/list:
+        get:
+            summary: Get camera motions
+            description: Get all supported camera motion strings that can be used in prompts
+            operationId: getCameraMotions
+            tags:
+                - Generations
+            responses:
+                '200':
+                    description: Camera motions found
+                    content:
+                        application/json:
+                            schema:
+                                type: array
+                                items:
+                                    type: string
+                            example:
+                                - "camera orbit left"
+                                - "camera pan right"
+                                - "camera zoom in"
                 default:
                     description: Error
                     content:
