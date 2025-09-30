@@ -31,11 +31,18 @@ export interface LumaConcept {
   key: string
 }
 
+export interface LumaImageReference {
+  type: 'image'
+  url: string
+}
+
 export interface LumaGenerationRequest {
   generation_type?: 'video'
   prompt?: string
   aspect_ratio?: LumaAspectRatio
   loop?: boolean
+  first_frame?: LumaImageReference
+  last_frame?: LumaImageReference
   keyframes?: Record<string, unknown>
   callback_url?: string
   model: LumaVideoModel

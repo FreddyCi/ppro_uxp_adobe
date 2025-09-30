@@ -1,4 +1,6 @@
-// @ts-ignore
+import { useGalleryStore } from './store'
+import { useShallow } from 'zustand/react/shallow'
+import { ContentItem } from './types/content'
 import React, { useState, useEffect } from "react";
 
 import { uxp, premierepro } from "./globals";
@@ -48,6 +50,10 @@ const AppContent = () => {
   const [lumaDuration, setLumaDuration] = useState<string>('5s');
   const [lumaResolution, setLumaResolution] = useState<string>('1080p');
   const [lumaLoop, setLumaLoop] = useState<boolean>(false);
+  const [lumaFirstFrameItem, setLumaFirstFrameItem] = useState<ContentItem | null>(null);
+  const [lumaLastFrameItem, setLumaLastFrameItem] = useState<ContentItem | null>(null);
+  const [showGalleryPicker, setShowGalleryPicker] = useState<boolean>(false);
+  const [galleryPickerTarget, setGalleryPickerTarget] = useState<'first' | 'last' | null>(null);
   const [isGeneratingLuma, setIsGeneratingLuma] = useState<boolean>(false);
   
   // Get toast helpers
@@ -365,6 +371,8 @@ const AppContent = () => {
         duration: lumaDuration,
         resolution: lumaResolution,
         loop: lumaLoop,
+        first_frame: lumaFirstFrameItem ? lumaFirstFrameItem.filename : undefined,
+        last_frame: lumaLastFrameItem ? lumaLastFrameItem.filename : undefined,
       });
 
       const lumaService = new LumaVideoService({
@@ -379,6 +387,18 @@ const AppContent = () => {
         duration: lumaDuration,
         resolution: lumaResolution,
         loop: lumaLoop,
+        ...(lumaFirstFrameItem && {
+          first_frame: {
+            type: 'image' as const,
+            url: lumaFirstFrameItem.displayUrl
+          }
+        }),
+        ...(lumaLastFrameItem && {
+          last_frame: {
+            type: 'image' as const,
+            url: lumaLastFrameItem.displayUrl
+          }
+        }),
       };
 
       console.log('🚀 Sending Luma Dream Machine request:', lumaRequest);
@@ -1158,6 +1178,90 @@ const AppContent = () => {
                           </sp-checkbox>
                         </div>
 
+                        {/* First Frame Image */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">First Frame Image (Optional)</sp-label>
+                          <div className="text-detail mb-sm">Select an image from your gallery for the video start</div>
+                          {lumaFirstFrameItem ? (
+                            <div className="selected-image-preview">
+                              <img
+                                src={lumaFirstFrameItem.displayUrl}
+                                alt="First frame"
+                                className="preview-image"
+                                style={{ maxWidth: '100px', maxHeight: '100px', objectFit: 'cover' }}
+                              />
+                              <div className="preview-info">
+                                <div className="text-detail">{lumaFirstFrameItem.filename}</div>
+                                {/* @ts-ignore */}
+                                <sp-button
+                                  variant="secondary"
+                                  size="s"
+                                  onClick={() => setLumaFirstFrameItem(null)}
+                                >
+                                  Remove
+                                {/* @ts-ignore */}
+                                </sp-button>
+                              </div>
+                            </div>
+                          ) : (
+                            /* @ts-ignore */
+                            <sp-button
+                              variant="secondary"
+                              size="m"
+                              onClick={() => {
+                                setGalleryPickerTarget('first');
+                                setShowGalleryPicker(true);
+                              }}
+                            >
+                              Choose from Gallery
+                            {/* @ts-ignore */}
+                            </sp-button>
+                          )}
+                        </div>
+
+                        {/* Last Frame Image */}
+                        <div className="form-group">
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Last Frame Image (Optional)</sp-label>
+                          <div className="text-detail mb-sm">Select an image from your gallery for the video end</div>
+                          {lumaLastFrameItem ? (
+                            <div className="selected-image-preview">
+                              <img
+                                src={lumaLastFrameItem.displayUrl}
+                                alt="Last frame"
+                                className="preview-image"
+                                style={{ maxWidth: '100px', maxHeight: '100px', objectFit: 'cover' }}
+                              />
+                              <div className="preview-info">
+                                <div className="text-detail">{lumaLastFrameItem.filename}</div>
+                                {/* @ts-ignore */}
+                                <sp-button
+                                  variant="secondary"
+                                  size="s"
+                                  onClick={() => setLumaLastFrameItem(null)}
+                                >
+                                  Remove
+                                {/* @ts-ignore */}
+                                </sp-button>
+                              </div>
+                            </div>
+                          ) : (
+                            /* @ts-ignore */
+                            <sp-button
+                              variant="secondary"
+                              size="m"
+                              onClick={() => {
+                                setGalleryPickerTarget('last');
+                                setShowGalleryPicker(true);
+                              }}
+                            >
+                              Choose from Gallery
+                            {/* @ts-ignore */}
+                            </sp-button>
+                          )}
+                        </div>
+
                         {/* Generate Button */}
                         <div className="form-actions">
                           {/* @ts-ignore */}
@@ -1216,6 +1320,50 @@ const AppContent = () => {
         </section>
       </main>
 
+      {/* Gallery Picker Modal */}
+      {showGalleryPicker && (
+        <div className="gallery-picker-modal">
+          <div className="gallery-picker-overlay" onClick={() => {
+            setShowGalleryPicker(false);
+            setGalleryPickerTarget(null);
+          }} />
+          <div className="gallery-picker-dialog">
+            <div className="gallery-picker-header">
+              <h3>Select Image from Gallery</h3>
+              {/* @ts-ignore */}
+              <sp-button
+                variant="secondary"
+                size="s"
+                onClick={() => {
+                  setShowGalleryPicker(false);
+                  setGalleryPickerTarget(null);
+                }}
+              >
+                ✕
+              {/* @ts-ignore */}
+              </sp-button>
+            </div>
+            <div className="gallery-picker-content">
+              <GalleryPicker
+                onSelect={(item: ContentItem) => {
+                  if (galleryPickerTarget === 'first') {
+                    setLumaFirstFrameItem(item);
+                  } else if (galleryPickerTarget === 'last') {
+                    setLumaLastFrameItem(item);
+                  }
+                  setShowGalleryPicker(false);
+                  setGalleryPickerTarget(null);
+                }}
+                onCancel={() => {
+                  setShowGalleryPicker(false);
+                  setGalleryPickerTarget(null);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       <footer className="uxp-footer">
         <div className="text-detail">UXP Panel v1.0.0</div>
@@ -1251,6 +1399,64 @@ const AppContent = () => {
           )}
         </div>
       </footer>
+    </div>
+  );
+};
+
+// Gallery Picker Component
+const GalleryPicker = ({ onSelect, onCancel }: {
+  onSelect: (item: ContentItem) => void;
+  onCancel: () => void;
+}) => {
+  // Use useShallow to prevent infinite re-renders by doing shallow comparison of the result
+  const galleryImages = useGalleryStore(
+    useShallow((state) =>
+      state.contentItems.filter(item =>
+        ['generated-image', 'corrected-image', 'uploaded-image'].includes(item.contentType)
+      )
+    )
+  );
+
+  return (
+    <div className="gallery-picker">
+      {galleryImages.length === 0 ? (
+        <div className="gallery-empty">
+          <div className="text-detail">No images in gallery</div>
+          {/* @ts-ignore */}
+          <sp-button variant="secondary" onClick={onCancel}>
+            Cancel
+          {/* @ts-ignore */}
+          </sp-button>
+        </div>
+      ) : (
+        <>
+          <div className="gallery-grid">
+            {galleryImages.slice(0, 20).map((item: ContentItem) => (
+              <div
+                key={item.id}
+                className="gallery-item"
+                onClick={() => onSelect(item)}
+              >
+                <img
+                  src={item.displayUrl}
+                  alt={item.filename}
+                  className="gallery-thumbnail"
+                />
+                <div className="gallery-item-info">
+                  <div className="text-detail">{item.filename}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="gallery-actions">
+            {/* @ts-ignore */}
+            <sp-button variant="secondary" onClick={onCancel}>
+              Cancel
+            {/* @ts-ignore */}
+            </sp-button>
+          </div>
+        </>
+      )}
     </div>
   );
 };
