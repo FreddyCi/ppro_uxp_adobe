@@ -342,6 +342,38 @@ export const Gallery = () => {
   const galleryActions = useGalleryStore(state => state.actions)
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers()
 
+  // Log initial gallery state
+  useEffect(() => {
+    console.log('[Gallery] Component mounted - current contentItems:', {
+      count: contentItems.length,
+      items: contentItems.map(item => ({
+        id: item.id,
+        filename: item.filename,
+        contentType: item.contentType,
+        source: 'gallery_store',
+        timestamp: item.timestamp,
+        localPath: item.localPath,
+        relativePath: item.relativePath
+      }))
+    });
+  }, []); // Empty dependency array - only run on mount
+
+  // Log when contentItems change
+  useEffect(() => {
+    if (contentItems.length > 0) {
+      console.log('[Gallery] Content items updated:', {
+        count: contentItems.length,
+        items: contentItems.map(item => ({
+          id: item.id,
+          filename: item.filename,
+          contentType: item.contentType,
+          source: 'gallery_store_update',
+          timestamp: item.timestamp
+        }))
+      });
+    }
+  }, [contentItems]);
+
   // Compute filtered and sorted items using useMemo
   const sortedItems = useMemo(() => {
     const allItems = getAllItems({ contentItems, typeFilter })

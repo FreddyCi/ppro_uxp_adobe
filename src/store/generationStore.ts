@@ -336,6 +336,17 @@ export const useGenerationStore = create<GenerationStore>()(
             }
           })
 
+          // Also clear persisted data from localStorage
+          try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+              const storageKey = 'generation-storage' // This matches the name in persist()
+              window.localStorage.removeItem(storageKey)
+              console.log('[Generation] Cleared persisted generation data from localStorage')
+            }
+          } catch (error) {
+            console.warn('[Generation] Failed to clear persisted data:', error)
+          }
+
           // Also clear generation items from unified gallery store
           try {
             const galleryState = useGalleryStore.getState()

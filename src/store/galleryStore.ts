@@ -200,7 +200,20 @@ export interface GalleryStore {
   }
 }// UXP-compatible storage implementation with localStorage
 const createUXPStorage = () => {
-  return createJSONStorage(() => localStorage)
+  return createJSONStorage(() => {
+    console.log('[Gallery] createUXPStorage called - checking localStorage availability');
+    if (typeof window !== 'undefined' && window.localStorage) {
+      console.log('[Gallery] localStorage is available');
+      return localStorage;
+    } else {
+      console.warn('[Gallery] localStorage not available, using in-memory storage');
+      return {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {}
+      };
+    }
+  });
 }
 
 // Initial state
@@ -362,6 +375,15 @@ export const useGalleryStore = create<GalleryStore>()(
       actions: {
         // Unified content management
         addContentItem(item: ContentItem): void {
+          console.log(`[Gallery] Adding new content item:`, {
+            id: item.id,
+            filename: item.filename,
+            contentType: item.contentType,
+            source: 'newly_generated',
+            timestamp: item.timestamp,
+            localPath: item.localPath,
+            relativePath: item.relativePath
+          });
           set(state => {
             const newContentItems = [item, ...state.contentItems]
             return {
@@ -566,10 +588,15 @@ export const useGalleryStore = create<GalleryStore>()(
                 const isUploadedVideo = rawMetadata?.model === 'uploaded-video' || rawMetadata?.contentType === 'uploaded-video' || item.id?.startsWith('uploaded-video-')
                 const isVideoExtension = item.filename ? VIDEO_EXTENSION_REGEX.test(item.filename) : false
 
+                const isFireflyGeneration = Boolean(
+                  rawMetadata?.model && rawMetadata.model.toLowerCase().includes('firefly')
+                )
+
                 console.log(`🔍 Content type detection for ${item.filename}:`, {
                   filename: item.filename,
                   rawMetadataContentType: rawMetadata?.contentType,
                   model: rawMetadata?.model,
+                  isFireflyGeneration,
                   hasLtx: item.filename?.includes('ltx-'),
                   hasLuma: item.filename?.includes('luma-'),
                   hasGemini: item.filename?.includes('gemini-corrected'),
@@ -587,10 +614,10 @@ export const useGalleryStore = create<GalleryStore>()(
                   contentType = 'video'
                 } else if (rawMetadata?.contentType === 'video' || rawMetadata?.contentType === 'video/mp4') {
                   contentType = 'video'
+                } else if (isFireflyGeneration || rawMetadata?.contentType === 'generated-image') {
+                  contentType = 'generated-image'
                 } else if (item.filename?.includes('gemini-corrected')) {
                   contentType = 'corrected-image'
-                } else if (rawMetadata?.contentType === 'generated-image') {
-                  contentType = 'generated-image'
                 }
 
                 console.log(`📋 Final content type for ${item.filename}: ${contentType}`)
@@ -645,6 +672,14 @@ export const useGalleryStore = create<GalleryStore>()(
                     status: 'ready'
                   } as ContentItem
                 } else if (contentType === 'generated-image') {
+                  const prompt = rawMetadata?.prompt || rawMetadata?.operationsApplied?.join(' ') || 'Generated image'
+                  const size = rawMetadata?.size || rawMetadata?.originalSize
+                  const width = size?.width ?? 1024
+                  const height = size?.height ?? 1024
+                  const seed = rawMetadata?.seed ?? 0
+                  const model = rawMetadata?.model || 'unknown'
+                  const version = rawMetadata?.version || 'v1'
+
                   return {
                     // Base metadata
                     id: item.id,
@@ -669,23 +704,23 @@ export const useGalleryStore = create<GalleryStore>()(
                     content: {
                       type: 'generated-image',
                       imageUrl: '',
-                      seed: rawMetadata?.seed || 0,
+                      seed,
                       generationMetadata: {
-                        prompt: rawMetadata?.operationsApplied?.join(' ') || 'Generated image',
+                        prompt,
                         contentType: 'image/jpeg',
-                        resolution: { width: 1024, height: 1024 },
+                        resolution: { width, height },
                         fileSize: 0,
                         timestamp: item.timestamp.getTime(), // Convert Date to number
                         userId: '',
                         sessionId: '',
                         filename: item.filename,
-                        seed: rawMetadata?.seed || 0,
+                        seed,
                         jobId: item.id,
-                        model: rawMetadata?.model || 'unknown',
-                        version: rawMetadata?.version || 'v1'
+                        model,
+                        version
                       },
-                      prompt: rawMetadata?.operationsApplied?.join(' ') || 'Generated image',
-                      size: { width: 1024, height: 1024 }
+                      prompt,
+                      size: { width, height }
                     },
 
                     // Storage
@@ -730,8 +765,16 @@ export const useGalleryStore = create<GalleryStore>()(
                         try {
                           const folder = await fs.getEntryForPersistentToken(folderToken)
                           const file = await folder.getEntry(relativePath)
-                          const arrayBuffer = await file.read()
-                          const blob = new Blob([arrayBuffer])
+                          const binaryFormat = storage.formats?.binary
+                          const readOptions = binaryFormat ? { format: binaryFormat } : undefined
+                          const fileData = await file.read(readOptions)
+                          const blobSource =
+                            fileData instanceof ArrayBuffer
+                              ? fileData
+                              : ArrayBuffer.isView(fileData)
+                                ? fileData.buffer
+                                : fileData
+                          const blob = new Blob([blobSource])
                           dataUrl = await blobToDataUrl(blob)
                           console.log('✅ Converted local file to base64 data URL:', dataUrl.substring(0, 50) + '...')
                         } catch (fileError) {
@@ -826,6 +869,24 @@ export const useGalleryStore = create<GalleryStore>()(
               console.warn(`📊 Sync summary: ${newContentItems.length} new, ${updatedContentItems.length} updated`)
 
               if (newContentItems.length > 0 || updatedContentItems.length > 0) {
+                console.log(`[Gallery] Adding items from local file sync:`, {
+                  newItems: newContentItems.map(item => ({
+                    id: item.id,
+                    filename: item.filename,
+                    contentType: item.contentType,
+                    source: 'local_file_sync',
+                    localPath: item.localPath,
+                    relativePath: item.relativePath
+                  })),
+                  updatedItems: updatedContentItems.map(item => ({
+                    id: item.id,
+                    filename: item.filename,
+                    contentType: item.contentType,
+                    source: 'local_file_sync_update',
+                    localPath: item.localPath,
+                    relativePath: item.relativePath
+                  }))
+                });
                 set((state: GalleryStore) => {
                   // Start with existing items
                   let updatedContentItemsArray = [...state.contentItems]
@@ -882,6 +943,17 @@ export const useGalleryStore = create<GalleryStore>()(
             totalItems: 0,
             currentPage: 1,
           })
+          
+          // Also clear persisted data from localStorage
+          try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+              const storageKey = 'gallery-storage' // This matches the name in persist()
+              window.localStorage.removeItem(storageKey)
+              console.log('[Gallery] Cleared persisted gallery data from localStorage')
+            }
+          } catch (error) {
+            console.warn('[Gallery] Failed to clear persisted data:', error)
+          }
         },
 
         setLoading(loading: boolean): void {
@@ -909,8 +981,26 @@ export const useGalleryStore = create<GalleryStore>()(
       }),
 
       // Handle rehydration
-      onRehydrateStorage: () => state => {
+      onRehydrateStorage: () => (state, error) => {
+        console.log('[Gallery] onRehydrateStorage called:', {
+          hasState: !!state,
+          hasError: !!error,
+          error: error instanceof Error ? error.message : String(error)
+        });
+
         if (state) {
+          console.log(`[Gallery] Rehydrating from localStorage:`, {
+            totalItems: state.contentItems.length,
+            items: state.contentItems.map(item => ({
+              id: item.id,
+              filename: item.filename,
+              contentType: item.contentType,
+              source: 'localStorage_rehydration',
+              timestamp: item.timestamp,
+              localPath: item.localPath,
+              relativePath: item.relativePath
+            }))
+          });
           // Reset transient state on rehydration
           state.selectedItems = []
           state.isLoading = false
@@ -922,6 +1012,8 @@ export const useGalleryStore = create<GalleryStore>()(
 
           // Recalculate total items
           state.totalItems = getAllItems(state).length
+        } else {
+          console.log('[Gallery] No state to rehydrate from localStorage');
         }
       },
 
@@ -1095,7 +1187,7 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
 
           console.warn(`📋 Raw metadata content:`, JSON.stringify(metadata, null, 2))
 
-          // Check if this is a supported generation type (Gemini-corrected, LTX video, Luma video, or other generations)
+          // Check if this is a supported generation type (Gemini-corrected, LTX video, Luma video, Firefly images, or other generations)
           const isSupportedGeneration = (
             metadata.filename && (
               metadata.filename.includes('gemini-corrected') || // Gemini corrections
@@ -1109,7 +1201,8 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
               (metadata.model && (
                 metadata.model.includes('ray') || // ray-2, ray-flash-2
                 metadata.model === 'LTX Video' || // LTX videos
-                metadata.model.includes('luma') // Any luma model
+                metadata.model.includes('luma') || // Any luma model
+                metadata.model.includes('firefly') // Firefly images (firefly-v3, etc.)
               ))
             )
           )
@@ -1242,6 +1335,18 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
   } catch (error) {
     console.error('❌ Failed to scan local files:', error)
   }
+
+  console.log(`[Gallery] scanAndLoadLocalFiles completed:`, {
+    totalFilesFound: syncedItems.length,
+    items: syncedItems.map(item => ({
+      id: item.id,
+      filename: item.filename,
+      contentType: item.metadata?.model || 'unknown',
+      source: 'local_file_scan',
+      localFilePath: item.localFilePath,
+      timestamp: item.timestamp
+    }))
+  });
 
   return syncedItems
 }
