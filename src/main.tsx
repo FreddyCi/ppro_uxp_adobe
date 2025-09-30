@@ -19,6 +19,66 @@ import { LtxVideoService } from './services/ltx';
 import { LumaVideoService } from './services/luma';
 import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, ReframeVideoModel } from './types/luma';
 import { createAzureSDKBlobService } from './services/blob/AzureSDKBlobService';
+import { createSASTokenService } from './services/blob/SASTokenService';
+import axios from 'axios';
+
+// Helper function to upload blob using SAS token (bypasses Azure SDK issues)
+async function uploadBlobWithSAS(
+  sasService: ReturnType<typeof createSASTokenService>,
+  accountName: string,
+  containerName: string,
+  blobName: string,
+  file: File | Blob | Uint8Array | ArrayBuffer,
+  cacheControl?: string
+): Promise<{ publicUrl: string; signedUrl: string }> {
+  // Request upload SAS token from backend
+  const sasResponse = await sasService.requestUploadToken(containerName, blobName, 15); // 15 minutes
+
+  // Build the PUT URL
+  const baseUrl = `https://${accountName}.blob.core.windows.net/${containerName}/${encodeURIComponent(blobName)}`;
+  const sasToken = sasResponse.sasToken.startsWith('?') ? sasResponse.sasToken.slice(1) : sasResponse.sasToken;
+  const putUrl = `${baseUrl}?${sasToken}`;
+
+  // Prepare file data
+  let arrayBuffer: ArrayBuffer;
+  if (file instanceof ArrayBuffer) {
+    arrayBuffer = file;
+  } else if (file instanceof Uint8Array) {
+    arrayBuffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer;
+  } else if (file instanceof Blob) {
+    arrayBuffer = await file.arrayBuffer();
+  } else if (typeof file === 'object' && 'arrayBuffer' in file && typeof (file as any).arrayBuffer === 'function') {
+    // Handle File objects (which extend Blob but TypeScript doesn't know that)
+    arrayBuffer = await (file as any).arrayBuffer();
+  } else {
+    throw new Error('Unsupported file type for upload');
+  }
+
+  // Infer content type
+  const contentType = file instanceof Blob && file.type ? file.type :
+    blobName.toLowerCase().endsWith('.jpg') || blobName.toLowerCase().endsWith('.jpeg') ? 'image/jpeg' :
+    blobName.toLowerCase().endsWith('.png') ? 'image/png' :
+    'application/octet-stream';
+
+  // Upload with axios
+  const headers: Record<string, string> = {
+    'x-ms-blob-type': 'BlockBlob',
+    'Content-Type': contentType,
+    'x-ms-version': '2021-08-06',
+  };
+  if (cacheControl) headers['x-ms-blob-cache-control'] = cacheControl;
+
+  const response = await axios.put(putUrl, arrayBuffer, { headers });
+
+  if (response.status >= 200 && response.status < 300) {
+    return {
+      publicUrl: baseUrl,
+      signedUrl: sasResponse.sasUrl || putUrl
+    };
+  } else {
+    throw new Error(`Upload failed with status ${response.status}: ${response.statusText}`);
+  }
+}
 import { refreshContentItemUrls } from './utils/blobUrlLifecycle';
 
 const AppContent = () => {
@@ -402,17 +462,17 @@ const AppContent = () => {
         console.log('☁️ Uploading keyframe to Azure for public access (required for Luma):', contentItem.filename);
 
         try {
-          // Create IMS service and Azure blob service
+          // Create IMS service and SAS token service
           const imsService = createIMSService();
-          const azureBlobService = createAzureSDKBlobService();
+          const sasService = createSASTokenService(imsService);
 
           // TEMPORARY: Test Azure credentials before attempting upload
           console.log('🔍 Testing Azure credentials before keyframe upload...');
           try {
-            const testResult = await azureBlobService.testCredentials();
-            console.log('✅ Azure credentials test result:', testResult);
+            const testResult = await sasService.testAuthenticationFlow();
+            console.log('✅ SAS authentication test result:', testResult);
           } catch (testError) {
-            console.error('❌ Azure credentials test failed:', testError);
+            console.error('❌ SAS authentication test failed:', testError);
             // Continue with upload attempt anyway to see the actual error
           }
 
@@ -455,15 +515,23 @@ const AppContent = () => {
           // Generate unique blob name
           const blobName = `luma-keyframe-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${contentItem.filename}`;
 
-          // Upload to Azure
-          const uploadResult = await azureBlobService.uploadBlob(blobToUpload, 'uxp-images', blobName, {
-            originalFilename: contentItem.filename,
-            uploadedFor: 'luma-keyframe',
-            timestamp: Date.now().toString(),
-          });
+          // Upload using SAS token approach
+          const accountName = import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_NAME;
+          if (!accountName) {
+            throw new Error('Azure storage account name not configured');
+          }
 
-          console.log('✅ Keyframe uploaded to Azure:', uploadResult.blobUrl);
-          return uploadResult.blobUrl;
+          const uploadResult = await uploadBlobWithSAS(
+            sasService,
+            accountName,
+            'uxp-images',
+            blobName,
+            blobToUpload,
+            'public, max-age=3600' // 1 hour cache
+          );
+
+          console.log('✅ Keyframe uploaded to Azure:', uploadResult.publicUrl);
+          return uploadResult.publicUrl;
 
         } catch (error) {
           console.error('❌ Failed to upload keyframe to Azure:', error);
