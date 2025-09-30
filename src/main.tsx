@@ -406,6 +406,16 @@ const AppContent = () => {
           const imsService = createIMSService();
           const azureBlobService = createAzureSDKBlobService();
 
+          // TEMPORARY: Test Azure credentials before attempting upload
+          console.log('🔍 Testing Azure credentials before keyframe upload...');
+          try {
+            const testResult = await azureBlobService.testCredentials();
+            console.log('✅ Azure credentials test result:', testResult);
+          } catch (testError) {
+            console.error('❌ Azure credentials test failed:', testError);
+            // Continue with upload attempt anyway to see the actual error
+          }
+
           // Get the blob data - try different sources
           let blobToUpload: Blob | Uint8Array;
           if (contentItem.contentType === 'video' && (contentItem.content as any).videoBlob) {

@@ -777,22 +777,78 @@ export class AzureSDKBlobService {
   // ===== HEALTH AND DIAGNOSTICS =====
 
   /**
-   * Test connection to Azure Storage
+   * Test Azure Storage credentials and connectivity
    */
-  async testConnection(): Promise<boolean> {
-    try {
-      await this.initializeClient()
+  async testCredentials(): Promise<{
+    accountName: string;
+    containerName: string;
+    connectionTest: boolean;
+    containerExists: boolean;
+    permissions: string[];
+    error?: string;
+  }> {
+    const result = {
+      accountName: this.config.storageAccountName,
+      containerName: this.config.defaultContainer,
+      connectionTest: false,
+      containerExists: false,
+      permissions: [] as string[],
+      error: undefined as string | undefined,
+    };
 
-      if (!this.blobServiceClient) {
-        return false
+    try {
+      console.warn('🔍 Testing Azure Storage credentials...');
+
+      // Test 1: Basic client initialization
+      await this.initializeClient();
+      result.connectionTest = true;
+      console.warn('✅ Azure client initialized successfully');
+
+      // Test 2: Check if container exists
+      const containerClient = this.getContainerClient(this.config.defaultContainer);
+      const containerExists = await containerClient.exists();
+      result.containerExists = containerExists;
+      console.warn(`📦 Container '${this.config.defaultContainer}' exists: ${containerExists}`);
+
+      // Test 3: Try to get container properties (tests permissions)
+      if (containerExists) {
+        try {
+          const properties = await containerClient.getProperties();
+          result.permissions.push('read');
+          console.warn('✅ Container read permissions: OK');
+
+          // Try to list blobs (tests list permission)
+          try {
+            const blobs = containerClient.listBlobsFlat();
+            // Just get the first result to test permissions
+            const firstBlob = await blobs.next();
+            if (!firstBlob.done) {
+              result.permissions.push('list');
+              console.warn('✅ Container list permissions: OK');
+            } else {
+              console.warn('ℹ️ Container list permissions: OK (empty container)');
+              result.permissions.push('list');
+            }
+          } catch (listError) {
+            console.warn('⚠️ Container list permissions: Failed (may be expected)');
+          }
+
+        } catch (propsError) {
+          console.warn('❌ Container permissions test failed:', propsError);
+          result.error = `Container access failed: ${propsError instanceof Error ? propsError.message : 'Unknown error'}`;
+        }
+      } else {
+        result.error = `Container '${this.config.defaultContainer}' does not exist`;
       }
 
-      // Try to get service properties to test connection
-      await this.blobServiceClient.getProperties()
-      return true
-    } catch {
-      return false
+    } catch (error) {
+      result.connectionTest = false;
+      result.error = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Azure credentials test failed:', error);
     }
+
+    console.warn('🔍 Azure credentials test result:', result);
+    return result;
   }
 
   /**
@@ -944,13 +1000,16 @@ export class AzureSDKBlobService {
       return 'Network error occurred while uploading to Azure Storage. This may be due to CORS configuration issues, network connectivity problems, or firewall restrictions.'
     }
 
-    // Authorization errors
+    // Authorization errors - check for 401 status or auth-related messages
     if (
       errorMessage.includes('unauthorized') ||
       errorMessage.includes('access denied') ||
-      errorMessage.includes('forbidden')
+      errorMessage.includes('forbidden') ||
+      errorMessage.includes('authenticationfailed') ||
+      errorMessage.includes('invalid authentication') ||
+      errorMessage.includes('401')
     ) {
-      return 'Azure Storage access denied. Please check your storage account credentials and permissions.'
+      return 'Azure Storage authentication failed. Please check your storage account name and key in the environment variables. Make sure VITE_AZURE_STORAGE_ACCOUNT_NAME and VITE_AZURE_STORAGE_ACCOUNT_KEY are set correctly.'
     }
 
     // Quota/storage errors
@@ -968,6 +1027,15 @@ export class AzureSDKBlobService {
       errorMessage.includes('request timeout')
     ) {
       return 'Azure Storage upload timed out. Please try again or check your network connection.'
+    }
+
+    // DOMParser errors (UXP doesn't have DOMParser)
+    if (
+      errorMessage.includes('dom.getelementsbytagname') ||
+      errorMessage.includes('domparser') ||
+      errorMessage.includes('xml parsing')
+    ) {
+      return 'Azure Storage error response parsing failed. This may indicate authentication issues or network problems. Please check your Azure credentials.'
     }
 
     // Fall back to original message if no specific pattern matches
@@ -1513,6 +1581,14 @@ export function createAzureSDKBlobService(
   const accountName = import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_NAME;
   const accountKey = import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_KEY;
   const containerName = import.meta.env.VITE_AZURE_STORAGE_CONTAINER_NAME || 'uxp-images';
+
+  // Debug logging for credentials
+  console.warn('🔍 Azure Credentials Debug:', {
+    accountName: accountName ? `${accountName.substring(0, 4)}...` : 'NOT SET',
+    accountKey: accountKey ? `${accountKey.substring(0, 10)}...` : 'NOT SET',
+    containerName,
+    hasIMS: !!imsService
+  });
 
   if (!accountName || !accountKey) {
     throw new Error('Azure storage credentials not configured. Required for Luma keyframe uploads.');
