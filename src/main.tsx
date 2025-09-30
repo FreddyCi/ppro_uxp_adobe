@@ -751,6 +751,23 @@ const AppContent = () => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
+  // Log available videos when reframe mode is selected
+  useEffect(() => {
+    if (lumaMode === 'reframe') {
+      const { contentItems } = useGalleryStore.getState();
+      const videos = contentItems.filter(item => ['video', 'uploaded-video'].includes(item.contentType));
+      console.log('🎥 Available videos for reframing:', videos.length);
+      videos.forEach((video, index) => {
+        console.log(`  ${index + 1}. ${video.filename} (${video.contentType}) - Display URL: ${video.displayUrl ? 'YES' : 'NO'}`);
+      });
+      
+      // Also log the local storage directory info
+      const folderToken = localStorage.getItem('boltuxp.localFolderToken');
+      const folderPath = localStorage.getItem('boltuxp.localFolderPath');
+      console.log('🎥 Local storage directory for videos:', { folderToken, folderPath });
+    }
+  }, [lumaMode]);
+
   // Clear any lingering auth dialogs and reset state
   const clearAuthState = () => {
     console.log('🔄 Clearing authentication state and dialogs...');
@@ -1566,11 +1583,37 @@ const AppContent = () => {
                                     variant="secondary"
                                     size="m"
                                     onClick={() => {
+                                      console.log('🎥 Opening gallery picker for reframe-video selection');
                                       setGalleryPickerTarget('reframe-video');
                                       setShowGalleryPicker(true);
                                     }}
                                   >
                                     Choose Video from Gallery
+                                  {/* @ts-ignore */}
+                                  </sp-button>
+                                  {/* @ts-ignore */}
+                                  <sp-button
+                                    variant="outline"
+                                    size="s"
+                                    onClick={async () => {
+                                      console.log('🔄 Syncing local files to load videos...');
+                                      const { actions } = useGalleryStore.getState();
+                                      await actions.syncLocalFiles();
+                                      console.log('✅ Local files synced');
+                                      
+                                      // Re-log available videos after sync
+                                      const { contentItems } = useGalleryStore.getState();
+                                      const videos = contentItems.filter(item => ['video', 'uploaded-video'].includes(item.contentType));
+                                      console.log('🎥 Videos after sync:', videos.length);
+                                      videos.forEach((video, index) => {
+                                        console.log(`  ${index + 1}. ${video.filename} (${video.contentType})`);
+                                      });
+                                      
+                                      showInfo('Sync Complete', 'Local files have been synced to gallery');
+                                    }}
+                                    style={{ marginLeft: '8px' }}
+                                  >
+                                    Sync Local Files
                                   {/* @ts-ignore */}
                                   </sp-button>
                                 </div>
@@ -1811,13 +1854,35 @@ const GalleryPicker = ({ target, onSelect, onCancel }: {
 }) => {
   // Use useShallow to prevent infinite re-renders by doing shallow comparison of the result
   const galleryImages = useGalleryStore(
-    useShallow((state) =>
-      state.contentItems.filter(item =>
-        target === 'reframe-video'
-          ? ['video', 'uploaded-video'].includes(item.contentType)
-          : ['generated-image', 'corrected-image', 'uploaded-image'].includes(item.contentType)
-      )
-    )
+    useShallow((state) => {
+      const allItems = state.contentItems;
+      console.log('🎥 GalleryPicker - All content items:', allItems.length);
+      console.log('🎥 GalleryPicker - Target:', target);
+      
+      // Log what directory we're searching
+      const folderToken = localStorage.getItem('boltuxp.localFolderToken');
+      const folderPath = localStorage.getItem('boltuxp.localFolderPath');
+      console.log('🎥 GalleryPicker - Local storage directory:', { folderToken, folderPath });
+      
+      const filtered = allItems.filter(item => {
+        const isVideo = ['video', 'uploaded-video'].includes(item.contentType);
+        const isImage = ['generated-image', 'corrected-image', 'uploaded-image'].includes(item.contentType);
+        
+        if (target === 'reframe-video') {
+          console.log(`🎥 GalleryPicker - Checking item: ${item.filename} (${item.contentType}) - isVideo: ${isVideo}`);
+          return isVideo;
+        } else {
+          return isImage;
+        }
+      });
+      
+      console.log(`🎥 GalleryPicker - Filtered items (${target}):`, filtered.length);
+      filtered.forEach((item, index) => {
+        console.log(`  ${index + 1}. ${item.filename} (${item.contentType}) - URL: ${item.displayUrl ? 'has displayUrl' : 'no displayUrl'}`);
+      });
+      
+      return filtered;
+    })
   );
 
   return (
