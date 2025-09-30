@@ -281,6 +281,13 @@ export const LocalIngestPanel: React.FC = () => {
         return
       }
 
+      // Check for active sequence before attempting ingest
+      const hasSequence = await service.hasActiveSequence()
+      if (!hasSequence) {
+        showError('No timeline open', 'Please open a sequence/timeline in Premiere Pro before ingesting clips.')
+        return
+      }
+
       if (!clip.filePath) {
         showError('Missing file path', 'The selected clip does not have a local file path.')
         return

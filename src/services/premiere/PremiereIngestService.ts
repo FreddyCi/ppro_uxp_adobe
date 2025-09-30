@@ -87,6 +87,25 @@ export class PremiereIngestService {
     return Boolean(this.ppro)
   }
 
+  async hasActiveSequence(): Promise<boolean> {
+    if (!this.ppro) {
+      return false
+    }
+
+    try {
+      const project = await this.ppro.Project.getActiveProject()
+      if (!project) {
+        return false
+      }
+
+      const sequence = await project.getActiveSequence()
+      return Boolean(sequence)
+    } catch (error) {
+      console.warn('[PremiereIngestService] Error checking for active sequence:', error)
+      return false
+    }
+  }
+
   async ingestLocalClip(options: IngestOptions): Promise<IngestResult> {
     const warnings: string[] = []
     const ppro = this.requirePremiere()
