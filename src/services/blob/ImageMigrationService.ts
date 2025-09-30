@@ -6,7 +6,7 @@
 
 import type { GenerationResult } from '../../types/firefly'
 import type { AzureSDKBlobService } from './AzureSDKBlobService'
-import type { IMSService } from '../ims/IMSService'
+import type { IIMSService } from '../ims/IMSService'
 
 export interface ImageMigrationConfig {
   containerName: string
@@ -40,7 +40,7 @@ export class ImageMigrationService {
 
   constructor(
     azureBlobService: AzureSDKBlobService,
-    _imsService: IMSService,
+    _imsService: IIMSService,
     config: Partial<ImageMigrationConfig> = {}
   ) {
     this.azureBlobService = azureBlobService
@@ -405,7 +405,7 @@ export class ImageMigrationService {
  */
 export function createImageMigrationService(
   azureBlobService: AzureSDKBlobService,
-  imsService: IMSService,
+  imsService: IIMSService,
   config: Partial<ImageMigrationConfig> = {}
 ): ImageMigrationService {
   return new ImageMigrationService(azureBlobService, imsService, config)

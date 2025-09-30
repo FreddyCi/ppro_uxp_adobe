@@ -6,7 +6,7 @@
 import { createAzureSDKBlobService } from './blob/AzureSDKBlobService'
 import { createImageMigrationService } from './blob/ImageMigrationService'
 import { createAzureMigrationIntegration } from './AzureMigrationIntegration'
-import type { IMSService } from './ims/IMSService'
+import type { IIMSService } from './ims/IMSService'
 import type { GenerationResult } from '../types/firefly'
 import { isAzureEnabled } from './storageMode'
 
@@ -27,7 +27,7 @@ export interface AzureStorageConfig {
  * Create configured Azure storage services
  */
 export function createAzureStorageServices(
-  imsService: IMSService,
+  imsService: IIMSService,
   config: AzureStorageConfig = {}
 ): AzureStorageServices {
   if (!isAzureEnabled()) {
@@ -176,7 +176,7 @@ export async function validateAzureStorageConfiguration(
     // Validate environment variables
     const requiredEnvVars = [
       'VITE_AZURE_STORAGE_ACCOUNT_NAME',
-      'VITE_AZURE_STORAGE_ACCOUNT_KEY'
+      'VITE_BACKEND_URL'
     ]
 
     for (const envVar of requiredEnvVars) {

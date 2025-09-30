@@ -4,7 +4,7 @@ import "./shims/domparser";
 import { useGalleryStore } from './store'
 import { useShallow } from 'zustand/react/shallow'
 import { ContentItem, isVideo } from './types/content'
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 import { uxp, premierepro } from "./globals";
 import { api } from "./api/api";
@@ -21,7 +21,7 @@ import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, Re
 import { createAzureSDKBlobService } from './services/blob/AzureSDKBlobService';
 import { createSASTokenService } from './services/blob/SASTokenService';
 import axios from 'axios';
-import { useAuthStore, useIsAuthenticated } from './store/authStore';
+import { useAuthStore, useIsAuthenticated, getIMSServiceInstance } from './store/authStore';
 
 // Helper function to upload blob using SAS token (bypasses Azure SDK issues)
 async function uploadBlobWithSAS(
@@ -132,6 +132,23 @@ const AppContent = () => {
 
   // Get authentication status
   const isAuthenticated = useIsAuthenticated();
+
+  const azureBlobServiceRef = useRef<ReturnType<typeof createAzureSDKBlobService> | null>(null);
+  const azureContainerName = import.meta.env.VITE_AZURE_STORAGE_CONTAINER_NAME || 'uxp-images';
+
+  const getAzureBlobService = () => {
+    if (!azureBlobServiceRef.current) {
+      const imsService = getIMSServiceInstance();
+      azureBlobServiceRef.current = createAzureSDKBlobService(imsService);
+    }
+    return azureBlobServiceRef.current;
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      azureBlobServiceRef.current = null;
+    }
+  }, [isAuthenticated]);
 
   const hostName = (uxp.host.name as string).toLowerCase();
 
@@ -421,6 +438,11 @@ const AppContent = () => {
       return;
     }
 
+    if (!isAuthenticated) {
+      showError('Authentication Required', 'Please sign in with your Adobe account before generating Dream Machine videos.');
+      return;
+    }
+
     // Input validation
     if (lumaPrompt.length > 1000) {
       showWarning('Prompt Too Long', 'Please keep your prompt under 1000 characters.');
@@ -515,16 +537,33 @@ const AppContent = () => {
       const prepareKeyframeUrl = async (contentItem: ContentItem | null): Promise<string | undefined> => {
         if (!contentItem) return undefined;
 
+        // Reuse any existing HTTPS URL before attempting upload
+        const existingUrl = [
+          (contentItem as any)?.azureMetadata?.blobUrl,
+          contentItem.displayUrl,
+          contentItem.thumbnailUrl,
+          contentItem.blobUrl
+        ].find((url): url is string => typeof url === 'string' && url.startsWith('https://'));
+
+        if (existingUrl) {
+          return existingUrl;
+        }
+
+        if (!isAuthenticated) {
+          const message = 'Sign in with Adobe IMS to upload keyframe assets to Azure before using Luma.';
+          showError('Authentication Required', message);
+          throw new Error(message);
+        }
+
+        if (!contentItem.folderToken || !contentItem.relativePath) {
+          const message = 'Missing local file reference for the selected keyframe. Please resync your gallery after signing in.';
+          showError('Keyframe Unavailable', message);
+          throw new Error(message);
+        }
+
         try {
           console.log('☁️ Preparing keyframe URL for Azure upload:', contentItem.filename);
 
-          // Check if we have the required folder token and relative path
-          if (!contentItem.folderToken || !contentItem.relativePath) {
-            console.warn('⚠️ Missing folder token or relative path for keyframe upload');
-            return contentItem.displayUrl || contentItem.blobUrl;
-          }
-
-          // Read the image file using correct UXP storage API
           const fs = uxp.storage.localFileSystem;
           const folder = await fs.getEntryForPersistentToken(contentItem.folderToken);
           const file = await folder.getEntry(contentItem.relativePath);
@@ -532,30 +571,33 @@ const AppContent = () => {
           const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
           const fileData = await file.read(readOptions);
 
-          // Create Azure blob service for keyframe uploads
-          const azureBlobService = createAzureSDKBlobService();
+          const azureBlobService = getAzureBlobService();
 
-          // Upload to Azure and get public URL
+          const sanitizedFilename = contentItem.filename || `keyframe-${Date.now()}.jpg`;
+          const blobName = `${new Date().toISOString().split('T')[0]}/${sanitizedFilename}`;
+
           const uploadResult = await azureBlobService.uploadBlob(
             fileData,
-            'uxp-images',
-            contentItem.filename,
+            azureContainerName,
+            blobName,
             {
-              filename: contentItem.filename,
-              contentType: contentItem.mimeType || 'image/jpeg'
+              filename: sanitizedFilename,
+              contentType: contentItem.mimeType || 'image/jpeg',
+              source: 'luma-keyframe'
             }
           );
+
+          if (!uploadResult.blobUrl || !uploadResult.blobUrl.startsWith('https://')) {
+            throw new Error('Azure upload did not return a secure HTTPS URL');
+          }
 
           console.log('✅ Keyframe uploaded to Azure:', uploadResult.blobUrl);
           return uploadResult.blobUrl;
         } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error while uploading keyframe to Azure.';
+          showError('Azure Upload Failed', message);
           console.error('❌ Failed to upload keyframe to Azure:', error);
-          // Fallback: try to use existing displayUrl if available
-          if (contentItem.displayUrl) {
-            console.warn('⚠️ Falling back to displayUrl for keyframe:', contentItem.displayUrl);
-            return contentItem.displayUrl;
-          }
-          throw error;
+          throw error instanceof Error ? error : new Error(message);
         }
       };
 
@@ -758,6 +800,11 @@ const AppContent = () => {
 
     if (!lumaReframeVideoItem) {
       showWarning('Missing Video', 'Please select a video to reframe.');
+      return;
+    }
+
+    if (!isAuthenticated) {
+      showError('Authentication Required', 'Please sign in with your Adobe account before reframing Dream Machine videos.');
       return;
     }
 

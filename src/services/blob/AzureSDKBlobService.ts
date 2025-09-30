@@ -28,7 +28,7 @@ import type {
   StorageAccountStats,
 } from '../../types/azureBlob.js'
 
-import type { IMSService } from '../ims/IMSService.js'
+import type { IIMSService } from '../ims/IMSService.js'
 import { SASTokenService, createSASTokenService } from './SASTokenService.js'
 import { isAzureEnabled } from '../storageMode.js'
 
@@ -39,7 +39,7 @@ export class AzureSDKBlobService {
   private config: AzureSDKBlobConfig
   private blobServiceClient: BlobServiceClient | null = null
   private credential: AnonymousCredential | null = null
-  private imsService?: IMSService
+  private imsService?: IIMSService
   private sasTokenService?: SASTokenService
 
   /**
@@ -98,7 +98,7 @@ export class AzureSDKBlobService {
     timeout: 60000, // 1 minute
   }
 
-  constructor(config: AzureSDKBlobConfig, imsService?: IMSService) {
+  constructor(config: AzureSDKBlobConfig, imsService?: IIMSService) {
     this.config = config
     this.imsService = imsService
 
@@ -139,13 +139,6 @@ export class AzureSDKBlobService {
     })
 
     // Validate storage configuration
-    if (this.config.environment === 'production') {
-      if (!this.config.storageAccountKey && !this.config.connectionString) {
-        throw new Error(
-          'Storage account key or connection string required for production'
-        )
-      }
-    }
   }
 
   /**
@@ -168,14 +161,11 @@ export class AzureSDKBlobService {
     try {
       const accountUrl = this.getAccountUrl()
 
-      // For browser environments with SAS token backend service
       if (this.sasTokenService) {
         console.warn(
           '🔐 Azure Storage: Using SAS token service for secure authentication'
         )
 
-        // Create service client with anonymous credential
-        // SAS tokens will be obtained per-operation from backend service
         this.credential = new AnonymousCredential()
         this.blobServiceClient = new BlobServiceClient(
           accountUrl,
@@ -188,26 +178,8 @@ export class AzureSDKBlobService {
         return
       }
 
-      // Fallback: Check for account key (development only)
-      if (this.config.storageAccountKey) {
-        console.warn(
-          '⚠️ Azure Storage: Using account key for authentication. This should only be used in development!'
-        )
-
-        this.credential = new AnonymousCredential()
-        this.blobServiceClient = new BlobServiceClient(
-          accountUrl,
-          this.credential
-        )
-
-        console.warn(
-          '⚠️ Azure Storage: Client initialized with account key fallback'
-        )
-        return
-      }
-
       throw new Error(
-        'Azure Storage: No authentication method available. SAS token service or account key required.'
+        'Azure Storage: SAS token service unavailable. IMS authentication is required before initializing the client.'
       )
     } catch (error) {
       const azureError = this.createAzureError(
@@ -225,6 +197,35 @@ export class AzureSDKBlobService {
    */
   private getAccountUrl(): string {
     return `https://${this.config.storageAccountName}.blob.core.windows.net`
+  }
+
+  private async ensureAuthenticated(): Promise<void> {
+    if (!this.imsService) {
+      throw this.createAzureError(
+        'IMS_AUTH_REQUIRED',
+        'IMS authentication is required before accessing Azure Storage. Please sign in and try again.',
+        401,
+        false
+      )
+    }
+
+    try {
+      const accessToken = await this.imsService.getAccessToken()
+      const validation = await this.imsService.validateToken(accessToken)
+
+      if (!validation?.valid) {
+        throw new Error('IMS token is invalid or expired')
+      }
+    } catch (error) {
+      throw this.createAzureError(
+        'IMS_AUTH_FAILED',
+        error instanceof Error
+          ? error.message
+          : 'Unable to validate IMS authentication. Please sign in again.',
+        401,
+        false
+      )
+    }
   }
 
   /**
@@ -255,6 +256,15 @@ export class AzureSDKBlobService {
     blobName: string,
     metadata?: Record<string, string>
   ): Promise<AzureBlobUploadResponse> {
+    if (!this.sasTokenService) {
+      throw this.createAzureError(
+        'SAS_SERVICE_UNAVAILABLE',
+        'SAS token service is not configured. Sign in with IMS before uploading to Azure.',
+        401,
+        false
+      )
+    }
+
     // Request SAS token with read+write permissions
     const sasResponse = await this.sasTokenService!.requestUploadToken(
       containerName,
@@ -298,82 +308,6 @@ export class AzureSDKBlobService {
   }
 
   /**
-   * Upload blob using Shared Key + fetch (development fallback)
-   */
-  private async uploadBlobWithFetch(
-    file: File | Blob | Uint8Array | ArrayBuffer | string,
-    containerName: string,
-    blobName: string,
-    metadata?: Record<string, string>
-  ): Promise<AzureBlobUploadResponse> {
-    const accountName = this.config.storageAccountName
-    const accountKey = this.config.storageAccountKey!
-    const contentType = this.getContentType(file as any, blobName)
-
-    const data = await this.toUint8Array(file)
-
-    const date = new Date().toUTCString()
-    const canonicalHeaders = `x-ms-blob-type:BlockBlob\nx-ms-date:${date}\nx-ms-version:2020-04-08`
-    const canonicalResource = `/${accountName}/${containerName}/${blobName}`
-    const stringToSign = `PUT\n\n\n${data.length}\n\n${contentType}\n\n\n\n\n\n\n${canonicalHeaders}\n${canonicalResource}`
-    const signature = await this.createSharedKeySignature(stringToSign, accountKey)
-
-    const uploadUrl = `https://${accountName}.blob.core.windows.net/${containerName}/${blobName}`
-    const headers: Record<string, string> = {
-      'Authorization': `SharedKey ${accountName}:${signature}`,
-      'Content-Type': contentType,
-      'x-ms-blob-type': 'BlockBlob',
-      'x-ms-date': date,
-      'x-ms-version': '2020-04-08',
-    }
-    if (metadata) {
-      for (const [k, v] of Object.entries(metadata)) headers[`x-ms-meta-${k}`] = v
-    }
-
-    const resp = await fetch(uploadUrl, { method: 'PUT', headers: new Headers(headers), body: data })
-    if (!resp.ok) {
-      throw new Error(`Azure upload failed: ${resp.status} ${resp.statusText} - ${await resp.text()}`)
-    }
-
-    // NOTE: this URL is only public if your container access is 'blob'
-    const publicUrl = uploadUrl
-
-    return {
-      success: true,
-      blobUrl: publicUrl, // if container is private, switch to SAS approach above
-      etag: resp.headers.get('etag') || '',
-      lastModified: resp.headers.get('last-modified') ? new Date(resp.headers.get('last-modified')!) : new Date(),
-      contentMD5: '',
-      requestId: resp.headers.get('x-ms-request-id') || '',
-      version: '2020-04-08',
-      date: new Date(),
-    }
-  }
-
-  /**
-   * Create Shared Key signature for Azure Storage authentication
-   */
-  private async createSharedKeySignature(stringToSign: string, accountKey: string): Promise<string> {
-    // Decode base64 account key
-    const keyBytes = Uint8Array.from(atob(accountKey), c => c.charCodeAt(0))
-
-    // Use Web Crypto API for HMAC-SHA256
-    const encoder = new TextEncoder()
-    const data = encoder.encode(stringToSign)
-    const key = await crypto.subtle.importKey(
-      'raw',
-      keyBytes,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    )
-    const signature = await crypto.subtle.sign('HMAC', key, data)
-
-    // Convert to base64
-    return btoa(String.fromCharCode(...new Uint8Array(signature)))
-  }
-
-  /**
    * Upload blob to Azure Storage using SAS token authentication
    */
   async uploadBlob(
@@ -383,37 +317,66 @@ export class AzureSDKBlobService {
     metadata?: Record<string, string>
   ): Promise<AzureBlobUploadResponse> {
     return this.withRetry(async () => {
+      await this.ensureAuthenticated()
       await this.initializeClient()
 
-      // Prefer SAS + fetch (browser/UXP safe, returns public URL)
-      if (this.sasTokenService) {
-        console.warn('🔐 Azure Upload: Using SAS + fetch')
-        return this.uploadBlobWithSASFetch(file, containerName, blobName, metadata)
+      if (!this.sasTokenService) {
+        throw this.createAzureError(
+          'SAS_SERVICE_UNAVAILABLE',
+          'SAS token service is not available. Sign in with IMS before uploading to Azure.',
+          401,
+          false
+        )
       }
 
-      // UXP fallback: Shared Key + fetch (dev only)
-      if (typeof uxp !== 'undefined') {
-        if (!this.config.storageAccountKey) {
-          throw this.createAzureError(
-            'NO_AUTH_METHOD',
-            'Shared Key required in UXP fallback',
-            401,
-            false
-          )
-        }
-        console.warn('⚠️ Azure Upload: Shared Key + fetch fallback')
-        return this.uploadBlobWithFetch(file, containerName, blobName, metadata)
-      }
-
-      // Last resort: (avoid SDK path in panel to prevent Buffer)
-      throw this.createAzureError(
-        'NO_AUTH_METHOD',
-        'No supported auth method available for upload',
-        401,
-        false
-      )
+      console.warn('🔐 Azure Upload: Using SAS + fetch')
+      return this.uploadBlobWithSASFetch(file, containerName, blobName, metadata)
     })
-  }  /**
+  }
+
+  /**
+   * Test connection by requesting a short-lived SAS token and probing container access
+   */
+  async testConnection(): Promise<boolean> {
+    try {
+      await this.ensureAuthenticated()
+      await this.initializeClient()
+
+      if (!this.sasTokenService) {
+        throw new Error('SAS token service is not available')
+      }
+
+      const containerName = this.config.defaultContainer
+      const sasResponse = await this.sasTokenService.requestListToken(
+        containerName,
+        5
+      )
+
+      const probeUrl = new URL(sasResponse.sasUrl)
+      probeUrl.searchParams.set('restype', 'container')
+      probeUrl.searchParams.set('comp', 'list')
+
+      const response = await fetch(probeUrl.toString(), {
+        method: 'GET',
+        headers: new Headers({ 'x-ms-version': '2020-04-08' }),
+      })
+
+      if (!response.ok) {
+        console.error('🔐 Azure Connection Test: Non-OK response', {
+          status: response.status,
+          statusText: response.statusText,
+        })
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error('🔐 Azure Connection Test: Failed to verify SAS access', error)
+      return false
+    }
+  }
+
+  /**
    * Download blob from Azure Storage using SAS token authentication
    */
   async downloadBlob(
@@ -421,85 +384,33 @@ export class AzureSDKBlobService {
     blobName: string
   ): Promise<AzureBlobDownloadResponse> {
     return this.withRetry(async () => {
+      await this.ensureAuthenticated()
       await this.initializeClient()
 
-      // Use SAS token service for secure download
-      if (this.sasTokenService) {
-        try {
-          console.warn('🔐 Azure Download: Requesting SAS token for download', {
-            containerName,
-            blobName,
-          })
-
-          // Request download SAS token from backend
-          const sasResponse = await this.sasTokenService.requestDownloadToken(
-            containerName,
-            blobName,
-            60 // 1 hour expiration
-          )
-
-          // Create blob client using SAS URL
-          const blobClient = new (
-            await import('@azure/storage-blob')
-          ).BlobClient(sasResponse.sasUrl)
-
-          const downloadResponse: BlobDownloadResponseParsed =
-            await blobClient.download()
-
-          if (!downloadResponse.readableStreamBody) {
-            throw new Error('No data received from blob download')
-          }
-
-          // Convert stream to blob
-          const buffer = await this.streamToBuffer(
-            downloadResponse.readableStreamBody
-          )
-          const blob = new Blob([new Uint8Array(buffer)], {
-            type: downloadResponse.contentType || 'application/octet-stream',
-          })
-
-          console.warn(
-            '🔐 Azure Download: Successfully downloaded using SAS token',
-            {
-              containerName,
-              blobName,
-              contentLength: buffer.byteLength,
-            }
-          )
-
-          return {
-            success: true,
-            blob,
-            metadata: downloadResponse.metadata || {},
-            contentType:
-              downloadResponse.contentType || 'application/octet-stream',
-            contentLength: downloadResponse.contentLength || buffer.byteLength,
-            etag: downloadResponse.etag!,
-            lastModified: downloadResponse.lastModified!,
-            blobType: downloadResponse.blobType!,
-          }
-        } catch (sasError) {
-          console.error(
-            '🔐 Azure Download: SAS token download failed:',
-            sasError
-          )
-          throw this.createAzureError(
-            'SAS_DOWNLOAD_FAILED',
-            `SAS token download failed: ${sasError instanceof Error ? sasError.message : 'Unknown error'}`,
-            500,
-            true
-          )
-        }
+      if (!this.sasTokenService) {
+        throw this.createAzureError(
+          'SAS_SERVICE_UNAVAILABLE',
+          'SAS token service is not available. Sign in with IMS before downloading from Azure.',
+          401,
+          false
+        )
       }
 
-      // Fallback: Account key method (development only)
-      if (this.config.storageAccountKey) {
-        console.warn(
-          '⚠️ Azure Download: Using account key fallback (development only)'
+      try {
+        console.warn('🔐 Azure Download: Requesting SAS token for download', {
+          containerName,
+          blobName,
+        })
+
+        const sasResponse = await this.sasTokenService.requestDownloadToken(
+          containerName,
+          blobName,
+          60
         )
 
-        const containerClient = this.getContainerClient(containerName)
-        const blobClient = containerClient.getBlobClient(blobName)
+        const blobClient = new (
+          await import('@azure/storage-blob')
+        ).BlobClient(sasResponse.sasUrl)
 
         const downloadResponse: BlobDownloadResponseParsed =
           await blobClient.download()
@@ -508,12 +419,17 @@ export class AzureSDKBlobService {
           throw new Error('No data received from blob download')
         }
 
-        // Convert stream to blob
         const buffer = await this.streamToBuffer(
           downloadResponse.readableStreamBody
         )
         const blob = new Blob([new Uint8Array(buffer)], {
           type: downloadResponse.contentType || 'application/octet-stream',
+        })
+
+        console.warn('🔐 Azure Download: Successfully downloaded using SAS token', {
+          containerName,
+          blobName,
+          contentLength: buffer.byteLength,
         })
 
         return {
@@ -527,15 +443,15 @@ export class AzureSDKBlobService {
           lastModified: downloadResponse.lastModified!,
           blobType: downloadResponse.blobType!,
         }
+      } catch (sasError) {
+        console.error('🔐 Azure Download: SAS token download failed:', sasError)
+        throw this.createAzureError(
+          'SAS_DOWNLOAD_FAILED',
+          `SAS token download failed: ${sasError instanceof Error ? sasError.message : 'Unknown error'}`,
+          500,
+          true
+        )
       }
-
-      // No authentication method available
-      throw this.createAzureError(
-        'NO_AUTH_METHOD',
-        'No authentication method available for Azure Storage download',
-        401,
-        false
-      )
     })
   }
 
@@ -544,6 +460,7 @@ export class AzureSDKBlobService {
    */
   async deleteBlob(containerName: string, blobName: string): Promise<void> {
     return this.withRetry(async () => {
+      await this.ensureAuthenticated()
       await this.initializeClient()
 
       const containerClient = this.getContainerClient(containerName)
@@ -561,6 +478,7 @@ export class AzureSDKBlobService {
     prefix?: string
   ): Promise<AzureBlobInfo[]> {
     return this.withRetry(async () => {
+      await this.ensureAuthenticated()
       await this.initializeClient()
 
       const containerClient = this.getContainerClient(containerName)
@@ -1626,21 +1544,19 @@ export class AzureSDKBlobService {
 
 /**
  * Factory function to create AzureSDKBlobService from environment variables
- * Uses IMS for user authentication and Azure Storage Account Key for blob access
+ * Uses IMS authentication plus SAS tokens for secure Azure access
  */
 export function createAzureSDKBlobService(
-  imsService?: IMSService
+  imsService?: IIMSService
 ): AzureSDKBlobService {
   // For Luma keyframes, we need Azure even in local mode
   // Check if we have Azure credentials available
   const accountName = import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_NAME;
-  const accountKey = import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_KEY;
   const containerName = import.meta.env.VITE_AZURE_STORAGE_CONTAINER_NAME || 'uxp-images';
 
   // Debug logging for credentials
   console.warn('🔍 Azure Credentials Debug:', {
     accountName: accountName ? `${accountName.substring(0, 4)}...` : 'NOT SET',
-    accountKey: accountKey ? `${accountKey.substring(0, 10)}...` : 'NOT SET',
     containerName,
     hasIMS: !!imsService
   });
@@ -1648,13 +1564,10 @@ export function createAzureSDKBlobService(
   if (!accountName) {
     throw new Error('Azure storage account name is required')
   }
-  // If imsService exists we can operate with SAS only (no key in the panel).
-  // Keep `accountKey` optional; only needed for SharedKey dev fallback.
 
   const config: AzureSDKBlobConfig = {
     // Storage account configuration
     storageAccountName: accountName,
-    storageAccountKey: accountKey,
     connectionString: import.meta.env.VITE_AZURE_STORAGE_CONNECTION_STRING,
 
     // Environment settings

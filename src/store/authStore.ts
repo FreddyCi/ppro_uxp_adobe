@@ -134,6 +134,8 @@ const getIMSService = (): IIMSService => {
   return imsService
 }
 
+export const getIMSServiceInstance = (): IIMSService => getIMSService()
+
 // Auto-refresh timer
 let refreshTimer: NodeJS.Timeout | null = null
 
