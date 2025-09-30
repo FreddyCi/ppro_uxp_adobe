@@ -21,6 +21,7 @@ import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, Re
 import { createAzureSDKBlobService } from './services/blob/AzureSDKBlobService';
 import { createSASTokenService } from './services/blob/SASTokenService';
 import axios from 'axios';
+import { useAuthStore, useIsAuthenticated } from './store/authStore';
 
 // Helper function to upload blob using SAS token (bypasses Azure SDK issues)
 async function uploadBlobWithSAS(
@@ -128,6 +129,9 @@ const AppContent = () => {
   
   // Get generation store actions
   const { actions: { addGeneration } } = useGenerationStore();
+
+  // Get authentication status
+  const isAuthenticated = useIsAuthenticated();
 
   const hostName = (uxp.host.name as string).toLowerCase();
 
@@ -968,6 +972,12 @@ const AppContent = () => {
   // Blob URL rehydration on app startup and gallery tab switch
   useEffect(() => {
     const rehydrateBlobUrls = async () => {
+      // Only run rehydration if user is authenticated
+      if (!isAuthenticated) {
+        console.log('🔄 Skipping blob URL rehydration - user not authenticated');
+        return;
+      }
+
       console.log('🔄 Starting blob URL rehydration...');
       const { contentItems, actions } = useGalleryStore.getState();
 
@@ -1023,7 +1033,7 @@ const AppContent = () => {
     if (activeTab === 'gallery') {
       rehydrateBlobUrls();
     }
-  }, [activeTab]); // Re-run when activeTab changes
+  }, [activeTab, isAuthenticated]); // Re-run when activeTab or authentication status changes
 
   // Clear any lingering auth dialogs and reset state
   const clearAuthState = () => {
