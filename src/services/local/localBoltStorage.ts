@@ -190,6 +190,13 @@ class LocalBoltStorage {
     )
 
     const directory = joinPath(separator, basePath, dateFolder)
+    console.log('[BoltStorage] Creating directory:', {
+      basePath,
+      dateFolder,
+      directory,
+      separator,
+      optionsSubfolder: options.subfolder
+    })
     this.ensureDirectory(addon, directory)
 
     const filePath = joinPath(separator, directory, safeFilename)
@@ -268,15 +275,38 @@ class LocalBoltStorage {
         let basePath: string | undefined
         try {
           basePath = addon.getDefaultStoragePath?.()
+          console.log('[BoltStorage] Raw basePath from addon.getDefaultStoragePath():', basePath)
         } catch (error) {
           console.warn('[BoltStorage] Failed to retrieve default storage path from addon:', error)
         }
 
         if (!basePath || typeof basePath !== 'string') {
           basePath = this.getFallbackBasePath()
+          console.log('[BoltStorage] Using fallback basePath:', basePath)
         }
 
         const separator = basePath.includes('\\') ? '\\' : '/'
+        console.log('[BoltStorage] Initial basePath before normalization:', basePath)
+        
+        // Strip trailing date folders to ensure basePath is the root storage folder
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+        const pathParts = basePath.split(separator).filter(part => part.length > 0)
+        console.log('[BoltStorage] Path parts:', pathParts)
+        const normalizedParts = []
+        for (let i = pathParts.length - 1; i >= 0; i--) {
+          if (!dateRegex.test(pathParts[i])) {
+            normalizedParts.unshift(...pathParts.slice(0, i + 1))
+            break
+          }
+        }
+        if (normalizedParts.length > 0) {
+          basePath = normalizedParts.join(separator)
+        } else if (pathParts.length > 0) {
+          // If all parts were dates, keep the last non-date part or the first part
+          basePath = pathParts[0]
+        }
+        console.log('[BoltStorage] Final normalized basePath:', basePath)
+        
         this.ensureDirectory(addon, basePath)
 
         return { path: basePath, separator }
@@ -360,7 +390,7 @@ class UxpLocalStorage {
   }
 
   async saveGenerationAsset(options: SaveGenerationOptions): Promise<LocalSaveResult | null> {
-    const folder = await this.ensureFolder()
+    let folder = await this.ensureFolder()
     if (!folder) {
       return null
     }
@@ -383,6 +413,12 @@ class UxpLocalStorage {
     )
 
     const targetFolder = await this.ensureSubfolder(folder, dateFolder)
+    console.log('[UXPLocalStorage] Creating target folder:', {
+      folderPath,
+      dateFolder,
+      targetFolderPath: this.getFolderPath(targetFolder),
+      optionsSubfolder: options.subfolder
+    })
     await this.ensurePermission(targetFolder)
 
     const arrayBuffer = await options.blob.arrayBuffer()
@@ -470,6 +506,19 @@ class UxpLocalStorage {
           try {
             const entry = await this.getEntryForToken(token)
             if (entry) {
+              // Check if the entry is a date folder
+              const entryPath = this.getFolderPath(entry)
+              if (entryPath) {
+                const separator = entryPath.includes('\\') ? '\\' : '/'
+                const pathParts = entryPath.split(separator).filter(part => part.length > 0)
+                const lastPart = pathParts[pathParts.length - 1]
+                const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+                if (dateRegex.test(lastPart)) {
+                  console.warn('[UXPLocalStorage] Stored folder token points to a date folder, clearing token and prompting for base folder')
+                  this.clearStoredToken()
+                  return this.promptForFolder()
+                }
+              }
               return entry
             }
           } catch (error) {
@@ -585,6 +634,21 @@ class UxpLocalStorage {
 
       await this.ensurePermission(folder)
 
+      const folderPath = this.getFolderPath(folder)
+      if (folderPath) {
+        const separator = folderPath.includes('\\') ? '\\' : '/'
+        const pathParts = folderPath.split(separator).filter(part => part.length > 0)
+        const lastPart = pathParts[pathParts.length - 1]
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+        if (dateRegex.test(lastPart)) {
+          console.warn('[UXPLocalStorage] Selected folder appears to be a date folder, prompting user to select base folder')
+          // Prompt again
+          return this.promptForFolder()
+        }
+
+        writePersistentValue(FOLDER_PATH_STORAGE_KEY, folderPath)
+      }
+
       if (typeof this.localFileSystem.createPersistentToken === 'function') {
         try {
           const token = await this.localFileSystem.createPersistentToken(folder)
@@ -596,11 +660,6 @@ class UxpLocalStorage {
         }
       } else {
         console.warn('[UXPLocalStorage] createPersistentToken not available; folder will prompt on restart.')
-      }
-
-      const folderPath = this.getFolderPath(folder)
-      if (folderPath) {
-        writePersistentValue(FOLDER_PATH_STORAGE_KEY, folderPath)
       }
 
       return folder

@@ -751,20 +751,30 @@ const AppContent = () => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
-  // Log available videos when reframe mode is selected
+  // Log available videos when reframe mode is selected and sync if needed
   useEffect(() => {
     if (lumaMode === 'reframe') {
-      const { contentItems } = useGalleryStore.getState();
-      const videos = contentItems.filter(item => ['video', 'uploaded-video'].includes(item.contentType));
-      console.log('🎥 Available videos for reframing:', videos.length);
-      videos.forEach((video, index) => {
-        console.log(`  ${index + 1}. ${video.filename} (${video.contentType}) - Display URL: ${video.displayUrl ? 'YES' : 'NO'}`);
-      });
+      const syncAndLogVideos = async () => {
+        console.log('🔄 Auto-syncing local files for reframe mode...');
+        await useGalleryStore.getState().actions.syncLocalFiles();
+        
+        // Wait a bit for the sync to complete, then log results
+        setTimeout(() => {
+          const { contentItems } = useGalleryStore.getState();
+          const videos = contentItems.filter(item => ['video', 'uploaded-video'].includes(item.contentType));
+          console.log('🎥 Available videos for reframing after sync:', videos.length);
+          videos.forEach((video, index) => {
+            console.log(`  ${index + 1}. ${video.filename} (${video.contentType}) - Display URL: ${video.displayUrl ? 'YES' : 'NO'}`);
+          });
+          
+          // Also log the local storage directory info
+          const folderToken = localStorage.getItem('boltuxp.localFolderToken');
+          const folderPath = localStorage.getItem('boltuxp.localFolderPath');
+          console.log('🎥 Local storage directory for videos:', { folderToken, folderPath });
+        }, 1000); // Wait 1 second for sync to complete
+      };
       
-      // Also log the local storage directory info
-      const folderToken = localStorage.getItem('boltuxp.localFolderToken');
-      const folderPath = localStorage.getItem('boltuxp.localFolderPath');
-      console.log('🎥 Local storage directory for videos:', { folderToken, folderPath });
+      syncAndLogVideos();
     }
   }, [lumaMode]);
 
@@ -1865,11 +1875,12 @@ const GalleryPicker = ({ target, onSelect, onCancel }: {
       console.log('🎥 GalleryPicker - Local storage directory:', { folderToken, folderPath });
       
       const filtered = allItems.filter(item => {
-        const isVideo = ['video', 'uploaded-video'].includes(item.contentType);
+        const hasVideoExtension = item.filename ? /\.(mp4|mov|avi|mkv|webm|m4v)$/i.test(item.filename) : false;
+        const isVideo = ['video', 'uploaded-video'].includes(item.contentType) || hasVideoExtension;
         const isImage = ['generated-image', 'corrected-image', 'uploaded-image'].includes(item.contentType);
         
         if (target === 'reframe-video') {
-          console.log(`🎥 GalleryPicker - Checking item: ${item.filename} (${item.contentType}) - isVideo: ${isVideo}`);
+          console.log(`🎥 GalleryPicker - Checking item: ${item.filename} (${item.contentType}) - isVideo: ${isVideo} (ext:${hasVideoExtension})`);
           return isVideo;
         } else {
           return isImage;
@@ -1920,6 +1931,14 @@ const GalleryPicker = ({ target, onSelect, onCancel }: {
                 )}
                 <div className="gallery-item-info">
                   <div className="text-detail">{item.filename}</div>
+                  <div className="text-detail" style={{ fontSize: '10px', color: 'var(--theme-text-secondary)', marginTop: '2px' }}>
+                    Type: {item.contentType}
+                  </div>
+                  {item.size && (
+                    <div className="text-detail" style={{ fontSize: '10px', color: 'var(--theme-text-secondary)' }}>
+                      Size: {(item.size / 1024 / 1024).toFixed(1)} MB
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
