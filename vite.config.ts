@@ -26,7 +26,6 @@ export default defineConfig({
       external: [
         "premierepro", 
         "bolt-uxp-hybrid.uxpaddon", 
-        "uxp",
         "fs",
         "os",
         "path",
@@ -34,7 +33,11 @@ export default defineConfig({
         "shell",
       ],
       output: {
-        format: "cjs",
+        format: "iife",
+        globals: {
+          "uxp": "uxp",
+          "premierepro": "premierepro",
+        },
       },
     },
   },

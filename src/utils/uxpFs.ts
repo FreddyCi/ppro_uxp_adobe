@@ -1,4 +1,4 @@
-import { storage } from 'uxp';
+import { uxp } from '../globals';
 
 /**
  * Convert a folder token and relative path to a temporary UXP URL that can be used in <img src="">
@@ -7,7 +7,7 @@ import { storage } from 'uxp';
  * Can also accept a full localFilePath and will parse it using stored folder information.
  */
 export async function toTempUrl(folderToken?: string | null, relativePath?: string, mimeType?: string, localFilePath?: string): Promise<string> {
-  const fs = storage.localFileSystem;
+  const fs = uxp.storage.localFileSystem;
 
   let actualFolderToken = folderToken;
   let actualRelativePath = relativePath;
@@ -52,7 +52,7 @@ export async function toTempUrl(folderToken?: string | null, relativePath?: stri
     }
 
     // Read the file content as binary data
-    const binaryFormat = storage.formats?.binary;
+    const binaryFormat = uxp.storage.formats?.binary;
     const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
     const arrayBuffer = await file.read(readOptions);
 

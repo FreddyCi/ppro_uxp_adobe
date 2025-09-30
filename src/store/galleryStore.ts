@@ -17,7 +17,7 @@ import {
   convertCorrectedImageToContentItem,
   convertVideoMetadataToContentItem
 } from '../types/content'
-import { storage } from 'uxp'
+import { uxp } from '../globals'
 import { refreshContentItemUrls } from '../utils/blobUrlLifecycle'
 
 const VIDEO_EXTENSION_REGEX = /\.(mp4|mov|avi|mkv|webm|m4v)$/i
@@ -197,6 +197,10 @@ export interface GalleryStore {
     clearAll: () => void
     setLoading: (loading: boolean) => void
     setError: (error: string | null) => void
+
+    // URL management
+    updateItemUrl: (id: string, displayUrl: string, thumbnailUrl?: string) => void
+    clearItemUrl: (id: string) => void
   }
 }// UXP-compatible storage implementation with localStorage
 const createUXPStorage = () => {
@@ -757,7 +761,7 @@ export const useGalleryStore = create<GalleryStore>()(
                     else if (item.localPath) {
                       console.log('🔄 Converting local file to base64 for:', item.filename)
                       // Load the file using UXP filesystem
-                      const fs = storage.localFileSystem
+                      const fs = uxp.storage.localFileSystem
                       const folderToken = item.folderToken
                       const relativePath = item.relativePath
 
@@ -765,7 +769,7 @@ export const useGalleryStore = create<GalleryStore>()(
                         try {
                           const folder = await fs.getEntryForPersistentToken(folderToken)
                           const file = await folder.getEntry(relativePath)
-                          const binaryFormat = storage.formats?.binary
+                          const binaryFormat = uxp.storage.formats?.binary
                           const readOptions = binaryFormat ? { format: binaryFormat } : undefined
                           const fileData = await file.read(readOptions)
                           const blobSource =
@@ -963,6 +967,36 @@ export const useGalleryStore = create<GalleryStore>()(
         setError(error: string | null): void {
           set({ error })
         },
+
+        // URL management
+        updateItemUrl(id: string, displayUrl: string, thumbnailUrl?: string): void {
+          set(state => ({
+            contentItems: state.contentItems.map(item =>
+              item.id === id
+                ? {
+                    ...item,
+                    displayUrl,
+                    thumbnailUrl: thumbnailUrl || item.thumbnailUrl
+                  }
+                : item
+            ),
+          }))
+        },
+
+        clearItemUrl(id: string): void {
+          set(state => ({
+            contentItems: state.contentItems.map(item =>
+              item.id === id
+                ? {
+                    ...item,
+                    displayUrl: '',
+                    thumbnailUrl: undefined,
+                    blobUrl: undefined
+                  }
+                : item
+            ),
+          }))
+        },
       },
     }),
     {
@@ -1129,7 +1163,7 @@ export const useGalleryDisplayItems = () => {
 
 // Scan local storage directory for metadata files and load all generations
 async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
-  const fs = storage.localFileSystem
+  const fs = uxp.storage.localFileSystem
   const syncedItems: CorrectedImage[] = []
 
   console.log('🔍 Starting scanAndLoadLocalFiles...')

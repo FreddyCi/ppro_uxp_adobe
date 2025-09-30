@@ -839,7 +839,6 @@ export const Gallery = () => {
           <label className="filter-label">Content Type</label>
           {/* @ts-ignore */}
           <sp-picker
-            value={localContentType}
             onChange={(e: any) => setLocalContentType(e.target.value)}
           >
             {/* @ts-ignore */}
@@ -865,7 +864,6 @@ export const Gallery = () => {
           <label className="filter-label">Aspect Ratio</label>
           {/* @ts-ignore */}
           <sp-picker
-            value={localAspectRatio}
             onChange={(e: any) => setLocalAspectRatio(e.target.value)}
           >
             {/* @ts-ignore */}
@@ -889,7 +887,6 @@ export const Gallery = () => {
           <label className="filter-label">Date Range</label>
           {/* @ts-ignore */}
           <sp-picker
-            value={localDateRange}
             onChange={(e: any) => setLocalDateRange(e.target.value)}
           >
             {/* @ts-ignore */}
@@ -931,7 +928,6 @@ export const Gallery = () => {
             <span className="sort-label">Sort by:</span>
             {/* @ts-ignore */}
             <sp-picker
-              value={localSortBy}
               onChange={(e: any) => setLocalSortBy(e.target.value)}
               size="s"
             >

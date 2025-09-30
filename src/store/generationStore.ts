@@ -418,7 +418,54 @@ export const useGenerationStore = create<GenerationStore>()(
             error: null,
             lastError: null
           })
-        }
+        },
+
+        /**
+         * Recreate blob URLs from local files for generation results
+         */
+        recreateBlobUrls(): void {
+          set((state) => {
+            const updatedHistory = state.generationHistory.map(result => {
+              // If we have a local path but no valid blob URL, try to recreate it
+              if (result.localPath && (!result.imageUrl || !result.imageUrl.startsWith('blob:') || !result.imageUrl.startsWith(`blob:${window.location.origin}`))) {
+                try {
+                  // Import the toTempUrl function dynamically to avoid circular imports
+                  import('../utils/uxpFs').then(({ toTempUrl }) => {
+                    // Get stored folder information
+                    const folderToken = typeof window !== 'undefined' && window.localStorage 
+                      ? window.localStorage.getItem('boltuxp.localFolderToken') 
+                      : null;
+                    
+                    if (folderToken && result.metadata.relativePath) {
+                      toTempUrl(folderToken, result.metadata.relativePath, result.metadata.contentType)
+                        .then(blobUrl => {
+                          // Update the result with the new blob URL
+                          set((currentState) => ({
+                            generationHistory: currentState.generationHistory.map(r => 
+                              r.id === result.id 
+                                ? { ...r, imageUrl: blobUrl, blobUrl }
+                                : r
+                            )
+                          }));
+                          console.warn('Recreated blob URL for generation result:', result.id, blobUrl);
+                        })
+                        .catch(error => {
+                          console.warn('Failed to recreate blob URL for generation result:', result.id, error);
+                        });
+                    }
+                  });
+                } catch (error) {
+                  console.warn('Failed to import toTempUrl for blob URL recreation:', error);
+                }
+              }
+              return result;
+            });
+            
+            return {
+              generationHistory: updatedHistory
+            };
+          });
+        },
       }
     }),
     {
@@ -453,6 +500,10 @@ export const useGenerationStore = create<GenerationStore>()(
           // Clean up invalid blob URLs from different origins
           console.warn('Cleaning up invalid blob URLs on rehydration...')
           state.actions.cleanupInvalidBlobUrls()
+
+          // Recreate blob URLs for local files
+          console.warn('Recreating blob URLs for local files on rehydration...')
+          state.actions.recreateBlobUrls()
         }
       },
       

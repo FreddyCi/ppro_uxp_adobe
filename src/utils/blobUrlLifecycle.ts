@@ -6,7 +6,7 @@
  * persistent base64 data URLs for reliable display.
  */
 
-import { storage } from 'uxp'
+import { uxp } from '../globals'
 
 /**
  * Checks if a blob URL is still valid and accessible
@@ -79,7 +79,7 @@ export async function loadLocalFileAsDataUrl(
   try {
     console.log('[BlobLifecycle] Loading local file as data URL:', relativePath)
 
-    const fs = storage.localFileSystem
+    const fs = uxp.storage.localFileSystem
     const folder = await fs.getEntryForPersistentToken(folderToken)
     const file = await folder.getEntry(relativePath)
 
@@ -107,7 +107,7 @@ export async function createTempBlobUrlFromLocalPath(
 
     // This is a fallback method that may not work reliably in UXP
     // Use loadLocalFileAsDataUrl whenever possible instead
-    const fs = storage.localFileSystem
+    const fs = uxp.storage.localFileSystem
 
     // Try to find the file by path - this is unreliable in UXP
     // as we don't have direct filesystem access

@@ -1,6 +1,9 @@
+// must be the first import
+import "./shims/domparser";
+
 import { useGalleryStore } from './store'
 import { useShallow } from 'zustand/react/shallow'
-import { ContentItem } from './types/content'
+import { ContentItem, isVideo } from './types/content'
 import React, { useState, useEffect } from "react";
 
 import { uxp, premierepro } from "./globals";
@@ -15,6 +18,8 @@ import { saveGenerationLocally } from './services/local/localBoltStorage';
 import { LtxVideoService } from './services/ltx';
 import { LumaVideoService } from './services/luma';
 import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, ReframeVideoModel } from './types/luma';
+import { createAzureSDKBlobService } from './services/blob/AzureSDKBlobService';
+import { refreshContentItemUrls } from './utils/blobUrlLifecycle';
 
 const AppContent = () => {
   const [imsToken, setImsToken] = useState<string | null>(null);
@@ -377,10 +382,74 @@ const AppContent = () => {
         frame1: lumaLastFrameItem ? lumaLastFrameItem.filename : undefined,
       });
 
+      // Helper function to prepare keyframe URLs for Luma API
+      const prepareKeyframeUrl = async (contentItem: ContentItem | null): Promise<string | undefined> => {
+        if (!contentItem) return undefined;
+
+        // If the item already has a blobUrl (Azure URL), use it
+        if (contentItem.blobUrl && contentItem.blobUrl.startsWith('https://')) {
+          console.log('🔗 Using existing Azure URL for keyframe:', contentItem.filename);
+          return contentItem.blobUrl;
+        }
+
+        // If the item has a displayUrl that looks like a public URL, use it
+        if (contentItem.displayUrl && contentItem.displayUrl.startsWith('https://')) {
+          console.log('🔗 Using existing public URL for keyframe:', contentItem.filename);
+          return contentItem.displayUrl;
+        }
+
+        // Otherwise, we need to upload to Azure to get a public URL
+        console.log('☁️ Uploading keyframe to Azure for public access:', contentItem.filename);
+
+        try {
+          // Create IMS service and Azure blob service
+          const imsService = createIMSService();
+          const azureBlobService = createAzureSDKBlobService();
+
+          // Get the blob data - try different sources
+          let blobToUpload: Blob;
+          if (contentItem.contentType === 'video' && (contentItem.content as any).videoBlob) {
+            blobToUpload = (contentItem.content as any).videoBlob;
+          } else if (contentItem.displayUrl) {
+            // Fetch the blob from the display URL
+            const response = await fetch(contentItem.displayUrl);
+            if (!response.ok) {
+              throw new Error(`Failed to fetch blob from ${contentItem.displayUrl}: ${response.status}`);
+            }
+            blobToUpload = await response.blob();
+          } else {
+            throw new Error('No blob data available for upload');
+          }
+
+          // Generate unique blob name
+          const blobName = `luma-keyframe-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${contentItem.filename}`;
+
+          // Upload to Azure
+          const uploadResult = await azureBlobService.uploadBlob(blobToUpload, 'uxp-images', blobName, {
+            originalFilename: contentItem.filename,
+            uploadedFor: 'luma-keyframe',
+            timestamp: Date.now().toString(),
+          });
+
+          console.log('✅ Keyframe uploaded to Azure:', uploadResult.blobUrl);
+          return uploadResult.blobUrl;
+
+        } catch (error) {
+          console.error('❌ Failed to upload keyframe to Azure:', error);
+          throw new Error(`Failed to prepare keyframe URL for ${contentItem.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      };
+
       const lumaService = new LumaVideoService({
         pollIntervalMs: 5_000,
         maxPollAttempts: 120,
       });
+
+      // Prepare keyframe URLs
+      const [frame0Url, frame1Url] = await Promise.all([
+        prepareKeyframeUrl(lumaFirstFrameItem),
+        prepareKeyframeUrl(lumaLastFrameItem)
+      ]);
 
       const lumaRequest: LumaGenerationRequest = {
         prompt: lumaPrompt,
@@ -390,16 +459,16 @@ const AppContent = () => {
         resolution: lumaResolution,
         loop: lumaLoop,
         keyframes: {
-          ...(lumaFirstFrameItem && {
+          ...(frame0Url && {
             frame0: {
               type: 'image' as const,
-              url: lumaFirstFrameItem.blobUrl || lumaFirstFrameItem.displayUrl
+              url: frame0Url
             }
           }),
-          ...(lumaLastFrameItem && {
+          ...(frame1Url && {
             frame1: {
               type: 'image' as const,
-              url: lumaLastFrameItem.blobUrl || lumaLastFrameItem.displayUrl
+              url: frame1Url
             }
           }),
         },
@@ -407,8 +476,8 @@ const AppContent = () => {
 
       console.log('🚀 Sending Luma Dream Machine request:', {
         ...lumaRequest,
-        frame0_url: lumaFirstFrameItem?.blobUrl || lumaFirstFrameItem?.displayUrl,
-        frame1_url: lumaLastFrameItem?.blobUrl || lumaLastFrameItem?.displayUrl,
+        frame0_url: frame0Url,
+        frame1_url: frame1Url,
         frame0_type: lumaFirstFrameItem?.blobUrl ? 'blobUrl' : 'displayUrl',
         frame1_type: lumaLastFrameItem?.blobUrl ? 'blobUrl' : 'displayUrl',
       });
@@ -778,6 +847,66 @@ const AppContent = () => {
     }
   }, [lumaMode]);
 
+  // Blob URL rehydration on app startup and gallery tab switch
+  useEffect(() => {
+    const rehydrateBlobUrls = async () => {
+      console.log('🔄 Starting blob URL rehydration...');
+      const { contentItems, actions } = useGalleryStore.getState();
+
+      // Find items that need blob URL rehydration (have relativePath and folderToken but no displayUrl)
+      const itemsNeedingRehydration = contentItems.filter(item =>
+        item.relativePath &&
+        item.folderToken &&
+        !item.displayUrl
+      );
+
+      if (itemsNeedingRehydration.length === 0) {
+        console.log('✅ No items need blob URL rehydration');
+        return;
+      }
+
+      console.log(`🔄 Rehydrating blob URLs for ${itemsNeedingRehydration.length} items...`);
+
+      for (const item of itemsNeedingRehydration) {
+        try {
+          // Use refreshContentItemUrls to recreate the display URL
+          const refreshedUrls = await refreshContentItemUrls({
+            displayUrl: item.displayUrl,
+            thumbnailUrl: item.thumbnailUrl,
+            blobUrl: item.blobUrl,
+            folderToken: item.folderToken,
+            relativePath: item.relativePath,
+            localPath: item.localPath,
+            mimeType: item.mimeType
+          });
+
+          if (refreshedUrls.displayUrl && refreshedUrls.displayUrl !== item.displayUrl) {
+            // Update the item with the refreshed URL
+            actions.updateContentItem(item.id, {
+              displayUrl: refreshedUrls.displayUrl,
+              thumbnailUrl: refreshedUrls.thumbnailUrl || item.thumbnailUrl
+            });
+            console.log(`✅ Rehydrated blob URL for ${item.filename}: ${refreshedUrls.displayUrl.substring(0, 50)}...`);
+          } else {
+            console.warn(`⚠️ Failed to rehydrate blob URL for ${item.filename}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error rehydrating blob URL for ${item.filename}:`, error);
+        }
+      }
+
+      console.log('✅ Blob URL rehydration complete');
+    };
+
+    // Rehydrate on app startup
+    rehydrateBlobUrls();
+
+    // Also rehydrate when switching to gallery tab
+    if (activeTab === 'gallery') {
+      rehydrateBlobUrls();
+    }
+  }, [activeTab]); // Re-run when activeTab changes
+
   // Clear any lingering auth dialogs and reset state
   const clearAuthState = () => {
     console.log('🔄 Clearing authentication state and dialogs...');
@@ -973,7 +1102,6 @@ const AppContent = () => {
                           <sp-picker 
                             placeholder="No Style" 
                             className="style-dropdown"
-                            value={stylePreset}
                             onChange={(e: any) => setStylePreset(e.target.value)}
                           >
                             {/* @ts-ignore */}
@@ -1005,18 +1133,17 @@ const AppContent = () => {
                           <div className="text-detail mb-sm">Choose between artistic or photorealistic content</div>
                           {/* @ts-ignore */}
                           <sp-radio-group 
-                            value={contentType} 
                             className="content-type-group"
                             onChange={(e: any) => setContentType(e.target.value)}
                           >
                             {/* @ts-ignore */}
-                            <sp-radio value="art">
+                            <sp-radio value="art" checked={contentType === 'art'}>
                               <span className="radio-label">Art</span>
                               <div className="radio-description text-detail">Creative, artistic content</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                             {/* @ts-ignore */}
-                            <sp-radio value="photo">
+                            <sp-radio value="photo" checked={contentType === 'photo'}>
                               <span className="radio-label">Photo</span>
                               <div className="radio-description text-detail">Photorealistic content</div>
                             {/* @ts-ignore */}
@@ -1032,30 +1159,29 @@ const AppContent = () => {
                           <div className="text-detail mb-sm">Choose image dimensions</div>
                           {/* @ts-ignore */}
                           <sp-radio-group 
-                            value={aspectRatio} 
                             className="content-type-group"
                             onChange={(e: any) => setAspectRatio(e.target.value)}
                           >
                             {/* @ts-ignore */}
-                            <sp-radio value="square">
+                            <sp-radio value="square" checked={aspectRatio === 'square'}>
                               <span className="radio-label">Square</span>
                               <div className="radio-description text-detail">1024×1024</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                             {/* @ts-ignore */}
-                            <sp-radio value="landscape">
+                            <sp-radio value="landscape" checked={aspectRatio === 'landscape'}>
                               <span className="radio-label">Landscape</span>
                               <div className="radio-description text-detail">1792×1024</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                             {/* @ts-ignore */}
-                            <sp-radio value="portrait">
+                            <sp-radio value="portrait" checked={aspectRatio === 'portrait'}>
                               <span className="radio-label">Portrait</span>
                               <div className="radio-description text-detail">1024×1792</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                             {/* @ts-ignore */}
-                            <sp-radio value="ultrawide">
+                            <sp-radio value="ultrawide" checked={aspectRatio === 'ultrawide'}>
                               <span className="radio-label">Ultrawide</span>
                               <div className="radio-description text-detail">2048×896</div>
                             {/* @ts-ignore */}
@@ -1146,18 +1272,17 @@ const AppContent = () => {
                           <div className="text-detail mb-sm">Frames per second</div>
                           {/* @ts-ignore */}
                           <sp-radio-group 
-                            value={ltxFps.toString()} 
                             className="fps-group"
                             onChange={(e: any) => setLtxFps(parseInt(e.target.value))}
                           >
                             {/* @ts-ignore */}
-                            <sp-radio value="16">
+                            <sp-radio value="16" checked={ltxFps === 16}>
                               <span className="radio-label">16 FPS</span>
                               <div className="radio-description text-detail">Smooth, cinematic</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                             {/* @ts-ignore */}
-                            <sp-radio value="24">
+                            <sp-radio value="24" checked={ltxFps === 24}>
                               <span className="radio-label">24 FPS</span>
                               <div className="radio-description text-detail">Film standard</div>
                             {/* @ts-ignore */}
@@ -1173,7 +1298,6 @@ const AppContent = () => {
                           <div className="text-detail mb-sm">Video dimensions</div>
                           {/* @ts-ignore */}
                           <sp-radio-group 
-                            value={`${ltxWidth}x${ltxHeight}`} 
                             className="resolution-group"
                             onChange={(e: any) => {
                               const [width, height] = e.target.value.split('x').map(Number);
@@ -1182,19 +1306,19 @@ const AppContent = () => {
                             }}
                           >
                             {/* @ts-ignore */}
-                            <sp-radio value="1024x576">
+                            <sp-radio value="1024x576" checked={`${ltxWidth}x${ltxHeight}` === '1024x576'}>
                               <span className="radio-label">1024×576</span>
                               <div className="radio-description text-detail">16:9 SD</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                             {/* @ts-ignore */}
-                            <sp-radio value="1280x720">
+                            <sp-radio value="1280x720" checked={`${ltxWidth}x${ltxHeight}` === '1280x720'}>
                               <span className="radio-label">1280×720</span>
                               <div className="radio-description text-detail">16:9 HD</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                             {/* @ts-ignore */}
-                            <sp-radio value="1920x1080">
+                            <sp-radio value="1920x1080" checked={`${ltxWidth}x${ltxHeight}` === '1920x1080'}>
                               <span className="radio-label">1920×1080</span>
                               <div className="radio-description text-detail">16:9 Full HD</div>
                             {/* @ts-ignore */}
@@ -1266,7 +1390,6 @@ const AppContent = () => {
                           <div className="text-detail mb-sm">Choose generation mode</div>
                           {/* @ts-ignore */}
                           <sp-radio-group 
-                            value={lumaMode}
                             className="content-type-group"
                             onChange={(e: any) => {
                               setLumaMode(e.target.value);
@@ -1280,13 +1403,13 @@ const AppContent = () => {
                             }}
                           >
                             {/* @ts-ignore */}
-                            <sp-radio value="keyframes">
+                            <sp-radio value="keyframes" checked={lumaMode === 'keyframes'}>
                               <span className="radio-label">First Frame Last Frame</span>
                               <div className="radio-description text-detail">Generate video with start/end images</div>
                             {/* @ts-ignore */}
                             </sp-radio>
                             {/* @ts-ignore */}
-                            <sp-radio value="reframe">
+                            <sp-radio value="reframe" checked={lumaMode === 'reframe'}>
                               <span className="radio-label">Reframe</span>
                               <div className="radio-description text-detail">Change aspect ratio of existing video</div>
                             {/* @ts-ignore */}
@@ -1304,7 +1427,6 @@ const AppContent = () => {
                           <sp-picker 
                             placeholder="Select model"
                             className="style-dropdown"
-                            value={lumaModel}
                             onChange={(e: any) => setLumaModel(e.target.value)}
                           >
                             {/* @ts-ignore */}
@@ -1330,30 +1452,29 @@ const AppContent = () => {
                               <div className="text-detail mb-sm">Select the composition</div>
                               {/* @ts-ignore */}
                               <sp-radio-group 
-                                value={lumaAspectRatio}
                                 className="content-type-group"
                                 onChange={(e: any) => setLumaAspectRatio(e.target.value)}
                               >
                                 {/* @ts-ignore */}
-                                <sp-radio value="16:9">
+                                <sp-radio value="16:9" checked={lumaAspectRatio === '16:9'}>
                                   <span className="radio-label">16:9</span>
                                   <div className="radio-description text-detail">Widescreen</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="9:16">
+                                <sp-radio value="9:16" checked={lumaAspectRatio === '9:16'}>
                                   <span className="radio-label">9:16</span>
                                   <div className="radio-description text-detail">Vertical</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="1:1">
+                                <sp-radio value="1:1" checked={lumaAspectRatio === '1:1'}>
                                   <span className="radio-label">1:1</span>
                                   <div className="radio-description text-detail">Square</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="21:9">
+                                <sp-radio value="21:9" checked={lumaAspectRatio === '21:9'}>
                                   <span className="radio-label">21:9</span>
                                   <div className="radio-description text-detail">Ultra-wide</div>
                                 {/* @ts-ignore */}
@@ -1369,18 +1490,17 @@ const AppContent = () => {
                               <div className="text-detail mb-sm">Clip length</div>
                               {/* @ts-ignore */}
                               <sp-radio-group 
-                                value={lumaDuration}
                                 className="fps-group"
                                 onChange={(e: any) => setLumaDuration(e.target.value)}
                               >
                                 {/* @ts-ignore */}
-                                <sp-radio value="5s">
+                                <sp-radio value="5s" checked={lumaDuration === '5s'}>
                                   <span className="radio-label">5 seconds</span>
                                   <div className="radio-description text-detail">Quick loop</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="9s">
+                                <sp-radio value="9s" checked={lumaDuration === '9s'}>
                                   <span className="radio-label">9 seconds</span>
                                   <div className="radio-description text-detail">Longer motion</div>
                                 {/* @ts-ignore */}
@@ -1396,30 +1516,29 @@ const AppContent = () => {
                               <div className="text-detail mb-sm">Output size</div>
                               {/* @ts-ignore */}
                               <sp-radio-group 
-                                value={lumaResolution}
                                 className="resolution-group"
                                 onChange={(e: any) => setLumaResolution(e.target.value)}
                               >
                                 {/* @ts-ignore */}
-                                <sp-radio value="540p">
+                                <sp-radio value="540p" checked={lumaResolution === '540p'}>
                                   <span className="radio-label">540p</span>
                                   <div className="radio-description text-detail">Lightweight preview</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="720p">
+                                <sp-radio value="720p" checked={lumaResolution === '720p'}>
                                   <span className="radio-label">720p</span>
                                   <div className="radio-description text-detail">HD</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="1080p">
+                                <sp-radio value="1080p" checked={lumaResolution === '1080p'}>
                                   <span className="radio-label">1080p</span>
                                   <div className="radio-description text-detail">Full HD</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="4k">
+                                <sp-radio value="4k" checked={lumaResolution === '4k'}>
                                   <span className="radio-label">4K</span>
                                   <div className="radio-description text-detail">Ultra HD</div>
                                 {/* @ts-ignore */}
@@ -1637,48 +1756,47 @@ const AppContent = () => {
                               <div className="text-detail mb-sm">Choose the new aspect ratio for the video</div>
                               {/* @ts-ignore */}
                               <sp-radio-group 
-                                value={lumaAspectRatio}
                                 className="content-type-group"
                                 onChange={(e: any) => setLumaAspectRatio(e.target.value)}
                               >
                                 {/* @ts-ignore */}
-                                <sp-radio value="1:1">
+                                <sp-radio value="1:1" checked={lumaAspectRatio === '1:1'}>
                                   <span className="radio-label">1:1</span>
                                   <div className="radio-description text-detail">Square</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="16:9">
+                                <sp-radio value="16:9" checked={lumaAspectRatio === '16:9'}>
                                   <span className="radio-label">16:9</span>
                                   <div className="radio-description text-detail">Widescreen</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="9:16">
+                                <sp-radio value="9:16" checked={lumaAspectRatio === '9:16'}>
                                   <span className="radio-label">9:16</span>
                                   <div className="radio-description text-detail">Vertical</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="4:3">
+                                <sp-radio value="4:3" checked={lumaAspectRatio === '4:3'}>
                                   <span className="radio-label">4:3</span>
                                   <div className="radio-description text-detail">Traditional</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="3:4">
+                                <sp-radio value="3:4" checked={lumaAspectRatio === '3:4'}>
                                   <span className="radio-label">3:4</span>
                                   <div className="radio-description text-detail">Portrait</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="21:9">
+                                <sp-radio value="21:9" checked={lumaAspectRatio === '21:9'}>
                                   <span className="radio-label">21:9</span>
                                   <div className="radio-description text-detail">Ultra-wide</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
-                                <sp-radio value="9:21">
+                                <sp-radio value="9:21" checked={lumaAspectRatio === '9:21'}>
                                   <span className="radio-label">9:21</span>
                                   <div className="radio-description text-detail">Ultra-tall</div>
                                 {/* @ts-ignore */}

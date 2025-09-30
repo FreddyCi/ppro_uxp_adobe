@@ -457,13 +457,13 @@ export const LocalIngestPanel: React.FC = () => {
               <span className="control-label">Placement mode</span>
               <div className="control-input">
                 {/* @ts-ignore */}
-                <sp-radio-group value={placementMode} onChange={(e: any) => setPlacementMode(e.target.value)} orientation="horizontal">
+                <sp-radio-group onChange={(e: any) => setPlacementMode(e.target.value)} orientation="horizontal">
                   {/* @ts-ignore */}
-                  <sp-radio value="append">Sequence end</sp-radio>
+                  <sp-radio value="append" checked={placementMode === 'append'}>Sequence end</sp-radio>
                   {/* @ts-ignore */}
-                  <sp-radio value="playhead">Playhead</sp-radio>
+                  <sp-radio value="playhead" checked={placementMode === 'playhead'}>Playhead</sp-radio>
                   {/* @ts-ignore */}
-                  <sp-radio value="custom">Custom time (s)</sp-radio>
+                  <sp-radio value="custom" checked={placementMode === 'custom'}>Custom time (s)</sp-radio>
                 {/* @ts-ignore */}
                 </sp-radio-group>
               </div>
@@ -484,11 +484,11 @@ export const LocalIngestPanel: React.FC = () => {
               <span className="control-label">Edit mode</span>
               <div className="control-input">
                 {/* @ts-ignore */}
-                <sp-radio-group value={editMode} onChange={(e: any) => setEditMode(e.target.value)} orientation="horizontal">
+                <sp-radio-group onChange={(e: any) => setEditMode(e.target.value)} orientation="horizontal">
                   {/* @ts-ignore */}
-                  <sp-radio value="insert">Insert</sp-radio>
+                  <sp-radio value="insert" checked={editMode === 'insert'}>Insert</sp-radio>
                   {/* @ts-ignore */}
-                  <sp-radio value="overwrite">Overwrite</sp-radio>
+                  <sp-radio value="overwrite" checked={editMode === 'overwrite'}>Overwrite</sp-radio>
                 {/* @ts-ignore */}
                 </sp-radio-group>
               </div>
