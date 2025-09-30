@@ -22,5 +22,5 @@ export * from './ltx'
 // Luma Labs Dream Machine video generation service
 export * from './luma'
 
-// TODO: Uncomment these as services are implemented in their respective tasks:
-// export * from './premiere';   // T025: Implement UXP Premiere Pro API Integration
+// Premiere Pro integration services - T025/T026
+export * from './premiere'
