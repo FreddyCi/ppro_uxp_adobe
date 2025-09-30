@@ -1175,40 +1175,6 @@ class FalService {
 - Update docs and comments sparingly—focus on accuracy over volume.
 ---
 
-### T023.6: Add Pure-UXP Local Storage Fallback
-**Status:** To Do
-**Dependencies:** T023.5
-**Priority:** High
-**Estimate:** 1 day
-**Progress Note:** Premiere builds without the hybrid addon API still need persistence; add a UXP-only save path that uses `storage.localFileSystem` when Bolt isn’t available so generations remain durable during the POC.
-**Description:** Detect the absence of the Bolt addon and route saves through the standard UXP file system APIs while keeping the Bolt path active for environments that support it.
-**Deliverables:**
-- Runtime detection that selects Bolt when available and the UXP local file system when not
-- Folder chooser flow that stores a persistent token for the chosen output directory
-- File writers that persist both image bytes and metadata JSON via ArrayBuffer writes
-- Gallery logging that surfaces the resolved path while continuing to render in-memory previews
-- Documentation noting how to switch back once hybrid support is enabled
-**Implementation Notes:**
-- `localBoltStorage` now delegates to Bolt first and automatically falls back to `storage.localFileSystem` with persistent folder tokens when the hybrid addon is missing or throws.
-- Metadata captures `localPersistenceProvider` (`bolt` or `uxp`), saved file paths, and any folder token so diagnostics can distinguish runtime behavior in logs.
-- To restore pure Bolt behavior, ship a build of Premiere that exposes the hybrid addon APIs; the code will resume using Bolt on the next launch without configuration changes. If you need to force a reset (for example, to pick a new UXP folder), clear the `boltuxp.localFolderToken` key from `window.localStorage` and restart the panel.
-**Acceptance Criteria:**
-- Generations on non-hybrid hosts write to disk without throwing errors or prompting every run
-- Stored folder tokens survive panel restarts and only prompt the user when access fails
-- Metadata JSON remains synchronized with the saved image and captures the filesystem path
-- Console logging differentiates between Bolt and UXP-only saves for troubleshooting
-- Hybrid-enabled builds automatically resume Bolt saves with no additional configuration
-**Simple Test:**
-1. Launch the panel on a build lacking addon support, choose an output folder, and generate an image; confirm the files appear alongside a data-URL preview.
-2. Restart the panel and generate another image; verify the cached token is reused without another prompt.
-3. Switch to a hybrid-enabled build and ensure the pipeline automatically returns to Bolt-backed saves.
-**Coding Rules:**
-- Keep fallback logic localized to the storage helper; avoid scattering environment checks through the UI.
-- Reuse existing blob-to-ArrayBuffer conversion utilities instead of introducing new ones.
-- Prompt the user only when no valid persistent token exists.
-- Leave `VITE_STORAGE_MODE` semantics unchanged so Azure reactivation remains straightforward.
-
-
 ### T024: Create Video Upload and Import Pipeline
 **Status:** To Do
 **Dependencies:** T023
@@ -1269,57 +1235,7 @@ class PremiereService {
 - Do not over engineer
 ---
 
-### T026: Implement Metadata Reading and Logging
-**Status:** To Do
-**Dependencies:** T025
-**Priority:** Medium
-**Estimate:** 45 minutes
-**Progress Note:** [Progress note for this task]
-**Description:** Read XMP metadata from Premiere assets and display in panel
-**Deliverables:**
-- Metadata reading service
-- UI display for metadata information
-- Export metadata to JSON logs
-**Metadata Features:**
-- Read XMP data from imported assets
-- Display in organized, readable format
-- Search and filter metadata entries
-- Export logs for external processing
-**Acceptance Criteria:**
-- Metadata reads correctly from all asset types
-- UI displays metadata in organized way
-- Export produces valid JSON
 
-**Coding Rules:**
-- Review docs directory if needed
-- Do not over engineer
----
-
-### T027: Create Export Pipeline to MP4
-**Status:** To Do
-**Dependencies:** T026
-**Priority:** High
-**Estimate:** 75 minutes
-**Progress Note:** [Progress note for this task]
-**Description:** Implement sequence export functionality with preset management
-**Deliverables:**
-- Export service with preset configurations
-- Progress tracking for export operations
-- Optional upload to Blob after export
-**Export Features:**
-- Multiple quality presets (web, archive, review)
-- Export progress monitoring
-- Automatic file naming with timestamps
-- Post-export Blob upload option
-**Acceptance Criteria:**
-- Exports complete successfully with all presets
-- Progress reporting accurate throughout export
-- Exported files play correctly in media players
-
-**Coding Rules:**
-- Review docs directory if needed
-- Do not over engineer
----
 
 ## Phase 9: Testing and Quality Assurance
 
