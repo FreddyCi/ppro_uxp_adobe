@@ -17,7 +17,7 @@ import {
 import { useToastHelpers } from '../../hooks/useToast'
 import './LocalIngestPanel.scss'
 
-interface LocalClip {
+export interface LocalClip {
   id: string
   source: 'generated' | 'manual'
   displayName: string
@@ -42,7 +42,7 @@ interface ClipStatusMap {
 
 const MARKER_BASE_NAME = 'Bolt Timeline Marker'
 
-function extractMetadataComment(clip: LocalClip): string {
+export function extractMetadataComment(clip: LocalClip): string {
   const metadata = clip.metadata as GenerationMetadata | undefined
   const lines: string[] = []
 
@@ -80,7 +80,7 @@ function extractMetadataComment(clip: LocalClip): string {
   return lines.join('\n')
 }
 
-function formatSeconds(seconds: number): string {
+export function formatSeconds(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
     return '0s'
   }
@@ -94,14 +94,14 @@ function formatSeconds(seconds: number): string {
   return `${minutes}m ${remainingSeconds.toFixed(0)}s`
 }
 
-function getClipFilePath(result: GenerationResult): string | null {
+export function getClipFilePath(result: GenerationResult): string | null {
   return (
     result.localPath ||
     (result.metadata?.localFilePath ?? null)
   )
 }
 
-function parseNumericArray(value: unknown): number[] {
+export function parseNumericArray(value: unknown): number[] {
   if (!value) {
     return []
   }
@@ -139,6 +139,7 @@ export const LocalIngestPanel: React.FC = () => {
   const [statusMap, setStatusMap] = useState<ClipStatusMap>({})
   const [folderInfo, setFolderInfo] = useState(getConfiguredLocalFolderInfo())
   const { showError, showInfo, showSuccess, showWarning } = useToastHelpers()
+  const hasConfiguredFolder = Boolean(folderInfo.folderPath && folderInfo.folderToken)
 
   const detectedClips = useMemo<LocalClip[]>(() => {
     return generationHistory
@@ -261,8 +262,18 @@ export const LocalIngestPanel: React.FC = () => {
     }))
   }, [])
 
+  const handleRemoveManualClip = useCallback((clipId: string) => {
+    setManualClips(prev => prev.filter(clip => clip.id !== clipId))
+    setStatusMap(prev => {
+      const { [clipId]: _removed, ...rest } = prev
+      return rest
+    })
+    showInfo('Clip removed', 'Manual clip removed from the ingest queue.')
+  }, [showInfo])
+
   const handleIngestClip = useCallback(
     async (clip: LocalClip) => {
+      console.log('Send to Premiere button clicked for clip:', clip.displayName, clip.filePath)
       const service = resolveService()
 
       if (!service.isAvailable()) {
@@ -386,201 +397,248 @@ export const LocalIngestPanel: React.FC = () => {
   }, [showInfo, showSuccess])
 
   return (
-    <div className="local-ingest-panel">
-      <section className="local-ingest-panel__section">
-        <header className="local-ingest-panel__section-header">
-          <div>
-            <h2 className="text-heading-medium">Local MP4 Watch Folder</h2>
-            <p className="text-detail">
-              Clips saved through the Bolt hybrid storage flow appear here for quick ingest into Premiere.
-            </p>
-          </div>
-          {/* @ts-ignore */}
-          <sp-button variant="primary" onClick={handleChooseFolder} size="s">
-            Choose folder
-          {/* @ts-ignore */}
-          </sp-button>
-        </header>
-        <div className="local-ingest-panel__folder-info">
-          <div className="folder-path">
-            <span className="label">Current folder:</span>
-            <span className="value">{folderInfo.folderPath ?? 'Not configured (using defaults)'}</span>
-          </div>
-          <div className="folder-token">
-            <span className="label">Folder token:</span>
-            <span className="value">{folderInfo.folderToken ?? 'Not available'}</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="local-ingest-panel__section">
-        <header className="local-ingest-panel__section-header">
-          <div>
-            <h2 className="text-heading-medium">Timeline placement</h2>
-            <p className="text-detail">Configure how clips are added to the active sequence.</p>
-          </div>
-        </header>
-        <div className="local-ingest-panel__controls">
-          <div className="control-group">
-            <span className="control-label">Placement mode</span>
-            <div className="control-input">
-              {/* @ts-ignore */}
-              <sp-radio-group value={placementMode} onChange={(e: any) => setPlacementMode(e.target.value)} orientation="horizontal">
-                {/* @ts-ignore */}
-                <sp-radio value="append">Sequence end</sp-radio>
-                {/* @ts-ignore */}
-                <sp-radio value="playhead">Playhead</sp-radio>
-                {/* @ts-ignore */}
-                <sp-radio value="custom">Custom time (s)</sp-radio>
-              {/* @ts-ignore */}
-              </sp-radio-group>
+    <article className="card">
+      <header className="card-header">
+        <h2 className="card-title">Local Ingest</h2>
+        <div className="text-detail">Import MP4s into Premiere Pro with timeline placement and markers</div>
+      </header>
+      <div className="card-body">
+        <section className="local-ingest-panel__section">
+          <header className="local-ingest-panel__section-header">
+            <div>
+              <h2 className="text-heading-medium">Local MP4 Watch Folder</h2>
+              <p className="text-detail">
+                Clips saved through the Bolt hybrid storage flow appear here for quick ingest into Premiere.
+              </p>
             </div>
-            {placementMode === 'custom' && (
-              <div className="control-input">
-                <input
-                  type="number"
-                  min={0}
-                  step={0.1}
-                  value={customSeconds}
-                  onChange={event => setCustomSeconds(parseFloat(event.target.value) || 0)}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="control-group">
-            <span className="control-label">Edit mode</span>
-            <div className="control-input">
-              {/* @ts-ignore */}
-              <sp-radio-group value={editMode} onChange={(e: any) => setEditMode(e.target.value)} orientation="horizontal">
-                {/* @ts-ignore */}
-                <sp-radio value="insert">Insert</sp-radio>
-                {/* @ts-ignore */}
-                <sp-radio value="overwrite">Overwrite</sp-radio>
-              {/* @ts-ignore */}
-              </sp-radio-group>
+            {/* @ts-ignore */}
+            <sp-button variant="primary" onClick={handleChooseFolder} size="s">
+              Choose folder
+            {/* @ts-ignore */}
+            </sp-button>
+          </header>
+          <div className="local-ingest-panel__folder-info">
+            <div className="folder-path">
+              <span className="label">Current folder:</span>
+              <span className="value">{folderInfo.folderPath ?? 'Not configured (using defaults)'}</span>
+            </div>
+            <div className="folder-token">
+              <span className="label">Folder token:</span>
+              <span className="value">{folderInfo.folderToken ?? 'Not available'}</span>
             </div>
           </div>
-
-          {editMode === 'insert' && (
-            <div className="control-group">
-              <span className="control-label">Limit ripple shift</span>
-              <div className="control-input">
-                {/* @ts-ignore */}
-                <sp-checkbox checked={limitShift} onChange={(e: any) => setLimitShift(Boolean(e.target.checked))}>
-                  Prevent downstream clips from shifting when inserting.
-                {/* @ts-ignore */}
-                </sp-checkbox>
-              </div>
+          {!hasConfiguredFolder && (
+            <div className="local-ingest-panel__folder-warning">
+              {/* @ts-ignore */}
+              <sp-banner variant="warning" open>
+                Grant folder access to enable automatic clip discovery.
+              {/* @ts-ignore */}
+              </sp-banner>
             </div>
           )}
+        </section>
 
-          <div className="control-row">
-            <div className="control-group">
-              <span className="control-label">Video track</span>
-              <div className="control-input">
-                <input
-                  type="number"
-                  min={1}
-                  value={videoTrackIndex}
-                  onChange={event => setVideoTrackIndex(Math.max(1, parseInt(event.target.value, 10) || 1))}
-                />
-              </div>
+        <section className="local-ingest-panel__section">
+          <header className="local-ingest-panel__section-header">
+            <div>
+              <h2 className="text-heading-medium">Timeline placement</h2>
+              <p className="text-detail">Configure how clips are added to the active sequence.</p>
             </div>
+          </header>
+          <div className="local-ingest-panel__controls">
             <div className="control-group">
-              <span className="control-label">Audio track</span>
+              <span className="control-label">Placement mode</span>
               <div className="control-input">
-                <input
-                  type="number"
-                  min={1}
-                  value={audioTrackIndex}
-                  onChange={event => setAudioTrackIndex(Math.max(1, parseInt(event.target.value, 10) || 1))}
-                />
+                {/* @ts-ignore */}
+                <sp-radio-group value={placementMode} onChange={(e: any) => setPlacementMode(e.target.value)} orientation="horizontal">
+                  {/* @ts-ignore */}
+                  <sp-radio value="append">Sequence end</sp-radio>
+                  {/* @ts-ignore */}
+                  <sp-radio value="playhead">Playhead</sp-radio>
+                  {/* @ts-ignore */}
+                  <sp-radio value="custom">Custom time (s)</sp-radio>
+                {/* @ts-ignore */}
+                </sp-radio-group>
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="local-ingest-panel__section">
-        <header className="local-ingest-panel__section-header">
-          <div>
-            <h2 className="text-heading-medium">Available clips</h2>
-            <p className="text-detail">
-              {clips.length > 0
-                ? 'Select a clip to place on the timeline. Metadata markers will be generated automatically.'
-                : 'No local MP4s detected yet. Generate a video or add one manually.'}
-            </p>
-          </div>
-          {/* @ts-ignore */}
-          <sp-button variant="secondary" size="s" onClick={handlePickManualClip}>
-            Add MP4 manually
-          {/* @ts-ignore */}
-          </sp-button>
-        </header>
-
-        <div className="local-ingest-panel__clip-grid">
-          {clips.map(clip => {
-            const status = statusMap[clip.id]
-            return (
-              <article key={clip.id} className="clip-card">
-                <div className="clip-card__preview">
-                  {clip.previewUrl ? (
-                    <video src={clip.previewUrl} muted controls preload="metadata" />
-                  ) : (
-                    <div className="clip-card__placeholder">
-                      <span role="img" aria-label="Video">
-                        🎬
-                      </span>
-                    </div>
-                  )}
+              {placementMode === 'custom' && (
+                <div className="control-input">
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={customSeconds}
+                    onChange={event => setCustomSeconds(parseFloat(event.target.value) || 0)}
+                  />
                 </div>
-                <div className="clip-card__body">
-                  <div className="clip-card__title">{clip.displayName}</div>
-                  <div className="clip-card__meta">
-                    <div className="clip-card__meta-row">
-                      <span className="label">Prompt:</span>
-                      <span className="value">{clip.prompt ?? 'Unknown prompt'}</span>
+              )}
+            </div>
+
+            <div className="control-group">
+              <span className="control-label">Edit mode</span>
+              <div className="control-input">
+                {/* @ts-ignore */}
+                <sp-radio-group value={editMode} onChange={(e: any) => setEditMode(e.target.value)} orientation="horizontal">
+                  {/* @ts-ignore */}
+                  <sp-radio value="insert">Insert</sp-radio>
+                  {/* @ts-ignore */}
+                  <sp-radio value="overwrite">Overwrite</sp-radio>
+                {/* @ts-ignore */}
+                </sp-radio-group>
+              </div>
+            </div>
+
+            {editMode === 'insert' && (
+              <div className="control-group">
+                <span className="control-label">Limit ripple shift</span>
+                <div className="control-input">
+                  {/* @ts-ignore */}
+                  <sp-checkbox checked={limitShift} onChange={(e: any) => setLimitShift(Boolean(e.target.checked))}>
+                    Prevent downstream clips from shifting when inserting.
+                  {/* @ts-ignore */}
+                  </sp-checkbox>
+                </div>
+              </div>
+            )}
+
+            <div className="control-row">
+              <div className="control-group">
+                <span className="control-label">Video track</span>
+                <div className="control-input">
+                  <input
+                    type="number"
+                    min={1}
+                    value={videoTrackIndex}
+                    onChange={event => setVideoTrackIndex(Math.max(1, parseInt(event.target.value, 10) || 1))}
+                  />
+                </div>
+              </div>
+              <div className="control-group">
+                <span className="control-label">Audio track</span>
+                <div className="control-input">
+                  <input
+                    type="number"
+                    min={1}
+                    value={audioTrackIndex}
+                    onChange={event => setAudioTrackIndex(Math.max(1, parseInt(event.target.value, 10) || 1))}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="local-ingest-panel__section">
+          <header className="local-ingest-panel__section-header">
+            <div>
+              <h2 className="text-heading-medium">Available clips</h2>
+              <p className="text-detail">
+                {clips.length > 0
+                  ? 'Select a clip to place on the timeline. Metadata markers will be generated automatically.'
+                  : 'No local MP4s detected yet. Generate a video or add one manually.'}
+              </p>
+            </div>
+            {/* @ts-ignore */}
+            <sp-button variant="secondary" size="s" onClick={handlePickManualClip}>
+              Add MP4 manually
+            {/* @ts-ignore */}
+            </sp-button>
+          </header>
+
+          <div className="local-ingest-panel__clip-grid">
+            {clips.length === 0 && (
+              <div className="local-ingest-panel__empty">
+                <p>No local MP4s detected yet. Generate a video or add one manually.</p>
+                {/* @ts-ignore */}
+                <sp-button variant="primary" size="s" onClick={handlePickManualClip}>
+                  Add MP4 manually
+                {/* @ts-ignore */}
+                </sp-button>
+              </div>
+            )}
+
+            {clips.map(clip => {
+              const status = statusMap[clip.id]
+              return (
+                <article key={clip.id} className="clip-card">
+                  <div className="clip-card__preview">
+                    {clip.previewUrl ? (
+                      <video src={clip.previewUrl} muted controls preload="metadata" />
+                    ) : (
+                      <div className="clip-card__placeholder">
+                        <span role="img" aria-label="Video">
+                          🎬
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="clip-card__body">
+                    <div className="clip-card__header">
+                      <div className="clip-card__title">{clip.displayName}</div>
+                      <div className="clip-card__badges">
+                        {clip.source === 'manual' && (
+                          <span className={`clip-card__badge clip-card__badge--${clip.source}`}>
+                            Manual upload
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="clip-card__meta-row">
-                      <span className="label">Model:</span>
-                      <span className="value">{clip.model ?? 'N/A'}</span>
-                    </div>
-                    {clip.durationSeconds && (
+                    <div className="clip-card__meta">
                       <div className="clip-card__meta-row">
-                        <span className="label">Duration:</span>
-                        <span className="value">{formatSeconds(clip.durationSeconds)}</span>
+                        <span className="label">Prompt:</span>
+                        <span className="value">{clip.prompt ?? 'Unknown prompt'}</span>
                       </div>
-                    )}
-                    <div className="clip-card__meta-row">
-                      <span className="label">Path:</span>
-                      <span className="value clip-card__path">{clip.filePath}</span>
+                      <div className="clip-card__meta-row">
+                        <span className="label">Model:</span>
+                        <span className="value">{clip.model ?? 'N/A'}</span>
+                      </div>
+                      {clip.durationSeconds && (
+                        <div className="clip-card__meta-row">
+                          <span className="label">Duration:</span>
+                          <span className="value">{formatSeconds(clip.durationSeconds)}</span>
+                        </div>
+                      )}
+                      <div className="clip-card__meta-row">
+                        <span className="label">Path:</span>
+                        <span className="value clip-card__path">{clip.filePath}</span>
+                      </div>
+                    </div>
+                    <div className="clip-card__actions">
+                      {/* @ts-ignore */}
+                      <sp-button
+                        variant="cta"
+                        size="s"
+                        onClick={() => handleIngestClip(clip)}
+                        disabled={status?.state === 'ingesting'}
+                      >
+                        {status?.state === 'ingesting' ? 'Ingesting…' : 'Send to Premiere'}
+                      {/* @ts-ignore */}
+                      </sp-button>
+                      {clip.source === 'manual' && (
+                        // @ts-ignore
+                        <sp-button
+                          variant="secondary"
+                          size="s"
+                          onClick={() => handleRemoveManualClip(clip.id)}
+                          disabled={status?.state === 'ingesting'}
+                        >
+                          Remove from list
+                        {/* @ts-ignore */}
+                        </sp-button>
+                      )}
+                      {status && (
+                        <div className={`clip-card__status clip-card__status--${status.state}`}>
+                          {status.message}
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="clip-card__actions">
-                    {/* @ts-ignore */}
-                    <sp-button
-                      variant="cta"
-                      size="s"
-                      onClick={() => handleIngestClip(clip)}
-                      disabled={status?.state === 'ingesting'}
-                    >
-                      {status?.state === 'ingesting' ? 'Ingesting…' : 'Send to Premiere'}
-                    {/* @ts-ignore */}
-                    </sp-button>
-                    {status && (
-                      <div className={`clip-card__status clip-card__status--${status.state}`}>
-                        {status.message}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </article>
-            )
-          })}
-        </div>
-      </section>
-    </div>
+                </article>
+              )
+            })}
+          </div>
+        </section>
+      </div>
+    </article>
   )
 }
 
