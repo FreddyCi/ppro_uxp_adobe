@@ -293,14 +293,17 @@ export class AzureSDKBlobService {
           // Upload the blob using SAS token
           let uploadResponse: BlobUploadCommonResponse
 
-          if (file instanceof File || file instanceof Blob) {
+          if (typeof Blob !== "undefined" && file instanceof Blob) {
+            // works in UXP (Blob is defined)
             uploadResponse = await blobClient.uploadData(file, uploadOptions)
-          } else {
+          } else if (file instanceof Uint8Array || Buffer.isBuffer(file)) {
             uploadResponse = await blobClient.upload(
               file,
               file.length,
               uploadOptions
             )
+          } else {
+            throw new Error("Unsupported file type passed to uploadBlob");
           }
 
           console.warn(
@@ -361,14 +364,16 @@ export class AzureSDKBlobService {
         // Upload the blob
         let uploadResponse: BlobUploadCommonResponse
 
-        if (file instanceof File || file instanceof Blob) {
+        if (typeof Blob !== "undefined" && file instanceof Blob) {
           uploadResponse = await blockBlobClient.uploadData(file, uploadOptions)
-        } else {
+        } else if (file instanceof Uint8Array || Buffer.isBuffer(file)) {
           uploadResponse = await blockBlobClient.upload(
             file,
             file.length,
             uploadOptions
           )
+        } else {
+          throw new Error("Unsupported file type passed to uploadBlob");
         }
 
         return {
@@ -836,11 +841,8 @@ export class AzureSDKBlobService {
     file: File | Blob | Buffer | Uint8Array,
     filename: string
   ): string {
-    if (file instanceof File) {
-      return file.type || this.getContentTypeFromExtension(filename)
-    }
-
-    if (file instanceof Blob) {
+    // Check if file has a type property (Blob-like objects)
+    if (file && typeof file === 'object' && 'type' in file && typeof file.type === 'string') {
       return file.type || this.getContentTypeFromExtension(filename)
     }
 
@@ -1506,16 +1508,20 @@ export class AzureSDKBlobService {
 export function createAzureSDKBlobService(
   imsService?: IMSService
 ): AzureSDKBlobService {
-  if (!isAzureEnabled()) {
-    throw new Error('Azure storage is disabled via VITE_STORAGE_MODE=local')
+  // For Luma keyframes, we need Azure even in local mode
+  // Check if we have Azure credentials available
+  const accountName = import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_NAME;
+  const accountKey = import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_KEY;
+  const containerName = import.meta.env.VITE_AZURE_STORAGE_CONTAINER_NAME || 'uxp-images';
+
+  if (!accountName || !accountKey) {
+    throw new Error('Azure storage credentials not configured. Required for Luma keyframe uploads.');
   }
 
   const config: AzureSDKBlobConfig = {
     // Storage account configuration
-    storageAccountName:
-      import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_NAME ||
-      'defaultstorageaccount',
-    storageAccountKey: import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_KEY,
+    storageAccountName: accountName,
+    storageAccountKey: accountKey,
     connectionString: import.meta.env.VITE_AZURE_STORAGE_CONNECTION_STRING,
 
     // Environment settings
@@ -1524,10 +1530,8 @@ export function createAzureSDKBlobService(
       'development',
 
     // Base configuration compatibility
-    accountName:
-      import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_NAME ||
-      'defaultstorageaccount',
-    containerName: 'uxp-images',
+    accountName: accountName,
+    containerName: containerName,
     timeout: 30000,
     retryOptions: {
       maxRetries: 3,
@@ -1536,9 +1540,9 @@ export function createAzureSDKBlobService(
     },
 
     // Container configuration
-    defaultContainer: 'uxp-images',
+    defaultContainer: containerName,
     containers: {
-      images: 'uxp-images',
+      images: containerName,
       videos: 'uxp-videos',
       temp: 'uxp-temp',
       exports: 'uxp-exports',

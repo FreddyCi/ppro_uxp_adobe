@@ -398,8 +398,8 @@ const AppContent = () => {
           return contentItem.displayUrl;
         }
 
-        // Otherwise, we need to upload to Azure to get a public URL
-        console.log('☁️ Uploading keyframe to Azure for public access:', contentItem.filename);
+        // For Luma keyframes, we ALWAYS need public URLs, so upload to Azure regardless of VITE_STORAGE_MODE
+        console.log('☁️ Uploading keyframe to Azure for public access (required for Luma):', contentItem.filename);
 
         try {
           // Create IMS service and Azure blob service
@@ -407,18 +407,39 @@ const AppContent = () => {
           const azureBlobService = createAzureSDKBlobService();
 
           // Get the blob data - try different sources
-          let blobToUpload: Blob;
+          let blobToUpload: Blob | Uint8Array;
           if (contentItem.contentType === 'video' && (contentItem.content as any).videoBlob) {
             blobToUpload = (contentItem.content as any).videoBlob;
-          } else if (contentItem.displayUrl) {
-            // Fetch the blob from the display URL
+          } else if (contentItem.folderToken && contentItem.relativePath) {
+            // Read from local filesystem for local content items
+            console.log('📁 Reading keyframe from local filesystem:', contentItem.relativePath);
+            const fs = uxp.storage.localFileSystem;
+            const folder = await fs.getEntryForPersistentToken(contentItem.folderToken);
+            const file = await folder.getEntry(contentItem.relativePath);
+
+            // Use binary format for reading image files
+            const binaryFormat = uxp.storage.formats?.binary;
+            const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
+            const fileData = await file.read(readOptions);
+
+            // Convert to Uint8Array for direct Azure upload
+            if (fileData instanceof ArrayBuffer) {
+              blobToUpload = new Uint8Array(fileData);
+            } else if (ArrayBuffer.isView(fileData)) {
+              blobToUpload = new Uint8Array(fileData.buffer, fileData.byteOffset, fileData.byteLength);
+            } else {
+              // Fallback: assume it's already a Uint8Array or compatible
+              blobToUpload = fileData as Uint8Array;
+            }
+          } else if (contentItem.displayUrl && !contentItem.displayUrl.startsWith('blob:')) {
+            // Fetch the blob from a public URL
             const response = await fetch(contentItem.displayUrl);
             if (!response.ok) {
               throw new Error(`Failed to fetch blob from ${contentItem.displayUrl}: ${response.status}`);
             }
             blobToUpload = await response.blob();
           } else {
-            throw new Error('No blob data available for upload');
+            throw new Error('No blob data available for upload - local files need folderToken and relativePath, remote files need public URLs');
           }
 
           // Generate unique blob name
@@ -436,6 +457,7 @@ const AppContent = () => {
 
         } catch (error) {
           console.error('❌ Failed to upload keyframe to Azure:', error);
+          // For Luma, we can't proceed without public URLs, so this is a hard failure
           throw new Error(`Failed to prepare keyframe URL for ${contentItem.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       };
