@@ -107,25 +107,24 @@ const manifest: UXP_Manifest = {
     },
     network: {
       domains: [
-        "https://hyperbrew.co",
-        "https://github.com",
-        "https://vitejs.dev",
-        "https://svelte.dev",
-        "https://reactjs.org",
-        "https://vuejs.org/",
-        "https://ims-na1.adobelogin.com", // Adobe IMS Authentication
-        "https://firefly-api.adobe.io", // Adobe Firefly API
-        "https://pre-signed-firefly-prod.s3-accelerate.amazonaws.com", // AWS S3 for Firefly images
-        "https://generativelanguage.googleapis.com", // Google Gemini API
-        "https://fal.run", // Fal.ai API
-        "https://uxppanelstorage.blob.core.windows.net", // Azure Blob Storage
-        "https://api.ltx.video", // LTX Video API
-        "https://api.ltx.video/v1", // LTX Video API v1 endpoint
-        "https://api.lumalabs.ai", // Luma Labs Dream Machine API
-        "https://api.lumalabs.ai/dream-machine/v1", // Luma Labs Dream Machine API v1 endpoint
-        "https://storage.cdn-luma.com", // Luma Dream Machine CDN for generated assets
-        `ws://localhost:${extraPrefs.hotReloadPort}`, // Required for hot reload
-      ],
+        "hyperbrew.co",
+        "github.com",
+        "vitejs.dev",
+        "svelte.dev",
+        "reactjs.org",
+        "vuejs.org",
+        "ims-na1.adobelogin.com",
+        "firefly-api.adobe.io",
+        "pre-signed-firefly-prod.s3-accelerate.amazonaws.com",
+        "generativelanguage.googleapis.com",
+        "fal.run",
+        "*.blob.core.windows.net",
+        "api.ltx.video",
+        "api.lumalabs.ai",
+        "storage.cdn-luma.com",
+        "localhost:3001",
+        "127.0.0.1:3001"
+      ]
     },
     clipboard: "readAndWrite",
     webview: {
