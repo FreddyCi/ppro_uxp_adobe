@@ -199,7 +199,7 @@ export class SASTokenService {
       operation: 'upload',
       expirationMinutes:
         expirationMinutes || this.config.defaultExpirationMinutes,
-      permissions: ['write'],
+      permissions: ['read', 'write'], // Include read permission for UXP to use the URL directly
     })
   }
 

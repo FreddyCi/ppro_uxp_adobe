@@ -122,8 +122,14 @@ const manifest: UXP_Manifest = {
         "api.ltx.video",
         "api.lumalabs.ai",
         "storage.cdn-luma.com",
+        "localhost",
+        "127.0.0.1",
         "localhost:3001",
-        "127.0.0.1:3001"
+        "127.0.0.1:3001",
+        "localhost:8080",
+        "127.0.0.1:8080",
+        "localhost:8082",
+        "127.0.0.1:8082"
       ]
     },
     clipboard: "readAndWrite",

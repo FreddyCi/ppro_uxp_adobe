@@ -32,6 +32,9 @@ import type { IMSService } from '../ims/IMSService.js'
 import { SASTokenService, createSASTokenService } from './SASTokenService.js'
 import { isAzureEnabled } from '../storageMode.js'
 
+// UXP environment detection
+declare const uxp: any
+
 export class AzureSDKBlobService {
   private config: AzureSDKBlobConfig
   private blobServiceClient: BlobServiceClient | null = null
@@ -244,10 +247,137 @@ export class AzureSDKBlobService {
   // ===== CORE STORAGE OPERATIONS =====
 
   /**
+   * Upload blob using SAS token + fetch (browser/UXP safe)
+   */
+  private async uploadBlobWithSASFetch(
+    file: File | Blob | Uint8Array | ArrayBuffer | string,
+    containerName: string,
+    blobName: string,
+    metadata?: Record<string, string>
+  ): Promise<AzureBlobUploadResponse> {
+    // Request SAS token with read+write permissions
+    const sasResponse = await this.sasTokenService!.requestUploadToken(
+      containerName,
+      blobName,
+      60 // 1 hour expiration
+    )
+
+    const contentType = this.getContentType(file as any, blobName)
+    const putUrl = sasResponse.sasUrl
+
+    const bytes = await this.toUint8Array(file)
+    const headers: Record<string, string> = {
+      'x-ms-blob-type': 'BlockBlob',
+      'Content-Type': contentType,
+      'x-ms-version': '2020-04-08',
+    }
+    if (metadata) {
+      for (const [k, v] of Object.entries(metadata)) headers[`x-ms-meta-${k}`] = v
+    }
+
+    const resp = await fetch(putUrl, {
+      method: 'PUT',
+      headers: new Headers(headers),
+      body: bytes
+    })
+
+    if (!resp.ok) {
+      throw new Error(`Azure PUT via SAS failed: ${resp.status} ${await resp.text()}`)
+    }
+
+    return {
+      success: true,
+      blobUrl: sasResponse.sasUrl, // Return SAS URL with read permission for Luma
+      etag: resp.headers.get('etag') || '',
+      lastModified: resp.headers.get('last-modified') ? new Date(resp.headers.get('last-modified')!) : new Date(),
+      contentMD5: '',
+      requestId: resp.headers.get('x-ms-request-id') || '',
+      version: '2020-04-08',
+      date: new Date(),
+    }
+  }
+
+  /**
+   * Upload blob using Shared Key + fetch (development fallback)
+   */
+  private async uploadBlobWithFetch(
+    file: File | Blob | Uint8Array | ArrayBuffer | string,
+    containerName: string,
+    blobName: string,
+    metadata?: Record<string, string>
+  ): Promise<AzureBlobUploadResponse> {
+    const accountName = this.config.storageAccountName
+    const accountKey = this.config.storageAccountKey!
+    const contentType = this.getContentType(file as any, blobName)
+
+    const data = await this.toUint8Array(file)
+
+    const date = new Date().toUTCString()
+    const canonicalHeaders = `x-ms-blob-type:BlockBlob\nx-ms-date:${date}\nx-ms-version:2020-04-08`
+    const canonicalResource = `/${accountName}/${containerName}/${blobName}`
+    const stringToSign = `PUT\n\n\n${data.length}\n\n${contentType}\n\n\n\n\n\n\n${canonicalHeaders}\n${canonicalResource}`
+    const signature = await this.createSharedKeySignature(stringToSign, accountKey)
+
+    const uploadUrl = `https://${accountName}.blob.core.windows.net/${containerName}/${blobName}`
+    const headers: Record<string, string> = {
+      'Authorization': `SharedKey ${accountName}:${signature}`,
+      'Content-Type': contentType,
+      'x-ms-blob-type': 'BlockBlob',
+      'x-ms-date': date,
+      'x-ms-version': '2020-04-08',
+    }
+    if (metadata) {
+      for (const [k, v] of Object.entries(metadata)) headers[`x-ms-meta-${k}`] = v
+    }
+
+    const resp = await fetch(uploadUrl, { method: 'PUT', headers: new Headers(headers), body: data })
+    if (!resp.ok) {
+      throw new Error(`Azure upload failed: ${resp.status} ${resp.statusText} - ${await resp.text()}`)
+    }
+
+    // NOTE: this URL is only public if your container access is 'blob'
+    const publicUrl = uploadUrl
+
+    return {
+      success: true,
+      blobUrl: publicUrl, // if container is private, switch to SAS approach above
+      etag: resp.headers.get('etag') || '',
+      lastModified: resp.headers.get('last-modified') ? new Date(resp.headers.get('last-modified')!) : new Date(),
+      contentMD5: '',
+      requestId: resp.headers.get('x-ms-request-id') || '',
+      version: '2020-04-08',
+      date: new Date(),
+    }
+  }
+
+  /**
+   * Create Shared Key signature for Azure Storage authentication
+   */
+  private async createSharedKeySignature(stringToSign: string, accountKey: string): Promise<string> {
+    // Decode base64 account key
+    const keyBytes = Uint8Array.from(atob(accountKey), c => c.charCodeAt(0))
+
+    // Use Web Crypto API for HMAC-SHA256
+    const encoder = new TextEncoder()
+    const data = encoder.encode(stringToSign)
+    const key = await crypto.subtle.importKey(
+      'raw',
+      keyBytes,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    )
+    const signature = await crypto.subtle.sign('HMAC', key, data)
+
+    // Convert to base64
+    return btoa(String.fromCharCode(...new Uint8Array(signature)))
+  }
+
+  /**
    * Upload blob to Azure Storage using SAS token authentication
    */
   async uploadBlob(
-    file: File | Blob | Buffer | Uint8Array,
+    file: File | Blob | Uint8Array | ArrayBuffer | string,
     containerName: string,
     blobName: string,
     metadata?: Record<string, string>
@@ -255,150 +385,35 @@ export class AzureSDKBlobService {
     return this.withRetry(async () => {
       await this.initializeClient()
 
-      // Use SAS token service for secure upload
+      // Prefer SAS + fetch (browser/UXP safe, returns public URL)
       if (this.sasTokenService) {
-        try {
-          console.warn('🔐 Azure Upload: Requesting SAS token for upload', {
-            containerName,
-            blobName,
-          })
+        console.warn('🔐 Azure Upload: Using SAS + fetch')
+        return this.uploadBlobWithSASFetch(file, containerName, blobName, metadata)
+      }
 
-          // Request upload SAS token from backend
-          const sasResponse = await this.sasTokenService.requestUploadToken(
-            containerName,
-            blobName,
-            60 // 1 hour expiration
-          )
-
-          // Create blob client using SAS URL
-          const blobClient = new (
-            await import('@azure/storage-blob')
-          ).BlockBlobClient(sasResponse.sasUrl)
-
-          // Prepare upload options
-          const uploadOptions = {
-            blobHTTPHeaders: {
-              blobContentType: this.getContentType(file, blobName),
-              blobContentDisposition: `inline; filename="${blobName}"`,
-            },
-            metadata: {
-              ...metadata,
-              uploadedAt: new Date().toISOString(),
-              uploadedBy: 'AzureSDKBlobService',
-              version: '1.0',
-            },
-            tags: this.createDefaultTags(metadata),
-          }
-
-          // Upload the blob using SAS token
-          let uploadResponse: BlobUploadCommonResponse
-
-          if (typeof Blob !== "undefined" && file instanceof Blob) {
-            // works in UXP (Blob is defined)
-            uploadResponse = await blobClient.uploadData(file, uploadOptions)
-          } else if (file instanceof Uint8Array || Buffer.isBuffer(file)) {
-            uploadResponse = await blobClient.upload(
-              file,
-              file.length,
-              uploadOptions
-            )
-          } else {
-            throw new Error("Unsupported file type passed to uploadBlob");
-          }
-
-          console.warn(
-            '🔐 Azure Upload: Successfully uploaded using SAS token',
-            {
-              containerName,
-              blobName,
-              etag: uploadResponse.etag,
-              requestId: uploadResponse.requestId,
-            }
-          )
-
-          return {
-            success: true,
-            blobUrl: blobClient.url.split('?')[0], // Remove SAS token from public URL
-            etag: uploadResponse.etag!,
-            lastModified: uploadResponse.lastModified!,
-            contentMD5: uploadResponse.contentMD5?.toString(),
-            requestId: uploadResponse.requestId!,
-            version: uploadResponse.version!,
-            date: uploadResponse.date!,
-          }
-        } catch (sasError) {
-          console.error('🔐 Azure Upload: SAS token upload failed:', sasError)
+      // UXP fallback: Shared Key + fetch (dev only)
+      if (typeof uxp !== 'undefined') {
+        if (!this.config.storageAccountKey) {
           throw this.createAzureError(
-            'SAS_UPLOAD_FAILED',
-            `SAS token upload failed: ${sasError instanceof Error ? sasError.message : 'Unknown error'}`,
-            500,
-            true
+            'NO_AUTH_METHOD',
+            'Shared Key required in UXP fallback',
+            401,
+            false
           )
         }
+        console.warn('⚠️ Azure Upload: Shared Key + fetch fallback')
+        return this.uploadBlobWithFetch(file, containerName, blobName, metadata)
       }
 
-      // Fallback: Account key method (development only)
-      if (this.config.storageAccountKey) {
-        console.warn(
-          '⚠️ Azure Upload: Using account key fallback (development only)'
-        )
-
-        const containerClient = this.getContainerClient(containerName)
-        const blockBlobClient = containerClient.getBlockBlobClient(blobName)
-
-        // Prepare upload options
-        const uploadOptions = {
-          blobHTTPHeaders: {
-            blobContentType: this.getContentType(file, blobName),
-            blobContentDisposition: `inline; filename="${blobName}"`,
-          },
-          metadata: {
-            ...metadata,
-            uploadedAt: new Date().toISOString(),
-            uploadedBy: 'AzureSDKBlobService',
-            version: '1.0',
-          },
-          tags: this.createDefaultTags(metadata),
-        }
-
-        // Upload the blob
-        let uploadResponse: BlobUploadCommonResponse
-
-        if (typeof Blob !== "undefined" && file instanceof Blob) {
-          uploadResponse = await blockBlobClient.uploadData(file, uploadOptions)
-        } else if (file instanceof Uint8Array || Buffer.isBuffer(file)) {
-          uploadResponse = await blockBlobClient.upload(
-            file,
-            file.length,
-            uploadOptions
-          )
-        } else {
-          throw new Error("Unsupported file type passed to uploadBlob");
-        }
-
-        return {
-          success: true,
-          blobUrl: blockBlobClient.url,
-          etag: uploadResponse.etag!,
-          lastModified: uploadResponse.lastModified!,
-          contentMD5: uploadResponse.contentMD5?.toString(),
-          requestId: uploadResponse.requestId!,
-          version: uploadResponse.version!,
-          date: uploadResponse.date!,
-        }
-      }
-
-      // No authentication method available
+      // Last resort: (avoid SDK path in panel to prevent Buffer)
       throw this.createAzureError(
         'NO_AUTH_METHOD',
-        'No authentication method available for Azure Storage upload',
+        'No supported auth method available for upload',
         401,
         false
       )
     })
-  }
-
-  /**
+  }  /**
    * Download blob from Azure Storage using SAS token authentication
    */
   async downloadBlob(
@@ -894,7 +909,7 @@ export class AzureSDKBlobService {
    * Get content type from file or filename
    */
   private getContentType(
-    file: File | Blob | Buffer | Uint8Array,
+    file: File | Blob | Uint8Array | ArrayBuffer | string,
     filename: string
   ): string {
     // Check if file has a type property (Blob-like objects)
@@ -962,19 +977,59 @@ export class AzureSDKBlobService {
   }
 
   /**
-   * Convert ReadableStream to Buffer
+   * Convert ReadableStream to Uint8Array (UXP compatible)
    */
-  private async streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
-    const chunks: Buffer[] = []
-
+  private async streamToBuffer(stream: any): Promise<Uint8Array> {
+    const chunks: Uint8Array[] = []
     return new Promise((resolve, reject) => {
-      stream.on('data', chunk =>
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-      )
-      stream.on('end', () => resolve(Buffer.concat(chunks)))
-      stream.on('error', reject)
+      stream.on?.('data', (chunk: any) => {
+        if (chunk instanceof Uint8Array) chunks.push(chunk)
+        else if (chunk instanceof ArrayBuffer) chunks.push(new Uint8Array(chunk))
+        else if (typeof chunk === 'string') chunks.push(new TextEncoder().encode(chunk))
+        else if (chunk && typeof chunk === 'object' && 'buffer' in chunk) chunks.push(new Uint8Array(chunk.buffer))
+        else reject(new Error('Unsupported stream chunk type'))
+      })
+      stream.on?.('end', () => {
+        const len = chunks.reduce((s, c) => s + c.length, 0)
+        const out = new Uint8Array(len)
+        let off = 0
+        for (const c of chunks) { out.set(c, off); off += c.length }
+        resolve(out)
+      })
+      stream.on?.('error', reject)
     })
   }
+
+  /**
+   * Normalize any input to Uint8Array without Buffer usage
+   */
+  private async toUint8Array(input: File | Blob | Uint8Array | ArrayBuffer | string): Promise<Uint8Array> {
+    if (input instanceof Uint8Array) return input
+    if (input instanceof ArrayBuffer) return new Uint8Array(input)
+    if (typeof Blob !== 'undefined' && input instanceof Blob) {
+      return new Uint8Array(await input.arrayBuffer())
+    }
+    if (typeof input === 'string') {
+      // http(s) URL
+      if (/^https?:\/\//i.test(input)) {
+        const resp = await fetch(input)
+        const buf = await resp.arrayBuffer()
+        return new Uint8Array(buf)
+      }
+      // data URL
+      if (/^data:/.test(input)) {
+        const base64 = input.split(',')[1] ?? ''
+        const bin = atob(base64)
+        const out = new Uint8Array(bin.length)
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+        return out
+      }
+      throw new Error('Unsupported string source (must be http(s) or data URL)')
+    }
+    throw new Error('Unsupported file type')
+  }
+
+
 
   /**
    * Create user-friendly error messages for common issues
@@ -1294,7 +1349,7 @@ export class AzureSDKBlobService {
    * Enhanced blob upload with comprehensive error handling
    */
   async uploadBlobWithResilience(
-    file: File | Blob | Buffer | Uint8Array,
+    file: File | Blob | Uint8Array | ArrayBuffer | string,
     containerName: string,
     blobName: string,
     metadata?: Record<string, string>
@@ -1406,7 +1461,7 @@ export class AzureSDKBlobService {
    */
   async batchUploadWithResilience(
     files: Array<{
-      file: File | Blob | Buffer | Uint8Array
+      file: File | Blob | Uint8Array | ArrayBuffer | string
       containerName: string
       blobName: string
       metadata?: Record<string, string>
@@ -1590,9 +1645,11 @@ export function createAzureSDKBlobService(
     hasIMS: !!imsService
   });
 
-  if (!accountName || !accountKey) {
-    throw new Error('Azure storage credentials not configured. Required for Luma keyframe uploads.');
+  if (!accountName) {
+    throw new Error('Azure storage account name is required')
   }
+  // If imsService exists we can operate with SAS only (no key in the panel).
+  // Keep `accountKey` optional; only needed for SharedKey dev fallback.
 
   const config: AzureSDKBlobConfig = {
     // Storage account configuration

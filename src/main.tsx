@@ -417,6 +417,40 @@ const AppContent = () => {
       return;
     }
 
+    // Input validation
+    if (lumaPrompt.length > 1000) {
+      showWarning('Prompt Too Long', 'Please keep your prompt under 1000 characters.');
+      return;
+    }
+
+    // Validate model selection
+    const validModels = ['ray-2', 'ray-flash-2', 'ray-1-6'];
+    if (!validModels.includes(lumaModel)) {
+      showWarning('Invalid Model', 'Please select a valid Dream Machine model.');
+      return;
+    }
+
+    // Validate aspect ratio
+    const validAspectRatios = ['16:9', '9:16', '1:1', '21:9'];
+    if (!validAspectRatios.includes(lumaAspectRatio)) {
+      showWarning('Invalid Aspect Ratio', 'Please select a valid aspect ratio.');
+      return;
+    }
+
+    // Validate duration
+    const validDurations = ['5s', '9s'];
+    if (!validDurations.includes(lumaDuration)) {
+      showWarning('Invalid Duration', 'Please select a valid duration.');
+      return;
+    }
+
+    // Validate resolution
+    const validResolutions = ['540p', '720p', '1080p', '4k'];
+    if (!validResolutions.includes(lumaResolution)) {
+      showWarning('Invalid Resolution', 'Please select a valid resolution.');
+      return;
+    }
+
     setIsGeneratingLuma(true);
 
     const resolutionLookup: Record<string, { width: number; height: number }> = {
@@ -428,10 +462,11 @@ const AppContent = () => {
     }
 
     try {
+      const generationSessionId = `luma-gen-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       showInfo('Generating Video', `Dreaming up "${lumaPrompt.substring(0, 50)}${lumaPrompt.length > 50 ? '...' : ''}"`);
 
-      console.log('🎞️ Starting Luma Dream Machine video generation...');
-      console.log('📝 Luma generation parameters:', {
+      console.log(`🎞️ [${generationSessionId}] Starting Luma Dream Machine video generation...`);
+      console.log(`📝 [${generationSessionId}] Luma generation parameters:`, {
         prompt: lumaPrompt,
         model: lumaModel,
         aspect_ratio: lumaAspectRatio,
@@ -442,15 +477,82 @@ const AppContent = () => {
         frame1: lumaLastFrameItem ? lumaLastFrameItem.filename : undefined,
       });
 
+      // Preflight check: Validate keyframe URLs if provided
+      const validateKeyframeUrl = async (url: string | undefined, frameName: string): Promise<boolean> => {
+        if (!url) return true; // Optional keyframes are OK
+
+        try {
+          console.log(`🔍 Preflight check: Testing ${frameName} URL accessibility...`);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+          const response = await fetch(url, {
+            method: 'HEAD',
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            console.warn(`⚠️ ${frameName} URL returned ${response.status}: ${url}`);
+            showWarning(`${frameName} URL Issue`, `The ${frameName.toLowerCase()} may not be accessible (${response.status}). Generation may fail.`);
+            return false;
+          }
+          console.log(`✅ ${frameName} URL is accessible`);
+          return true;
+        } catch (error) {
+          console.warn(`⚠️ ${frameName} URL preflight failed:`, error);
+          showWarning(`${frameName} URL Issue`, `Cannot verify ${frameName.toLowerCase()} accessibility. Generation may fail.`);
+          return false;
+        }
+      };
+
       // Helper function to prepare keyframe URLs for Luma API
       const prepareKeyframeUrl = async (contentItem: ContentItem | null): Promise<string | undefined> => {
         if (!contentItem) return undefined;
 
-        // WORKAROUND: Since SAS backend is not reachable from UXP, return a test public URL
-        // TODO: Replace with actual Azure upload once backend is available
-        // For testing, use a placeholder image. To use actual keyframes, upload them to a public URL manually
-        console.log('� WORKAROUND: Using test public URL for keyframe instead of Azure upload:', contentItem.filename);
-        return "https://picsum.photos/512/512"; // Placeholder image for testing Luma API flow
+        try {
+          console.log('☁️ Preparing keyframe URL for Azure upload:', contentItem.filename);
+
+          // Check if we have the required folder token and relative path
+          if (!contentItem.folderToken || !contentItem.relativePath) {
+            console.warn('⚠️ Missing folder token or relative path for keyframe upload');
+            return contentItem.displayUrl || contentItem.blobUrl;
+          }
+
+          // Read the image file using correct UXP storage API
+          const fs = uxp.storage.localFileSystem;
+          const folder = await fs.getEntryForPersistentToken(contentItem.folderToken);
+          const file = await folder.getEntry(contentItem.relativePath);
+          const binaryFormat = uxp.storage.formats?.binary;
+          const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
+          const fileData = await file.read(readOptions);
+
+          // Create Azure blob service for keyframe uploads
+          const azureBlobService = createAzureSDKBlobService();
+
+          // Upload to Azure and get public URL
+          const uploadResult = await azureBlobService.uploadBlob(
+            fileData,
+            'uxp-images',
+            contentItem.filename,
+            {
+              filename: contentItem.filename,
+              contentType: contentItem.mimeType || 'image/jpeg'
+            }
+          );
+
+          console.log('✅ Keyframe uploaded to Azure:', uploadResult.blobUrl);
+          return uploadResult.blobUrl;
+        } catch (error) {
+          console.error('❌ Failed to upload keyframe to Azure:', error);
+          // Fallback: try to use existing displayUrl if available
+          if (contentItem.displayUrl) {
+            console.warn('⚠️ Falling back to displayUrl for keyframe:', contentItem.displayUrl);
+            return contentItem.displayUrl;
+          }
+          throw error;
+        }
       };
 
       const lumaService = new LumaVideoService({
@@ -487,7 +589,7 @@ const AppContent = () => {
         },
       };
 
-      console.log('🚀 Sending Luma Dream Machine request:', {
+      console.log(`🚀 [${generationSessionId}] Sending Luma Dream Machine request:`, {
         ...lumaRequest,
         frame0_url: frame0Url,
         frame1_url: frame1Url,
@@ -496,14 +598,15 @@ const AppContent = () => {
       });
 
       const result = await lumaService.generateVideo(lumaRequest);
-      console.log('✅ Luma Dream Machine generation completed:', result);
+      const jobId = result.metadata?.id;
+      console.log(`✅ [${generationSessionId}] Luma Dream Machine generation completed - Job ID: ${jobId}`, result);
 
       const durationSeconds = parseInt(lumaDuration.replace(/[^0-9]/g, ''), 10) || undefined;
       const computedSeed = Math.floor(Math.random() * 999999);
       const resolutionKey = typeof lumaResolution === 'string' ? lumaResolution.toLowerCase() : '';
       const resolutionSize = resolutionLookup[resolutionKey] ?? undefined;
 
-      console.log('💾 Saving Luma Dream Machine video to local storage...');
+      console.log(`💾 [${generationSessionId}] Saving Luma Dream Machine video to local storage - Job ID: ${jobId}...`);
       const localSaveResult = await saveGenerationLocally({
         blob: result.blob,
         metadata: {
@@ -572,14 +675,14 @@ const AppContent = () => {
           `Generated "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB) - saved in memory only`
         );
 
-        console.log('🎥 Video added to gallery store (data URL fallback):', {
+        console.log(`🎥 [${generationSessionId}] Video added to gallery store (data URL fallback) - Job ID: ${jobId}:`, {
           id: videoGenerationResult.id,
           videoUrl,
           filename: result.filename,
           size: result.blob.size,
         });
       } else {
-        console.log('✅ Luma Dream Machine video saved locally:', localSaveResult);
+        console.log(`✅ [${generationSessionId}] Luma Dream Machine video saved locally - Job ID: ${jobId}`, localSaveResult);
 
         const videoGenerationResult = {
           id: uuidv4(),
@@ -626,7 +729,7 @@ const AppContent = () => {
           `Generated "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB) - saved to ${localSaveResult.displayPath || localSaveResult.filePath}`
         );
 
-        console.log('🎥 Video added to gallery store (local file):', {
+        console.log(`🎥 [${generationSessionId}] Video added to gallery store (local file) - Job ID: ${jobId}:`, {
           id: videoGenerationResult.id,
           localPath: localSaveResult.filePath,
           relativePath: localSaveResult.relativePath,
@@ -657,10 +760,11 @@ const AppContent = () => {
     setIsGeneratingLuma(true);
 
     try {
+      const generationSessionId = `luma-gen-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       showInfo('Reframming Video', `Changing aspect ratio of "${lumaReframeVideoItem.filename}" to ${lumaAspectRatio}`);
 
-      console.log('🎞️ Starting Luma Dream Machine video reframing...');
-      console.log('📝 Luma reframe parameters:', {
+      console.log(`🎞️ [${generationSessionId}] Starting Luma Dream Machine video reframing...`);
+      console.log(`📝 [${generationSessionId}] Luma reframe parameters:`, {
         prompt: lumaPrompt,
         model: lumaModel,
         aspect_ratio: lumaAspectRatio,
@@ -683,14 +787,15 @@ const AppContent = () => {
         aspect_ratio: lumaAspectRatio,
       };
 
-      console.log('🚀 Sending Luma Dream Machine reframe request:', reframeRequest);
+      console.log(`🚀 [${generationSessionId}] Sending Luma Dream Machine reframe request:`, reframeRequest);
 
       const result = await lumaService.reframeVideo(reframeRequest);
-      console.log('✅ Luma Dream Machine reframe completed:', result);
+      const jobId = result.metadata?.id;
+      console.log(`✅ [${generationSessionId}] Luma Dream Machine reframe completed - Job ID: ${jobId}`, result);
 
       const computedSeed = Math.floor(Math.random() * 999999);
 
-      console.log('💾 Saving Luma Dream Machine reframed video to local storage...');
+      console.log(`💾 [${generationSessionId}] Saving Luma Dream Machine reframed video to local storage - Job ID: ${jobId}...`);
       const localSaveResult = await saveGenerationLocally({
         blob: result.blob,
         metadata: {
@@ -759,14 +864,14 @@ const AppContent = () => {
           `Reframed "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB) - saved in memory only`
         );
 
-        console.log('🎥 Reframed video added to gallery store (data URL fallback):', {
+        console.log(`🎥 [${generationSessionId}] Reframed video added to gallery store (data URL fallback) - Job ID: ${jobId}:`, {
           id: videoGenerationResult.id,
           videoUrl,
           filename: result.filename,
           size: result.blob.size,
         });
       } else {
-        console.log('✅ Luma Dream Machine reframed video saved locally:', localSaveResult);
+        console.log(`✅ [${generationSessionId}] Luma Dream Machine reframed video saved locally - Job ID: ${jobId}`, localSaveResult);
 
         const videoGenerationResult = {
           id: uuidv4(),
@@ -813,7 +918,7 @@ const AppContent = () => {
           `Reframed "${result.filename}" (${(result.blob.size / 1024 / 1024).toFixed(2)} MB) - saved to ${localSaveResult.displayPath || localSaveResult.filePath}`
         );
 
-        console.log('🎥 Reframed video added to gallery store (local file):', {
+        console.log(`🎥 [${generationSessionId}] Reframed video added to gallery store (local file) - Job ID: ${jobId}:`, {
           id: videoGenerationResult.id,
           localPath: localSaveResult.filePath,
           relativePath: localSaveResult.relativePath,
@@ -1596,7 +1701,6 @@ const AppContent = () => {
                                 )}
                               </div>
                             </div>
-
                             {/* First Frame Image */}
                             <div className="form-group">
                               {/* @ts-ignore */}
@@ -1645,8 +1749,6 @@ const AppContent = () => {
                                 </div>
                               )}
                             </div>
-
-                            {/* Last Frame Image */}
                             <div className="form-group">
                               {/* @ts-ignore */}
                               <sp-label className="form-label">Last Frame Image (Optional)</sp-label>
