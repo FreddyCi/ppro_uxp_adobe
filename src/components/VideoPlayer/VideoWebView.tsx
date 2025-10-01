@@ -170,26 +170,49 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
 
     const createWebViewFile = async () => {
       try {
-        console.log('🎬 [VideoWebView] Creating webview HTML file');
+        console.log('🎬 [VideoWebView] Creating webview HTML file with video');
         
-        const testHTML = `<!DOCTYPE html>
+        // Escape video src for HTML attribute
+        const escapedVideoSrc = videoSrc.replace(/"/g, '&quot;');
+        
+        const videoHTML = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <style>
-    body { margin: 0; padding: 20px; background: #ff00ff; color: white; font-family: monospace; font-size: 12px; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { width: 100%; height: 100vh; overflow: hidden; background: #000; display: flex; flex-direction: column; }
+    video { width: 100%; flex: 1; object-fit: contain; background: #000; }
+    #status { color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; font-family: monospace; font-size: 10px; max-height: 50px; overflow-y: auto; }
   </style>
 </head>
 <body>
-  <h1>🎬 WEBVIEW FILE LOADED!</h1>
-  <p>Video src length: ${videoSrc.length}</p>
-  <p>Src type: ${videoSrc.startsWith('data:') ? 'DATA URL' : 'OTHER'}</p>
-  <div id="test"></div>
+  <div id="status">Loading video...</div>
+  <video id="videoElement" ${controls ? 'controls' : ''} ${muted ? 'muted' : ''} ${autoPlay ? 'autoplay' : ''} ${poster ? `poster="${poster}"` : ''} preload="metadata" src="${escapedVideoSrc}">
+    Your browser does not support the video tag.
+  </video>
   <script>
-    document.getElementById('test').innerHTML = '<p style="color:yellow">JavaScript is working!</p>';
-    setTimeout(() => {
-      document.body.innerHTML += '<p style="color:lime">✅ Timeout fired!</p>';
-    }, 1000);
+    const video = document.getElementById('videoElement');
+    const status = document.getElementById('status');
+    
+    function log(msg) {
+      console.log(msg);
+      status.innerHTML += '<br>' + msg;
+      status.scrollTop = status.scrollHeight;
+    }
+    
+    log('Video src: ' + video.src.length + ' bytes');
+    
+    video.addEventListener('loadstart', () => log('✅ loadstart'));
+    video.addEventListener('loadedmetadata', () => log('✅ metadata - ' + video.duration + 's'));
+    video.addEventListener('loadeddata', () => log('✅ loadeddata'));
+    video.addEventListener('canplay', () => log('✅ canplay'));
+    video.addEventListener('canplaythrough', () => log('✅ canplaythrough'));
+    video.addEventListener('playing', () => log('▶️ playing'));
+    video.addEventListener('error', (e) => {
+      const err = video.error;
+      log('❌ ERROR ' + err.code + ': ' + err.message);
+    });
   </script>
 </body>
 </html>`;
@@ -202,11 +225,15 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
         const file = await tempFolder.createFile(filename, { overwrite: true });
         
         // Write HTML content
-        await file.write(testHTML);
+        await file.write(videoHTML);
         
-        // Get file URL (using plugin:// protocol)
+        // Get file URL
         const fileUrl = `file://${file.nativePath}`;
-        console.log('✅ [VideoWebView] HTML file created:', { fileUrl, nativePath: file.nativePath });
+        console.log('✅ [VideoWebView] Video HTML file created:', { 
+          fileUrl, 
+          nativePath: file.nativePath,
+          videoSrcLength: videoSrc.length
+        });
         
         setWebviewSrc(fileUrl);
       } catch (error) {
