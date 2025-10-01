@@ -396,8 +396,8 @@ export const Gallery = () => {
   const galleryActions = useGalleryStore(state => state.actions)
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers()
 
-  // Track processed video IDs across renders to prevent infinite loops
-  const processedVideoIds = useRef(new Set<string>());
+  // Track hydration status to prevent rendering videos before they're ready
+  const [isHydrating, setIsHydrating] = useState(true)
 
   // Log initial gallery state
   useEffect(() => {
@@ -431,123 +431,24 @@ export const Gallery = () => {
     }
   }, [contentItems]);
 
-  // Refresh URLs for video items that don't have displayable URLs
+  // Hydrate runtime URLs on mount (convert data: URLs to blob: URLs for video playback)
   useEffect(() => {
-    const refreshVideoUrls = async () => {
-      console.log(`🔄 [Gallery] Auto-refresh triggered - checking ${contentItems.length} items`);
-      
-      for (const item of contentItems) {
-        // Check if this is a video without a valid displayUrl
-        const isVideo = item.contentType === 'video' || item.contentType === 'uploaded-video';
-        
-        // CRITICAL: Skip if we already have a VALID data URL
-        // Data URLs are persistent (base64-encoded) and always work
-        // Blob URLs are ephemeral and expire on session close
-        if (item.displayUrl?.startsWith('data:')) {
-          // Already has a valid data URL - mark as processed and skip
-          processedVideoIds.current.add(item.id);
-          continue;
-        }
-        
-        // Skip if already processed this item (prevents infinite loop)
-        if (processedVideoIds.current.has(item.id)) {
-          console.log(`⏭️ [Gallery] Already processed: ${item.filename}`);
-          continue;
-        }
-        
-        // Check if URL is invalid (missing, file path, or expired blob)
-        const hasInvalidUrl = 
-          !item.displayUrl || // No URL at all
-          item.displayUrl.startsWith('/Users/') || // Local file path
-          item.displayUrl.startsWith('/') || // Any absolute path
-          item.displayUrl.startsWith('blob:'); // Expired blob URL from previous session
-        
-        if (isVideo && hasInvalidUrl) {
-          // Mark as processing to prevent re-processing
-          processedVideoIds.current.add(item.id);
-          // Check if this is a legacy video with blob URLs in relativePath
-          const isLegacyBlobVideo = item.relativePath?.startsWith('blob:');
-          
-          if (isLegacyBlobVideo) {
-            console.warn(`⚠️ [Gallery] Legacy video with expired blob URL - cannot recover: ${item.filename}`);
-            // Mark as unavailable - these videos can't be recovered
-            continue;
-          }
-          
-          // Check if we have valid local file references
-          const hasLocalFiles = item.folderToken && item.relativePath && !item.relativePath.startsWith('blob:');
-          
-          if (!hasLocalFiles) {
-            console.warn(`⚠️ [Gallery] Video missing local file references - skipping refresh: ${item.filename}`, {
-              hasToken: !!item.folderToken,
-              hasPath: !!item.relativePath,
-              relativePath: item.relativePath,
-              displayUrl: item.displayUrl?.substring(0, 30)
-            });
-            continue;
-          }
-          
-          try {
-            console.log(`🔄 [Gallery] Refreshing video to blob URL for: ${item.filename}`, {
-              currentUrl: item.displayUrl?.substring(0, 50),
-              hasLocalFiles,
-              folderToken: item.folderToken?.substring(0, 20),
-              relativePath: item.relativePath
-            });
-            
-            // Load video from local file and create fresh blob URL (UXP compatible)
-            const requireFn = (globalThis as unknown as { require?: (moduleId: string) => any }).require;
-            if (!requireFn) {
-              throw new Error('UXP require function not available');
-            }
-            
-            const uxp = requireFn('uxp') as any;
-            const fs = uxp.storage.localFileSystem;
-            const binaryFormat = uxp.storage.formats?.binary;
-            
-            const folder = await fs.getEntryForPersistentToken(item.folderToken);
-            const file = await folder.getEntry(item.relativePath);
-            const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
-            const fileData = await file.read(readOptions);
-            
-            const blobSource =
-              fileData instanceof ArrayBuffer
-                ? fileData
-                : ArrayBuffer.isView(fileData)
-                  ? fileData.buffer
-                  : fileData;
-            
-            // Create File object and blob URL (like the old code)
-            const videoFile = new File([blobSource], item.filename, { type: item.mimeType || 'video/mp4' });
-            const videoBlobUrl = URL.createObjectURL(videoFile);
-            
-            console.log(`✅ [Gallery] Created fresh blob URL:`, videoBlobUrl.substring(0, 50) + '...');
-            
-            // Update the item in the store with blob URL
-            if (item.contentType === 'video' || item.contentType === 'uploaded-video') {
-              const videoContent = item.content as VideoData;
-              galleryActions.updateContentItem(item.id, {
-                displayUrl: videoBlobUrl,
-                thumbnailUrl: videoBlobUrl, // Use blob URL as thumbnail
-                content: {
-                  ...videoContent,
-                  videoUrl: videoBlobUrl
-                }
-              });
-            }
-            
-            console.log(`✅ [Gallery] Refreshed video to blob URL for: ${item.filename}`);
-          } catch (error) {
-            console.error(`❌ [Gallery] Failed to refresh video URL for ${item.filename}:`, error);
-          }
-        }
-      }
-    };
+    const { hydrateRuntimeUrls, revokeRuntimeUrls } = galleryActions
+    console.log('🎬 [Gallery] Hydrating runtime URLs for video playback')
     
-    if (contentItems.length > 0) {
-      refreshVideoUrls();
+    const runHydration = async () => {
+      await hydrateRuntimeUrls()
+      setIsHydrating(false)
+      console.log('✅ [Gallery] Hydration complete, videos ready to render')
     }
-  }, [contentItems, galleryActions]); // Depend on contentItems array to trigger on any change
+    
+    runHydration()
+    
+    return () => {
+      console.log('🗑️ [Gallery] Revoking runtime URLs on unmount')
+      revokeRuntimeUrls()
+    }
+  }, [galleryActions]) // Re-run if actions change
 
   // Compute filtered and sorted items using useMemo
   const sortedItems = useMemo(() => {
@@ -585,14 +486,30 @@ export const Gallery = () => {
   // Convert unified ContentItems to gallery format for display
   const imagesToUse = useMemo(() => {
     return displayItems.map((item: ContentItem) => {
-      // For videos, prefer blob URLs over base64 data URLs
+      // For videos, prefer runtimeUrl (blob:) over data: URLs
       const isVideo = item.contentType === 'video' || item.contentType === 'uploaded-video';
       let videoUrl = '';
       let thumbnailUrl = item.thumbnailUrl || item.displayUrl;
       
       if (isVideo) {
         const videoContent = item.content as VideoData;
-        videoUrl = videoContent?.videoUrl || '';
+        // Prefer runtimeUrl (blob:) which works in UXP video elements
+        videoUrl = (item as any).runtimeUrl || videoContent?.videoUrl || '';
+        
+        // Debug logging to see what URL we're using
+        console.log(`🎥 [Gallery] Video URL for ${item.filename}:`, {
+          runtimeUrl: (item as any).runtimeUrl,
+          contentVideoUrl: videoContent?.videoUrl,
+          finalVideoUrl: videoUrl,
+          hasRuntimeUrl: !!(item as any).runtimeUrl,
+          urlType: videoUrl?.startsWith('blob:') ? 'blob' : videoUrl?.startsWith('data:') ? 'data' : videoUrl?.startsWith('/') ? 'native-path' : 'unknown',
+          pathLength: videoUrl?.length || 0
+        });
+        
+        // Also use runtimeUrl for thumbnail if available
+        if ((item as any).runtimeUrl) {
+          thumbnailUrl = (item as any).runtimeUrl;
+        }
       }
       
       return {
@@ -1163,7 +1080,18 @@ export const Gallery = () => {
 
         {/* Image Grid */}
         <div className="gallery-grid">
-          {filteredImages.map((image: ImageData) => (
+          {isHydrating ? (
+            <div style={{ 
+              padding: '40px', 
+              textAlign: 'center', 
+              color: '#666',
+              gridColumn: '1 / -1'
+            }}>
+              <div>🎬 Loading videos...</div>
+              <div style={{ fontSize: '12px', marginTop: '8px' }}>Preparing video playback</div>
+            </div>
+          ) : (
+            filteredImages.map((image: ImageData) => (
             <div key={image.id} className="gallery-item">
               <div className="item-image">
                 {image.isVideo ? (
@@ -1176,12 +1104,27 @@ export const Gallery = () => {
                       style={{ width: '100%', height: '200px', objectFit: 'cover' }}
                       onError={(e) => {
                         const target = e.target as HTMLVideoElement;
-                        console.warn('❌ Video failed to load:', {
+                        console.error('❌ Video failed to load:', {
                           originalSrc: target.src,
+                          srcLength: target.src?.length,
+                          srcStartsWith: target.src?.substring(0, 30),
                           prompt: image.prompt,
                           storageMode: image.storageMode,
                           persistenceMethod: image.persistenceMethod,
                         });
+                        
+                        // Try to get more error details
+                        const videoElement = target as any;
+                        if (videoElement.error) {
+                          console.error('❌ Video error details:', {
+                            code: videoElement.error.code,
+                            message: videoElement.error.message,
+                            MEDIA_ERR_ABORTED: videoElement.error.MEDIA_ERR_ABORTED,
+                            MEDIA_ERR_NETWORK: videoElement.error.MEDIA_ERR_NETWORK,
+                            MEDIA_ERR_DECODE: videoElement.error.MEDIA_ERR_DECODE,
+                            MEDIA_ERR_SRC_NOT_SUPPORTED: videoElement.error.MEDIA_ERR_SRC_NOT_SUPPORTED,
+                          });
+                        }
 
                         // Show error placeholder
                         target.style.display = 'none';
@@ -1308,10 +1251,11 @@ export const Gallery = () => {
                 )}
               </div>
             </div>
-          ))}
+          ))
+          )}
         </div>
 
-        {filteredImages.length === 0 && (
+        {filteredImages.length === 0 && !isHydrating && (
           <div className="gallery-empty">
             {/* @ts-ignore */}
             <sp-icon name="ui:Image" size="xl"></sp-icon>

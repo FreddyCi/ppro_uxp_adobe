@@ -19,6 +19,7 @@ import {
 } from '../types/content'
 import { uxp } from '../globals'
 import { refreshContentItemUrls } from '../utils/blobUrlLifecycle'
+import { dataUrlToObjectUrl } from '../utils/runtimeUrl'
 
 const VIDEO_EXTENSION_REGEX = /\.(mp4|mov|avi|mkv|webm|m4v)$/i
 const VIDEO_MIME_TYPES: Record<string, string> = {
@@ -201,6 +202,10 @@ export interface GalleryStore {
     // URL management
     updateItemUrl: (id: string, displayUrl: string, thumbnailUrl?: string) => void
     clearItemUrl: (id: string) => void
+    
+    // Runtime URL hydration for video playback
+    hydrateRuntimeUrls: () => Promise<void>
+    revokeRuntimeUrls: () => void
   }
 }// UXP-compatible storage implementation with localStorage
 const createUXPStorage = () => {
@@ -1021,6 +1026,128 @@ export const useGalleryStore = create<GalleryStore>()(
                 : item
             ),
           }))
+        },
+
+        /**
+         * Hydrate runtime URLs for video playback
+         * Converts persisted data: URLs OR loads from local files to create runtime blob: URLs that UXP can play
+         * Should be called on mount to prepare videos for playback
+         */
+        async hydrateRuntimeUrls(): Promise<void> {
+          const { contentItems } = get()
+          console.log(`🔄 [Store] Starting hydration for ${contentItems.length} items`)
+          
+          const updated = await Promise.all(contentItems.map(async (item: any) => {
+              const src =
+                item.contentType === 'video'
+                  ? item.content?.videoUrl || item.displayUrl
+                  : item.displayUrl
+
+              const hasData = typeof src === 'string' && src.startsWith('data:')
+              const hasExpiredBlob = typeof src === 'string' && src.startsWith('blob:')
+              const hasValidRuntimeBlob = item.runtimeUrl?.startsWith('blob:uxp-internal:')
+              const isVideo = item.contentType === 'video' || item.contentType === 'uploaded-video'
+              const hasNativeFilePath = typeof src === 'string' && (src.startsWith('/') || src.startsWith('C:\\') || src.startsWith('file://'))
+
+              console.log(`🔍 [Store] Checking ${item.filename}:`, {
+                isVideo,
+                hasData,
+                hasExpiredBlob,
+                hasNativeFilePath,
+                hasValidRuntimeBlob,
+                hasLocalFiles: !!(item.folderToken && item.relativePath),
+                srcType: src?.substring(0, 20),
+                runtimeUrlType: item.runtimeUrl?.substring(0, 30)
+              })
+
+              // Case 1: Has data URL - convert to blob URL
+              if (hasData && !hasValidRuntimeBlob) {
+                try {
+                  const objUrl = dataUrlToObjectUrl(src)
+                  if (objUrl) {
+                    console.log(`🎬 [Store] Hydrated runtime URL from data URL for: ${item.filename}`, {
+                      blobUrl: objUrl.substring(0, 50)
+                    })
+                    if (isVideo) {
+                      return {
+                        ...item,
+                        runtimeUrl: objUrl,
+                        content: { ...item.content, videoUrl: objUrl }
+                      }
+                    }
+                    return { ...item, runtimeUrl: objUrl }
+                  }
+                } catch (e) {
+                  console.warn('⚠️ hydrateRuntimeUrls failed for', item.filename, e)
+                }
+              }
+              
+              // Case 2: Video with native file path OR expired blob URL - recreate blob URL from file data
+              if (isVideo && (hasNativeFilePath || hasExpiredBlob) && !hasValidRuntimeBlob && item.folderToken && item.relativePath) {
+                try {
+                  console.log(`🔄 [Store] Recreating blob URL for video: ${item.filename}`)
+                  const fs = uxp.storage.localFileSystem
+                  const folder = await fs.getEntryForPersistentToken(item.folderToken)
+                  const file = await folder.getEntry(item.relativePath)
+                  
+                  // Read the file content as binary data
+                  const binaryFormat = uxp.storage.formats?.binary
+                  const readOptions = binaryFormat ? { format: binaryFormat } : undefined
+                  const arrayBuffer = await file.read(readOptions)
+                  
+                  if (!arrayBuffer) {
+                    throw new Error('Failed to read video file content')
+                  }
+                  
+                  // Create a blob with proper video MIME type
+                  const mimeType = 'video/mp4' // Default to mp4, adjust if needed
+                  const blob = new Blob([arrayBuffer], { type: mimeType })
+                  
+                  // Create blob URL - this creates a blob:uxp-internal: URL that video elements CAN play
+                  const blobUrl = URL.createObjectURL(blob)
+                  
+                  console.log(`🎬 [Store] Created fresh blob URL for video: ${item.filename}`, {
+                    blobUrl: blobUrl.substring(0, 60),
+                    fileSize: arrayBuffer.byteLength,
+                    mimeType
+                  })
+                  
+                  return {
+                    ...item,
+                    runtimeUrl: blobUrl,
+                    content: { ...item.content, videoUrl: blobUrl }
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Failed to recreate blob URL for video:', item.filename, e)
+                }
+              }
+              
+              return item
+            }))
+            
+            console.log(`✅ [Store] Hydration complete, updating state`)
+            set({ contentItems: updated })
+        },
+
+        /**
+         * Revoke runtime URLs to prevent memory leaks
+         * Should be called on unmount to clean up blob URLs
+         */
+        revokeRuntimeUrls(): void {
+          const items = get().contentItems as any[]
+          items.forEach(it => {
+            if (it?.runtimeUrl?.startsWith('blob:')) {
+              try { 
+                URL.revokeObjectURL(it.runtimeUrl)
+                console.log(`🗑️ [Gallery] Revoked runtime URL for: ${it.filename}`)
+              } catch {}
+            }
+          })
+          set({
+            contentItems: items.map(it =>
+              it?.runtimeUrl ? { ...it, runtimeUrl: undefined } : it
+            )
+          })
         },
       },
     }),
