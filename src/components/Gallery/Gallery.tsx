@@ -8,6 +8,7 @@ import { GeminiService } from '../../services/gemini';
 import type { CorrectionParams } from '../../types/gemini';
 import { useToastHelpers } from '../../hooks/useToast';
 import type { ContentItem, VideoData } from '../../types/content';
+import { VideoWebView } from '../VideoPlayer/VideoWebView';
 import './Gallery.scss';
 
 // Helper functions for gallery filtering and sorting
@@ -496,14 +497,14 @@ export const Gallery = () => {
         // Prefer runtimeUrl (blob:) which works in UXP video elements
         videoUrl = (item as any).runtimeUrl || videoContent?.videoUrl || '';
         
-        // Debug logging to see what URL we're using
-        console.log(`🎥 [Gallery] Video URL for ${item.filename}:`, {
+        // Debug logging to see what URL and data we have
+        console.log(`🎥 [Gallery] Video data for ${item.filename}:`, {
           runtimeUrl: (item as any).runtimeUrl,
           contentVideoUrl: videoContent?.videoUrl,
-          finalVideoUrl: videoUrl,
-          hasRuntimeUrl: !!(item as any).runtimeUrl,
-          urlType: videoUrl?.startsWith('blob:') ? 'blob' : videoUrl?.startsWith('data:') ? 'data' : videoUrl?.startsWith('/') ? 'native-path' : 'unknown',
-          pathLength: videoUrl?.length || 0
+          hasVideoBlob: !!videoContent?.videoBlob,
+          hasVideoDataUrl: !!(item.content as any)?.videoDataUrl,
+          videoDataUrlLength: (item.content as any)?.videoDataUrl?.length,
+          videoMimeType: (item.content as any)?.videoMimeType
         });
         
         // Also use runtimeUrl for thumbnail if available
@@ -534,6 +535,9 @@ export const Gallery = () => {
         // Video support
         isVideo,
         videoUrl,
+        videoBlob: isVideo ? (item.content as VideoData)?.videoBlob : undefined,
+        videoDataUrl: isVideo ? (item.content as any)?.videoDataUrl : undefined,
+        videoMimeType: isVideo ? (item.content as any)?.videoMimeType || 'video/mp4' : undefined,
         duration: isVideo ? (item.content as any).duration : undefined,
         fps: isVideo ? (item.content as any).fps : undefined,
         resolution: isVideo ? (item.content as any).resolution : undefined,
@@ -615,7 +619,7 @@ export const Gallery = () => {
     }
 
     return filtered;
-  }, [localSearchQuery, localContentType, localAspectRatio, localDateRange, localSortBy]);
+  }, [imagesToUse, localSearchQuery, localContentType, localAspectRatio, localDateRange, localSortBy]);
 
   const handleApplyFilters = () => {
     // Filters are already applied via useMemo
@@ -1092,62 +1096,40 @@ export const Gallery = () => {
             </div>
           ) : (
             filteredImages.map((image: ImageData) => (
-            <div key={image.id} className="gallery-item">
+            <div key={`${image.id}-${isHydrating ? 'loading' : 'ready'}`} className="gallery-item">
               <div className="item-image">
                 {image.isVideo ? (
                   (image.videoUrl || image.url) ? (
-                    <video 
-                      src={image.videoUrl || image.url} 
-                      controls
-                      muted
-                      poster={image.url} // Use thumbnail if available
-                      style={{ width: '100%', height: '200px', objectFit: 'cover' }}
-                      onError={(e) => {
-                        const target = e.target as HTMLVideoElement;
-                        console.error('❌ Video failed to load:', {
-                          originalSrc: target.src,
-                          srcLength: target.src?.length,
-                          srcStartsWith: target.src?.substring(0, 30),
+                    <>
+                      {console.log('🎬 [Gallery] Rendering VideoWebView with:', {
+                        hasVideoDataUrl: !!(image as any).videoDataUrl,
+                        videoDataUrlLength: (image as any).videoDataUrl?.length,
+                        videoDataUrlPrefix: (image as any).videoDataUrl?.substring(0, 50)
+                      })}
+                      <VideoWebView
+                      key={`video-${image.id}-${image.videoUrl?.substring(0, 20)}`}
+                      videoDataUrl={(image as any).videoDataUrl}
+                      videoUrl={image.videoUrl || image.url}
+                      poster={image.url}
+                      width="100%"
+                      height="200px"
+                      controls={true}
+                      muted={true}
+                      onLoadedMetadata={() => {
+                        console.log('✅ Video metadata loaded successfully for:', image.prompt);
+                      }}
+                      onError={(error) => {
+                        console.error('❌ Video failed to load in WebView:', {
+                          videoUrl: image.videoUrl || image.url,
+                          hasVideoDataUrl: !!(image as any).videoDataUrl,
+                          videoDataUrlLength: (image as any).videoDataUrl?.length,
+                          error,
                           prompt: image.prompt,
                           storageMode: image.storageMode,
-                          persistenceMethod: image.persistenceMethod,
                         });
-                        
-                        // Try to get more error details
-                        const videoElement = target as any;
-                        if (videoElement.error) {
-                          console.error('❌ Video error details:', {
-                            code: videoElement.error.code,
-                            message: videoElement.error.message,
-                            MEDIA_ERR_ABORTED: videoElement.error.MEDIA_ERR_ABORTED,
-                            MEDIA_ERR_NETWORK: videoElement.error.MEDIA_ERR_NETWORK,
-                            MEDIA_ERR_DECODE: videoElement.error.MEDIA_ERR_DECODE,
-                            MEDIA_ERR_SRC_NOT_SUPPORTED: videoElement.error.MEDIA_ERR_SRC_NOT_SUPPORTED,
-                          });
-                        }
-
-                        // Show error placeholder
-                        target.style.display = 'none';
-                        const parent = target.parentElement;
-                        if (parent && !parent.querySelector('.error-placeholder')) {
-                          const placeholder = document.createElement('div');
-                          placeholder.className = 'error-placeholder';
-                          placeholder.style.cssText = `
-                            width: 100%; height: 200px; background: #f0f0f0; 
-                            display: flex; align-items: center; justify-content: center;
-                            color: #666; font-size: 14px; text-align: center;
-                          `;
-                          placeholder.innerHTML = `
-                            <div>
-                              <div>🎥</div>
-                              <div>Video unavailable</div>
-                              <div style="font-size: 12px; margin-top: 4px;">URL expired</div>
-                            </div>
-                          `;
-                          parent.appendChild(placeholder);
-                        }
                       }}
                     />
+                    </>
                   ) : (
                     <div className="error-placeholder" style={{
                       width: '100%', height: '200px', background: '#f0f0f0', 

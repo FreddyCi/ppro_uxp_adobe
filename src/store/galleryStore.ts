@@ -1106,16 +1106,31 @@ export const useGalleryStore = create<GalleryStore>()(
                   // Create blob URL - this creates a blob:uxp-internal: URL that video elements CAN play
                   const blobUrl = URL.createObjectURL(blob)
                   
+                  // Convert ArrayBuffer to base64 data URL for WebView (ArrayBuffers can't be persisted)
+                  const bytes = new Uint8Array(arrayBuffer)
+                  const base64 = encodeBase64(bytes)
+                  const videoDataUrl = `data:${mimeType};base64,${base64}`
+                  
                   console.log(`🎬 [Store] Created fresh blob URL for video: ${item.filename}`, {
-                    blobUrl: blobUrl.substring(0, 60),
+                    blobUrl: blobUrl,
+                    fullBlobUrl: blobUrl,
                     fileSize: arrayBuffer.byteLength,
-                    mimeType
+                    dataUrlLength: videoDataUrl.length,
+                    mimeType,
+                    urlConstructor: URL.name,
+                    blobConstructor: blob.constructor.name
                   })
                   
                   return {
                     ...item,
                     runtimeUrl: blobUrl,
-                    content: { ...item.content, videoUrl: blobUrl }
+                    content: { 
+                      ...item.content, 
+                      videoUrl: blobUrl, 
+                      videoBlob: blob,
+                      videoDataUrl,  // Save data URL string (can be persisted)
+                      videoMimeType: mimeType
+                    }
                   }
                 } catch (e) {
                   console.warn('⚠️ Failed to recreate blob URL for video:', item.filename, e)

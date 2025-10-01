@@ -151,6 +151,14 @@ declare global {
         },
         HTMLElement
       >;
+      "webview": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement> & {
+          src?: string;
+          width?: string | number;
+          height?: string | number;
+        },
+        HTMLElement
+      >;
     }
   }
 }
