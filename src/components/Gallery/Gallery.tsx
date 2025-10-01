@@ -488,14 +488,14 @@ export const Gallery = () => {
           }
           
           try {
-            console.log(`🔄 [Gallery] Refreshing video to DATA URL for: ${item.filename}`, {
+            console.log(`🔄 [Gallery] Refreshing video to blob URL for: ${item.filename}`, {
               currentUrl: item.displayUrl?.substring(0, 50),
               hasLocalFiles,
               folderToken: item.folderToken?.substring(0, 20),
               relativePath: item.relativePath
             });
             
-            // Load video as blob from local file and convert to base64 data URL using UXP-compatible method
+            // Load video from local file and create fresh blob URL (UXP compatible)
             const requireFn = (globalThis as unknown as { require?: (moduleId: string) => any }).require;
             if (!requireFn) {
               throw new Error('UXP require function not available');
@@ -517,31 +517,26 @@ export const Gallery = () => {
                   ? fileData.buffer
                   : fileData;
             
-            const blob = new Blob([blobSource], { type: item.mimeType || 'video/mp4' });
+            // Create File object and blob URL (like the old code)
+            const videoFile = new File([blobSource], item.filename, { type: item.mimeType || 'video/mp4' });
+            const videoBlobUrl = URL.createObjectURL(videoFile);
             
-            // Convert to base64 data URL using UXP-compatible base64 encoder
-            const arrayBuffer = await blob.arrayBuffer();
-            const bytes = new Uint8Array(arrayBuffer);
-            const base64 = encodeBase64UXP(bytes);
-            const mimeType = blob.type || 'video/mp4';
-            const dataUrl = `data:${mimeType};base64,${base64}`;
+            console.log(`✅ [Gallery] Created fresh blob URL:`, videoBlobUrl.substring(0, 50) + '...');
             
-            console.log(`✅ [Gallery] Converted to data URL:`, dataUrl.substring(0, 50) + '...');
-            
-            // Update the item in the store with data URL
+            // Update the item in the store with blob URL
             if (item.contentType === 'video' || item.contentType === 'uploaded-video') {
               const videoContent = item.content as VideoData;
               galleryActions.updateContentItem(item.id, {
-                displayUrl: dataUrl,
-                thumbnailUrl: dataUrl, // Use data URL as thumbnail
+                displayUrl: videoBlobUrl,
+                thumbnailUrl: videoBlobUrl, // Use blob URL as thumbnail
                 content: {
                   ...videoContent,
-                  videoUrl: dataUrl
+                  videoUrl: videoBlobUrl
                 }
               });
             }
             
-            console.log(`✅ [Gallery] Refreshed video to DATA URL for: ${item.filename}`);
+            console.log(`✅ [Gallery] Refreshed video to blob URL for: ${item.filename}`);
           } catch (error) {
             console.error(`❌ [Gallery] Failed to refresh video URL for ${item.filename}:`, error);
           }
@@ -598,19 +593,6 @@ export const Gallery = () => {
       if (isVideo) {
         const videoContent = item.content as VideoData;
         videoUrl = videoContent?.videoUrl || '';
-        
-        // If we have a blob URL, prefer it over data URLs
-        if (videoUrl && videoUrl.startsWith('data:')) {
-          // Check if displayUrl is a blob URL
-          if (item.displayUrl && item.displayUrl.startsWith('blob:')) {
-            videoUrl = item.displayUrl;
-          }
-        }
-        
-        // For thumbnail, prefer actual thumbnail over displayUrl if it's a blob
-        if (item.displayUrl && item.displayUrl.startsWith('data:')) {
-          thumbnailUrl = videoUrl; // Use the video URL as fallback
-        }
       }
       
       return {
