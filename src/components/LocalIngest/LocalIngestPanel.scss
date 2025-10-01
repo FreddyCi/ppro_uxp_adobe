@@ -137,12 +137,17 @@
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
 
+  .clip-card__preview{
+    margin-right: 20px;
+  }
+
   &__preview {
     width: 160px;
     height: 90px;
     border-radius: 6px;
     overflow: hidden;
     background: var(--spectrum-global-color-gray-800, #2b2b2b);
+    flex-shrink: 0; // Prevent preview from shrinking
 
     video {
       width: 100%;
@@ -153,11 +158,21 @@
 
   &__placeholder {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     width: 100%;
     height: 100%;
-    font-size: 32px;
+    gap: 8px;
+    
+    sp-icon {
+      color: var(--spectrum-global-color-gray-500, #6e6e6e);
+    }
+    
+    .text-detail {
+      font-size: 11px;
+      color: var(--spectrum-global-color-gray-500, #6e6e6e);
+    }
   }
 
   &__body {
@@ -165,6 +180,8 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    min-width: 0; // Allow flex items to shrink below their content size
+    margin-right: 12px; // Add right margin for body content
   }
 
   &__header {
@@ -176,6 +193,7 @@
 
   &__title {
     font-weight: 600;
+    margin-bottom: 6px;
   }
 
   &__badges {
@@ -194,6 +212,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    margin-bottom: 16px;
     font-size: 12px;
 
     .clip-card__meta-row {
@@ -203,8 +222,8 @@
 
       .label {
         color: var(--spectrum-global-color-gray-400, #a4a4a4);
-        width: 80px;
         flex-shrink: 0;
+        margin-right: 4px;
       }
 
       .value {
@@ -222,6 +241,11 @@
     flex-direction: column;
     gap: 6px;
     margin-top: auto;
+    
+    sp-button {
+      width: fit-content; // Make button width fit its content instead of 100%
+      min-width: 140px; // Set a reasonable minimum width
+    }
   }
 
   &__status {
