@@ -181,37 +181,20 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
   <meta charset="UTF-8">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { width: 100%; height: 100vh; overflow: hidden; background: #000; display: flex; flex-direction: column; }
-    video { width: 100%; flex: 1; object-fit: contain; background: #000; }
-    #status { color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; font-family: monospace; font-size: 10px; max-height: 50px; overflow-y: auto; }
+    body { width: 100%; height: 100vh; overflow: hidden; background: #000; }
+    video { width: 100%; height: 100%; object-fit: cover; background: #000; }
   </style>
 </head>
 <body>
-  <div id="status">Loading video...</div>
   <video id="videoElement" ${controls ? 'controls' : ''} ${muted ? 'muted' : ''} ${autoPlay ? 'autoplay' : ''} ${poster ? `poster="${poster}"` : ''} preload="metadata" src="${escapedVideoSrc}">
     Your browser does not support the video tag.
   </video>
   <script>
     const video = document.getElementById('videoElement');
-    const status = document.getElementById('status');
     
-    function log(msg) {
-      console.log(msg);
-      status.innerHTML += '<br>' + msg;
-      status.scrollTop = status.scrollHeight;
-    }
-    
-    log('Video src: ' + video.src.length + ' bytes');
-    
-    video.addEventListener('loadstart', () => log('✅ loadstart'));
-    video.addEventListener('loadedmetadata', () => log('✅ metadata - ' + video.duration + 's'));
-    video.addEventListener('loadeddata', () => log('✅ loadeddata'));
-    video.addEventListener('canplay', () => log('✅ canplay'));
-    video.addEventListener('canplaythrough', () => log('✅ canplaythrough'));
-    video.addEventListener('playing', () => log('▶️ playing'));
     video.addEventListener('error', (e) => {
       const err = video.error;
-      log('❌ ERROR ' + err.code + ': ' + err.message);
+      console.error('Video error ' + err.code + ': ' + err.message);
     });
   </script>
 </body>
@@ -267,7 +250,8 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
       width: typeof width === 'number' ? `${width}px` : width,
       height: typeof height === 'number' ? `${height}px` : height,
       backgroundColor: '#000',
-      position: 'relative'
+      position: 'relative',
+      overflow: 'hidden'
     }}>
       {webviewSrc ? (
         <webview
@@ -278,6 +262,8 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
             width: '100%',
             height: '100%',
             backgroundColor: '#000',
+            border: 'none',
+            display: 'block'
           }}
         />
       ) : (
@@ -288,7 +274,8 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
           alignItems: 'center',
           justifyContent: 'center',
           color: '#999',
-          fontSize: '12px'
+          fontSize: '12px',
+          backgroundColor: '#000'
         }}>
           Preparing video...
         </div>
