@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+const storage = require('uxp').storage;
+const fs = storage.localFileSystem;
+
 // Helper function to encode bytes to base64 (UXP-compatible)
 function encodeBase64(bytes: Uint8Array): string {
   if (typeof btoa === 'function') {
@@ -160,119 +163,109 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
     }
   }, [videoUrl, videoBlob, videoArrayBuffer, videoDataUrl, videoMimeType])
 
+  const [webviewSrc, setWebviewSrc] = useState<string>('');
+
   useEffect(() => {
-    const webview = webviewRef.current;
-    if (!webview || !videoSrc) return;
+    if (!videoSrc) return;
 
-    console.log('🎬 [VideoWebView] Creating WebView HTML with videoSrc:', {
-      videoSrcLength: videoSrc.length,
-      videoSrcPrefix: videoSrc.substring(0, 50),
-      isDataUrl: videoSrc.startsWith('data:'),
-      mimeType: videoSrc.match(/^data:([^;]+)/)?.[1]
-    })
+    const createWebViewFile = async () => {
+      try {
+        console.log('🎬 [VideoWebView] Creating webview HTML file');
+        
+        const testHTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { margin: 0; padding: 20px; background: #ff00ff; color: white; font-family: monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>🎬 WEBVIEW FILE LOADED!</h1>
+  <p>Video src length: ${videoSrc.length}</p>
+  <p>Src type: ${videoSrc.startsWith('data:') ? 'DATA URL' : 'OTHER'}</p>
+  <div id="test"></div>
+  <script>
+    document.getElementById('test').innerHTML = '<p style="color:yellow">JavaScript is working!</p>';
+    setTimeout(() => {
+      document.body.innerHTML += '<p style="color:lime">✅ Timeout fired!</p>';
+    }, 1000);
+  </script>
+</body>
+</html>`;
 
-    // Generate the HTML content for the webview
-    const videoHTML = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-          }
-          body {
-            width: 100%;
-            height: 100vh;
-            overflow: hidden;
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-          }
-        </style>
-      </head>
-      <body>
-        <video
-          id="videoElement"
-          ${controls ? 'controls' : ''}
-          ${muted ? 'muted' : ''}
-          ${autoPlay ? 'autoplay' : ''}
-          ${poster ? `poster="${poster}"` : ''}
-          src="${videoSrc}"
-          preload="metadata"
-        >
-          Your browser does not support the video tag.
-        </video>
-        <script>
-          const video = document.getElementById('videoElement');
-          
-          console.log('📺 [WebView Internal] Video element created:', {
-            src: video.src.substring(0, 50),
-            srcLength: video.src.length,
-            readyState: video.readyState,
-            networkState: video.networkState
-          });
-          
-          video.addEventListener('loadedmetadata', () => {
-            window.parent.postMessage({ type: 'loadedmetadata' }, '*');
-          });
-          
-          video.addEventListener('error', (e) => {
-            window.parent.postMessage({ 
-              type: 'error',
-              error: {
-                code: video.error?.code,
-                message: video.error?.message
-              }
-            }, '*');
-          });
-          
-          video.addEventListener('canplay', () => {
-            window.parent.postMessage({ type: 'canplay' }, '*');
-          });
-        </script>
-      </body>
-      </html>
-    `;
-
-    // Set the HTML content
-    // Note: UXP webview uses 'src' with a data URI or you can use srcdoc
-    const dataUri = `data:text/html;charset=utf-8,${encodeURIComponent(videoHTML)}`;
-    webview.setAttribute('src', dataUri);
-
-    // Listen for messages from the webview
-    const handleMessage = (event: any) => {
-      if (event.data.type === 'error' && onError) {
-        onError(event.data.error);
-      } else if (event.data.type === 'loadedmetadata' && onLoadedMetadata) {
-        onLoadedMetadata();
+        // Get temp folder
+        const tempFolder = await fs.getTemporaryFolder();
+        
+        // Create unique filename
+        const filename = `webview-${Date.now()}.html`;
+        const file = await tempFolder.createFile(filename, { overwrite: true });
+        
+        // Write HTML content
+        await file.write(testHTML);
+        
+        // Get file URL (using plugin:// protocol)
+        const fileUrl = `file://${file.nativePath}`;
+        console.log('✅ [VideoWebView] HTML file created:', { fileUrl, nativePath: file.nativePath });
+        
+        setWebviewSrc(fileUrl);
+      } catch (error) {
+        console.error('❌ [VideoWebView] Error creating webview file:', error);
       }
     };
 
-    window.addEventListener('message', handleMessage);
+    createWebViewFile();
+  }, [videoSrc]);
 
-    return () => {
-      window.removeEventListener('message', handleMessage);
-    };
-  }, [videoUrl, poster, controls, muted, autoPlay, onError, onLoadedMetadata]);
-
-  return (
-    <webview
-      ref={webviewRef}
-      style={{
+  // Don't render until we have videoSrc
+  if (!videoSrc) {
+    return (
+      <div style={{
         width: typeof width === 'number' ? `${width}px` : width,
         height: typeof height === 'number' ? `${height}px` : height,
-        border: 'none',
-        backgroundColor: '#000',
-      }}
-    />
+        backgroundColor: '#333',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#fff',
+        fontSize: '12px'
+      }}>
+        Loading video...
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      width: typeof width === 'number' ? `${width}px` : width,
+      height: typeof height === 'number' ? `${height}px` : height,
+      backgroundColor: '#ff0000', // RED background to see if container renders
+      border: '2px solid yellow',
+      position: 'relative'
+    }}>
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        color: 'white',
+        background: 'blue',
+        padding: '5px',
+        fontSize: '10px',
+        zIndex: 1000
+      }}>
+        WEBVIEW CONTAINER (data URL: {videoSrc?.substring(0, 30)}...)
+      </div>
+      <webview
+        key={`webview-${videoSrc.substring(0, 50)}`}
+        ref={webviewRef}
+        src={webviewSrc}
+        style={{
+          width: '100%',
+          height: '100%',
+          border: '3px solid cyan',
+          backgroundColor: '#00ff00', // GREEN background for webview itself
+        }}
+      />
+    </div>
   );
 };
