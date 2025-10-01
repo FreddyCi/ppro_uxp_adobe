@@ -203,8 +203,8 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
         // Get temp folder
         const tempFolder = await fs.getTemporaryFolder();
         
-        // Create unique filename
-        const filename = `webview-${Date.now()}.html`;
+        // Create unique filename with timestamp and random component to prevent collisions
+        const filename = `webview-${Date.now()}-${Math.random().toString(36).substring(2, 9)}.html`;
         const file = await tempFolder.createFile(filename, { overwrite: true });
         
         // Write HTML content
@@ -213,6 +213,7 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
         // Get file URL
         const fileUrl = `file://${file.nativePath}`;
         console.log('✅ [VideoWebView] Video HTML file created:', { 
+          filename,
           fileUrl, 
           nativePath: file.nativePath,
           videoSrcLength: videoSrc.length

@@ -1104,10 +1104,16 @@ export const useGalleryStore = create<GalleryStore>()(
               // Case 2: Video with native file path OR expired blob URL - recreate blob URL from file data
               if (isVideo && (hasNativeFilePath || hasExpiredBlob) && !hasValidRuntimeBlob && item.folderToken && item.relativePath) {
                 try {
-                  console.log(`🔄 [Store] Recreating blob URL for video: ${item.filename}`)
+                  console.log(`🔄 [Store] Recreating blob URL for video: ${item.filename}`, {
+                    filename: item.filename,
+                    relativePath: item.relativePath,
+                    folderToken: item.folderToken?.substring(0, 20) + '...'
+                  })
                   const fs = uxp.storage.localFileSystem
                   const folder = await fs.getEntryForPersistentToken(item.folderToken)
                   const file = await folder.getEntry(item.relativePath)
+                  
+                  console.log(`📂 [Store] Successfully loaded file from path: ${item.relativePath}`)
                   
                   // Read the file content as binary data
                   const binaryFormat = uxp.storage.formats?.binary

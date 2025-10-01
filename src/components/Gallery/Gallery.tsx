@@ -1128,12 +1128,15 @@ export const Gallery = () => {
                   (image.videoUrl || image.url) ? (
                     <>
                       {console.log('🎬 [Gallery] Rendering VideoWebView with:', {
+                        filename: image.prompt,
                         hasVideoDataUrl: !!(image as any).videoDataUrl,
                         videoDataUrlLength: (image as any).videoDataUrl?.length,
-                        videoDataUrlPrefix: (image as any).videoDataUrl?.substring(0, 50)
+                        videoDataUrlPrefix: (image as any).videoDataUrl?.substring(0, 50),
+                        videoUrl: image.videoUrl,
+                        url: image.url
                       })}
                       <VideoWebView
-                      key={`video-${image.id}-${image.videoUrl?.substring(0, 20)}`}
+                      key={`video-${image.id}-${(image as any).videoDataUrl?.length || 0}`}
                       videoDataUrl={(image as any).videoDataUrl}
                       videoUrl={image.videoUrl || image.url}
                       poster={image.url}
