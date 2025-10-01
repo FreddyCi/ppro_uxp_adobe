@@ -1067,6 +1067,7 @@ export const useGalleryStore = create<GalleryStore>()(
               const hasValidRuntimeBlob = item.runtimeUrl?.startsWith('blob:uxp-internal:')
               const isVideo = item.contentType === 'video' || item.contentType === 'uploaded-video'
               const hasNativeFilePath = typeof src === 'string' && (src.startsWith('/') || src.startsWith('C:\\') || src.startsWith('file://'))
+              const hasVideoBlob = isVideo && item.content?.videoBlob instanceof Blob
 
               console.log(`🔍 [Store] Checking ${item.filename}:`, {
                 isVideo,
@@ -1074,10 +1075,45 @@ export const useGalleryStore = create<GalleryStore>()(
                 hasExpiredBlob,
                 hasNativeFilePath,
                 hasValidRuntimeBlob,
+                hasVideoBlob,
                 hasLocalFiles: !!(item.folderToken && item.relativePath),
                 srcType: src?.substring(0, 20),
                 runtimeUrlType: item.runtimeUrl?.substring(0, 30)
               })
+
+              // Case 0: Video with Blob object but no URL - create blob URL directly
+              if (hasVideoBlob && !hasValidRuntimeBlob) {
+                try {
+                  const videoBlob = item.content.videoBlob
+                  const blobUrl = URL.createObjectURL(videoBlob)
+                  
+                  // Convert blob to base64 data URL for WebView persistence
+                  const arrayBuffer = await videoBlob.arrayBuffer()
+                  const bytes = new Uint8Array(arrayBuffer)
+                  const base64 = encodeBase64(bytes)
+                  const mimeType = videoBlob.type || 'video/mp4'
+                  const videoDataUrl = `data:${mimeType};base64,${base64}`
+                  
+                  console.log(`🎬 [Store] Created blob URL from videoBlob for: ${item.filename}`, {
+                    blobUrl: blobUrl.substring(0, 50),
+                    blobSize: videoBlob.size,
+                    mimeType
+                  })
+                  
+                  return {
+                    ...item,
+                    runtimeUrl: blobUrl,
+                    content: { 
+                      ...item.content, 
+                      videoUrl: blobUrl,
+                      videoDataUrl,
+                      videoMimeType: mimeType
+                    }
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Failed to create blob URL from videoBlob for', item.filename, e)
+                }
+              }
 
               // Case 1: Has data URL - convert to blob URL
               if (hasData && !hasValidRuntimeBlob) {

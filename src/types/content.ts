@@ -147,46 +147,98 @@ export const isVideoContent = (item: ContentItem): boolean =>
   ['video', 'uploaded-video'].includes(item.contentType)
 
 // Migration helpers for converting existing types to unified model
-export const convertGenerationResultToContentItem = (result: import('./firefly').GenerationResult): ContentItem => ({
-  // Base metadata
-  id: result.id,
-  filename: result.metadata.filename || `generation_${result.id}.jpg`,
-  originalName: result.metadata.filename || `generation_${result.id}.jpg`,
-  mimeType: result.metadata.contentType || 'image/jpeg',
-  size: result.metadata.fileSize || 0,
-  tags: [],
-  timestamp: new Date(result.timestamp),
-  userId: result.metadata.userId,
-  sessionId: result.metadata.sessionId,
+export const convertGenerationResultToContentItem = (result: import('./firefly').GenerationResult): ContentItem => {
+  // Detect if this is a video based on contentType field or videoUrl/videoBlob presence
+  const isVideoResult = result.contentType === 'video' || 
+                       !!(result as any).videoUrl || 
+                       !!(result as any).videoBlob ||
+                       result.metadata.contentType?.includes('video')
 
-  // Type and display
-  contentType: 'generated-image',
-  displayUrl: result.blobUrl || result.imageUrl,
-  thumbnailUrl: result.thumbnailUrl,
-  blobUrl: result.blobUrl,
-  localPath: result.localPath,
+  if (isVideoResult) {
+    // Convert as video content
+    const videoResult = result as any
+    return {
+      // Base metadata
+      id: result.id,
+      filename: result.metadata.filename || `generation_${result.id}.mp4`,
+      originalName: result.metadata.filename || `generation_${result.id}.mp4`,
+      mimeType: result.metadata.contentType || 'video/mp4',
+      size: result.metadata.fileSize || 0,
+      tags: [],
+      timestamp: new Date(result.timestamp),
+      userId: result.metadata.userId,
+      sessionId: result.metadata.sessionId,
 
-  // Content data
-  content: {
-    type: 'generated-image',
-    imageUrl: result.imageUrl,
-    downloadUrl: result.downloadUrl,
-    seed: result.seed,
-    generationMetadata: result.metadata,
-    prompt: result.metadata.prompt,
-    style: result.metadata.style as Record<string, unknown> | undefined,
-    size: result.metadata.resolution || { width: 1024, height: 1024 }
-  },
+      // Type and display
+      contentType: 'video',
+      displayUrl: result.blobUrl || videoResult.videoUrl || result.imageUrl,
+      thumbnailUrl: result.thumbnailUrl,
+      blobUrl: result.blobUrl,
+      localPath: result.localPath,
 
-  // Storage
-  storageMode: result.metadata.storageMode || 'memory',
-  persistenceMethod: result.metadata.persistenceMethod || 'blob',
-  folderToken: result.metadata.folderToken || undefined,
-  relativePath: result.metadata.relativePath,
+      // Content data
+      content: {
+        type: 'video',
+        videoUrl: videoResult.videoUrl || result.imageUrl,
+        videoBlob: videoResult.videoBlob,
+        duration: videoResult.duration || result.metadata.duration || 0,
+        fps: videoResult.fps || result.metadata.fps,
+        resolution: result.metadata.resolution || videoResult.resolution || { width: 1920, height: 1080 }
+      },
 
-  // Status
-  status: result.status === 'generated' ? 'ready' : 'processing'
-})
+      // Storage
+      storageMode: result.metadata.storageMode || 'memory',
+      persistenceMethod: result.metadata.persistenceMethod || 'blob',
+      folderToken: result.metadata.folderToken || undefined,
+      relativePath: result.metadata.relativePath,
+
+      // Status
+      status: result.status === 'generated' ? 'ready' : 'processing'
+    }
+  }
+
+  // Convert as image content (default behavior)
+  return {
+    // Base metadata
+    id: result.id,
+    filename: result.metadata.filename || `generation_${result.id}.jpg`,
+    originalName: result.metadata.filename || `generation_${result.id}.jpg`,
+    mimeType: result.metadata.contentType || 'image/jpeg',
+    size: result.metadata.fileSize || 0,
+    tags: [],
+    timestamp: new Date(result.timestamp),
+    userId: result.metadata.userId,
+    sessionId: result.metadata.sessionId,
+
+    // Type and display
+    contentType: 'generated-image',
+    displayUrl: result.blobUrl || result.imageUrl,
+    thumbnailUrl: result.thumbnailUrl,
+    blobUrl: result.blobUrl,
+    localPath: result.localPath,
+
+    // Content data
+    content: {
+      type: 'generated-image',
+      imageUrl: result.imageUrl,
+      downloadUrl: result.downloadUrl,
+      seed: result.seed,
+      generationMetadata: result.metadata,
+      prompt: result.metadata.prompt,
+      style: result.metadata.style as Record<string, unknown> | undefined,
+      size: result.metadata.resolution || { width: 1024, height: 1024 }
+    },
+
+    // Storage
+    storageMode: result.metadata.storageMode || 'memory',
+    persistenceMethod: result.metadata.persistenceMethod || 'blob',
+    folderToken: result.metadata.folderToken || undefined,
+    relativePath: result.metadata.relativePath,
+
+    // Status
+    status: result.status === 'generated' ? 'ready' : 'processing'
+  }
+}
 
 export const convertCorrectedImageToContentItem = (corrected: import('./gemini').CorrectedImage): ContentItem => ({
   // Base metadata
