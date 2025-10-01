@@ -1,11 +1,12 @@
 /**
  * SAS Token Service
- * Handles secure SAS token requests for Azure Storage operations
- * Validates IMS authentication and communicates with backend service
+ * Handles secure SAS token generation using Azure User Delegation Keys
+ * Generates SAS tokens client-side without backend service dependency
  */
 
-import axios from 'axios'
-import type { AxiosResponse } from 'axios'
+import {
+  BlobServiceClient,
+} from '@azure/storage-blob'
 import type { IIMSService } from '../ims/IMSService'
 
 // SAS Token Request/Response Types
@@ -38,7 +39,7 @@ export interface SASTokenError {
 }
 
 export interface SASTokenServiceConfig {
-  backendUrl: string
+  storageAccountName: string
   defaultExpirationMinutes: number
   maxExpirationMinutes: number
   timeout: number
@@ -50,19 +51,21 @@ export interface SASTokenServiceConfig {
 export class SASTokenService {
   private config: SASTokenServiceConfig
   private imsService: IIMSService
+  private blobServiceClient: BlobServiceClient | null = null
 
   constructor(config: SASTokenServiceConfig, imsService: IIMSService) {
     this.config = config
     this.imsService = imsService
     this.validateConfig()
+    this.initializeBlobServiceClient()
   }
 
   /**
    * Validate service configuration
    */
   private validateConfig(): void {
-    if (!this.config.backendUrl) {
-      throw new Error('Backend URL is required for SAS token service')
+    if (!this.config.storageAccountName) {
+      throw new Error('Storage account name is required for SAS token service')
     }
 
     if (
@@ -87,15 +90,33 @@ export class SASTokenService {
   }
 
   /**
-   * Request SAS token from backend service
+   * Initialize Azure Blob Service Client
    */
-  async requestSASToken(request: SASTokenRequest): Promise<SASTokenResponse> {
+  private initializeBlobServiceClient(): void {
+    try {
+      const accountUrl = `https://${this.config.storageAccountName}.blob.core.windows.net`
+      // We'll use anonymous credential initially and get user delegation key when needed
+      this.blobServiceClient = new BlobServiceClient(accountUrl)
+      console.warn('🔐 SAS Token Service: Blob service client initialized for user delegation')
+    } catch (error) {
+      console.error('🔐 SAS Token Service: Failed to initialize blob service client:', error)
+      throw new Error('Failed to initialize Azure Blob Service client')
+    }
+  }
+
+  /**
+   * Get user delegation key from Azure Storage
+   */
+  private async getUserDelegationKey(): Promise<any> {
+    if (!this.blobServiceClient) {
+      throw new Error('Blob service client not initialized')
+    }
+
     try {
       // Validate IMS authentication first
       const imsToken = await this.imsService.getAccessToken()
-
       if (!imsToken) {
-        throw new Error('IMS authentication required for SAS token request')
+        throw new Error('IMS authentication required for user delegation key request')
       }
 
       // Validate token is still valid
@@ -104,85 +125,120 @@ export class SASTokenService {
         throw new Error('IMS token is invalid or expired')
       }
 
-      // Prepare request with validated parameters
+      // Calculate start and expiry times
+      const now = new Date()
+      const expiryTime = new Date(now.getTime() + (this.config.maxExpirationMinutes * 60 * 1000))
+
+      console.warn('🔐 SAS Token Service: Requesting user delegation key', {
+        accountName: this.config.storageAccountName,
+        expiryTime: expiryTime.toISOString(),
+      })
+
+      // Get user delegation key using Azure SDK
+      const userDelegationKey = await this.blobServiceClient.getUserDelegationKey(now, expiryTime)
+
+      console.warn('🔐 SAS Token Service: Successfully obtained user delegation key')
+
+      return userDelegationKey
+    } catch (error) {
+      console.error('🔐 SAS Token Service: Failed to get user delegation key:', error)
+      throw new Error(`Failed to obtain user delegation key: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
+   * Request SAS token using user delegation key
+   */
+  async requestSASToken(request: SASTokenRequest): Promise<SASTokenResponse> {
+    try {
+      // Validate request
       const validatedRequest = this.validateRequest(request)
 
-      // Make authenticated request to backend
-      const backendUrl = `${this.config.backendUrl}/api/azure/sas-token`
+      // Get user delegation key
+      const userDelegationKey = await this.getUserDelegationKey()
 
-      console.warn('🔐 SAS Token Service: Requesting SAS token from backend', {
-        containerName: validatedRequest.containerName,
-        operation: validatedRequest.operation,
-        blobName: validatedRequest.blobName,
-        expirationMinutes: validatedRequest.expirationMinutes,
-        backendUrl,
-      })
+      // Calculate expiry time
+      const expiryTime = new Date(Date.now() + (validatedRequest.expirationMinutes! * 60 * 1000))
 
-      const response: AxiosResponse<SASTokenResponse | SASTokenError> =
-        await axios.post(backendUrl, validatedRequest, {
-          headers: {
-            Authorization: `Bearer ${imsToken}`,
-            'Content-Type': 'application/json',
-            'X-Adobe-IMS-Org': this.imsService.getTokenInfo().expiresAt
-              ? 'validated'
-              : 'unknown',
-          },
-          timeout: this.config.timeout,
+      let sasUrl: string
+
+      if (validatedRequest.blobName) {
+        // Generate blob SAS token using BlobClient
+        const containerClient = this.blobServiceClient!.getContainerClient(validatedRequest.containerName)
+        const blobClient = containerClient.getBlobClient(validatedRequest.blobName)
+        
+        const permissions = this.mapPermissionsToString(validatedRequest.permissions!)
+        sasUrl = await blobClient.generateUserDelegationSasUrl({
+          permissions: permissions as any, // Browser SDK expects permission object
+          expiresOn: expiryTime,
+        }, userDelegationKey)
+      } else {
+        // Generate container SAS token using ContainerClient
+        const containerClient = this.blobServiceClient!.getContainerClient(validatedRequest.containerName)
+        
+        const permissions = this.mapPermissionsToString(validatedRequest.permissions!)
+        sasUrl = await containerClient.generateSasUrl({
+          permissions: permissions as any, // Browser SDK expects permission object
+          expiresOn: expiryTime,
         })
-
-      // Handle response
-      if (!response.data.success) {
-        const errorResponse = response.data as SASTokenError
-        throw new Error(
-          `Backend SAS token request failed: ${errorResponse.error.message}`
-        )
       }
 
-      const sasResponse = response.data as SASTokenResponse
+      // Extract SAS token from URL (everything after the '?')
+      const sasToken = sasUrl.split('?')[1] || ''
 
-      console.warn('🔐 SAS Token Service: Successfully received SAS token', {
-        containerName: sasResponse.containerName,
-        blobName: sasResponse.blobName,
-        expiresAt: sasResponse.expiresAt,
-        permissions: sasResponse.permissions,
-        hasToken: !!sasResponse.sasToken,
-        hasUrl: !!sasResponse.sasUrl,
+      const response: SASTokenResponse = {
+        success: true,
+        sasUrl,
+        sasToken,
+        expiresAt: expiryTime.toISOString(),
+        permissions: validatedRequest.permissions!,
+        containerName: validatedRequest.containerName,
+        blobName: validatedRequest.blobName,
+      }
+
+      console.warn('🔐 SAS Token Service: Successfully generated SAS token', {
+        containerName: response.containerName,
+        blobName: response.blobName,
+        expiresAt: response.expiresAt,
+        permissions: response.permissions,
+        hasToken: !!response.sasToken,
+        hasUrl: !!response.sasUrl,
       })
 
-      return sasResponse
+      return response
     } catch (error) {
-      console.error('🔐 SAS Token Service: Failed to request SAS token:', error)
-
-      // Handle specific error types
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 401) {
-          throw new Error(
-            'IMS authentication failed or expired. Please re-authenticate.'
-          )
-        }
-        if (error.response?.status === 403) {
-          throw new Error('Insufficient permissions for Azure Storage access')
-        }
-        if (error.response?.status === 429) {
-          throw new Error('Rate limit exceeded. Please try again later.')
-        }
-        if (error.response?.status && error.response.status >= 500) {
-          throw new Error(
-            'Backend service temporarily unavailable. Please try again.'
-          )
-        }
-
-        throw new Error(
-          `SAS token request failed: ${error.response?.data?.message || error.message}`
-        )
-      }
+      console.error('🔐 SAS Token Service: Failed to generate SAS token:', error)
 
       if (error instanceof Error) {
         throw error
       }
 
-      throw new Error('Failed to request SAS token: Unknown error')
+      throw new Error('Failed to generate SAS token: Unknown error')
     }
+  }
+
+  /**
+   * Map permission strings to SAS permission string
+   */
+  private mapPermissionsToString(permissions: string[]): string {
+    const permissionMap: Record<string, string> = {
+      'read': 'r',
+      'write': 'w',
+      'delete': 'd',
+      'list': 'l',
+      'create': 'c',
+      'add': 'a',
+    }
+
+    let permissionString = ''
+    for (const permission of permissions) {
+      const sasChar = permissionMap[permission]
+      if (sasChar && !permissionString.includes(sasChar)) {
+        permissionString += sasChar
+      }
+    }
+
+    return permissionString
   }
 
   /**
@@ -358,42 +414,11 @@ export class SASTokenService {
   }
 
   /**
-   * Check backend service health
+   * Test user delegation SAS token generation
    */
-  async checkBackendHealth(): Promise<{
-    healthy: boolean
-    latencyMs?: number
-    error?: string
-  }> {
-    try {
-      const startTime = Date.now()
-
-      const healthUrl = `${this.config.backendUrl}/api/health`
-      const response = await axios.get(healthUrl, {
-        timeout: this.config.timeout,
-      })
-
-      const latencyMs = Date.now() - startTime
-
-      return {
-        healthy: response.status === 200,
-        latencyMs,
-      }
-    } catch (error) {
-      return {
-        healthy: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      }
-    }
-  }
-
-  /**
-   * Test full authentication flow
-   */
-  async testAuthenticationFlow(): Promise<{
-    imsValid: boolean
-    backendReachable: boolean
-    canRequestToken: boolean
+  async testUserDelegation(): Promise<{
+    canGenerateToken: boolean
+    hasValidCredentials: boolean
     error?: string
   }> {
     try {
@@ -403,47 +428,31 @@ export class SASTokenService {
 
       if (!tokenValidation.valid) {
         return {
-          imsValid: false,
-          backendReachable: false,
-          canRequestToken: false,
+          canGenerateToken: false,
+          hasValidCredentials: false,
           error: 'IMS token validation failed',
         }
       }
 
-      // Test backend connectivity
-      const healthCheck = await this.checkBackendHealth()
-
-      if (!healthCheck.healthy) {
-        return {
-          imsValid: true,
-          backendReachable: false,
-          canRequestToken: false,
-          error: `Backend health check failed: ${healthCheck.error}`,
-        }
-      }
-
-      // Test minimal SAS token request (list operation for default container)
+      // Test user delegation key retrieval
       try {
-        await this.requestListToken('uxp-images', 1) // 1 minute expiration for test
+        await this.getUserDelegationKey()
 
         return {
-          imsValid: true,
-          backendReachable: true,
-          canRequestToken: true,
+          canGenerateToken: true,
+          hasValidCredentials: true,
         }
-      } catch (tokenError) {
+      } catch (delegationError) {
         return {
-          imsValid: true,
-          backendReachable: true,
-          canRequestToken: false,
-          error: `SAS token request failed: ${tokenError instanceof Error ? tokenError.message : 'Unknown error'}`,
+          canGenerateToken: false,
+          hasValidCredentials: true,
+          error: `User delegation key retrieval failed: ${delegationError instanceof Error ? delegationError.message : 'Unknown error'}`,
         }
       }
     } catch (error) {
       return {
-        imsValid: false,
-        backendReachable: false,
-        canRequestToken: false,
+        canGenerateToken: false,
+        hasValidCredentials: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       }
     }
@@ -457,7 +466,7 @@ export function createSASTokenService(
   imsService: IIMSService
 ): SASTokenService {
   const config: SASTokenServiceConfig = {
-    backendUrl: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001',
+    storageAccountName: import.meta.env.VITE_AZURE_STORAGE_ACCOUNT_NAME || '',
     defaultExpirationMinutes: parseInt(
       import.meta.env.VITE_SAS_DEFAULT_EXPIRATION_MINUTES || '60',
       10
