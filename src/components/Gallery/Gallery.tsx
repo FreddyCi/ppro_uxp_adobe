@@ -1,5 +1,5 @@
 // @ts-ignore
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useGenerationStore } from '../../store/generationStore';
 import { useGalleryStore, useGalleryDisplayItems } from '../../store/galleryStore';
 import { createIMSService } from '../../services/ims/IMSService';
@@ -312,6 +312,49 @@ async function loadLocalFileAsBlob(filePath: string): Promise<Blob> {
 
 type GallerySource = 'generated' | 'corrected';
 
+// UXP-compatible base64 encoder (FileReader not available in UXP)
+function encodeBase64UXP(bytes: Uint8Array): string {
+  // Try browser btoa first (faster if available)
+  if (typeof btoa === 'function') {
+    let binary = '';
+    const chunkSize = 0x8000; // Process in chunks to avoid stack overflow
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += Array.from(chunk, byte => String.fromCharCode(byte)).join('');
+    }
+    return btoa(binary);
+  }
+
+  // Fallback: Manual base64 encoding
+  const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let result = '';
+  let i = 0;
+
+  for (; i + 3 <= bytes.length; i += 3) {
+    const triplet = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    result += base64Chars[(triplet >> 18) & 63];
+    result += base64Chars[(triplet >> 12) & 63];
+    result += base64Chars[(triplet >> 6) & 63];
+    result += base64Chars[triplet & 63];
+  }
+
+  if (i < bytes.length) {
+    const remaining = bytes.length - i;
+    const chunk = (bytes[i] << 16) | ((remaining > 1 ? bytes[i + 1] : 0) << 8);
+    result += base64Chars[(chunk >> 18) & 63];
+    result += base64Chars[(chunk >> 12) & 63];
+    if (remaining === 2) {
+      result += base64Chars[(chunk >> 6) & 63];
+      result += '=';
+    } else {
+      result += '=';
+      result += '=';
+    }
+  }
+
+  return result;
+}
+
 interface ImageData {
   id: string;
   url: string;
@@ -352,6 +395,9 @@ export const Gallery = () => {
 
   const galleryActions = useGalleryStore(state => state.actions)
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers()
+
+  // Track processed video IDs across renders to prevent infinite loops
+  const processedVideoIds = useRef(new Set<string>());
 
   // Log initial gallery state
   useEffect(() => {
@@ -398,7 +444,14 @@ export const Gallery = () => {
         // Data URLs are persistent (base64-encoded) and always work
         // Blob URLs are ephemeral and expire on session close
         if (item.displayUrl?.startsWith('data:')) {
-          // Already has a valid data URL - don't refresh
+          // Already has a valid data URL - mark as processed and skip
+          processedVideoIds.current.add(item.id);
+          continue;
+        }
+        
+        // Skip if already processed this item (prevents infinite loop)
+        if (processedVideoIds.current.has(item.id)) {
+          console.log(`⏭️ [Gallery] Already processed: ${item.filename}`);
           continue;
         }
         
@@ -410,6 +463,8 @@ export const Gallery = () => {
           item.displayUrl.startsWith('blob:'); // Expired blob URL from previous session
         
         if (isVideo && hasInvalidUrl) {
+          // Mark as processing to prevent re-processing
+          processedVideoIds.current.add(item.id);
           // Check if this is a legacy video with blob URLs in relativePath
           const isLegacyBlobVideo = item.relativePath?.startsWith('blob:');
           
@@ -440,7 +495,7 @@ export const Gallery = () => {
               relativePath: item.relativePath
             });
             
-            // Load video as blob from local file and convert to base64 data URL
+            // Load video as blob from local file and convert to base64 data URL using UXP-compatible method
             const requireFn = (globalThis as unknown as { require?: (moduleId: string) => any }).require;
             if (!requireFn) {
               throw new Error('UXP require function not available');
@@ -464,13 +519,12 @@ export const Gallery = () => {
             
             const blob = new Blob([blobSource], { type: item.mimeType || 'video/mp4' });
             
-            // Convert to base64 data URL
-            const dataUrl = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
+            // Convert to base64 data URL using UXP-compatible base64 encoder
+            const arrayBuffer = await blob.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            const base64 = encodeBase64UXP(bytes);
+            const mimeType = blob.type || 'video/mp4';
+            const dataUrl = `data:${mimeType};base64,${base64}`;
             
             console.log(`✅ [Gallery] Converted to data URL:`, dataUrl.substring(0, 50) + '...');
             
