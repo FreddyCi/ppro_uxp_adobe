@@ -349,7 +349,7 @@ const AppContent = () => {
         
         // Create generation result for the video
         const videoGenerationResult = {
-          id: uuidv4(),
+          id: result.filename,
           imageUrl: videoUrl,
           videoUrl: videoUrl,
           videoBlob: result.blob,
@@ -396,7 +396,7 @@ const AppContent = () => {
         
         // Create generation result for the video with local file reference
         const videoGenerationResult = {
-          id: uuidv4(),
+          id: result.filename, // Use filename as ID to match synced files
           imageUrl: '', // Will be set by toTempUrl in gallery
           videoUrl: '', // Will be set by toTempUrl in gallery
           videoBlob: result.blob,
@@ -721,7 +721,7 @@ const AppContent = () => {
         const videoUrl = `data:${result.contentType};base64,${base64}`;
 
         const videoGenerationResult = {
-          id: uuidv4(),
+          id: result.filename,
           imageUrl: '',
           videoUrl,
           videoBlob: result.blob,
@@ -789,7 +789,7 @@ const AppContent = () => {
         const thumbnailUrl = '';
 
         const videoGenerationResult = {
-          id: uuidv4(),
+          id: result.filename,
           imageUrl: thumbnailUrl || videoUrl || '', // Use thumbnail if available, fallback to video URL
           videoUrl: videoUrl || '',
           videoBlob: result.blob,
@@ -952,7 +952,7 @@ const AppContent = () => {
         const videoUrl = `data:${result.contentType};base64,${base64}`;
 
         const videoGenerationResult = {
-          id: uuidv4(),
+          id: result.filename,
           imageUrl: '',
           videoUrl,
           videoBlob: result.blob,
@@ -1000,7 +1000,7 @@ const AppContent = () => {
         console.log(`✅ [${generationSessionId}] Luma Dream Machine reframed video saved locally - Job ID: ${jobId}`, localSaveResult);
 
         const videoGenerationResult = {
-          id: uuidv4(),
+          id: result.filename,
           imageUrl: '',
           videoUrl: '',
           videoBlob: result.blob,

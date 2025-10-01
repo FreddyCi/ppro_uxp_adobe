@@ -543,11 +543,11 @@ export const Gallery = () => {
         id: item.id,
         url: thumbnailUrl,
         prompt: item.contentType === 'generated-image' 
-          ? (item.content as any).prompt || 'Generated image'
+          ? (item.content as any).prompt || item.filename || 'Generated image'
           : item.contentType === 'corrected-image'
-          ? (item.content as any).correctionMetadata?.operationsApplied?.join(', ') || 'Corrected image'
+          ? (item.content as any).correctionMetadata?.operationsApplied?.join(', ') || item.filename || 'Corrected image'
           : (item.contentType === 'video' || item.contentType === 'uploaded-video')
-          ? (item as any).metadata?.prompt || item.filename || 'Video'
+          ? item.filename || (item as any).metadata?.prompt || 'Video'
           : item.filename || 'Content',
         contentType: item.contentType,
         aspectRatio: 'square', // Default since we're generating square images

@@ -393,7 +393,26 @@ export const useGalleryStore = create<GalleryStore>()(
             localPath: item.localPath,
             relativePath: item.relativePath
           });
+          
           set(state => {
+            // Check for duplicates by ID or localPath
+            const isDuplicateById = state.contentItems.some(existing => existing.id === item.id)
+            const isDuplicateByPath = item.localPath && state.contentItems.some(existing => 
+              existing.localPath === item.localPath
+            )
+            
+            if (isDuplicateById || isDuplicateByPath) {
+              console.warn(`[Gallery] Skipping duplicate item:`, {
+                id: item.id,
+                filename: item.filename,
+                isDuplicateById,
+                isDuplicateByPath,
+                localPath: item.localPath
+              });
+              // Don't add duplicate, return unchanged state
+              return state;
+            }
+            
             const newContentItems = [item, ...state.contentItems]
             return {
               contentItems: newContentItems,
@@ -1219,11 +1238,65 @@ export const useGalleryStore = create<GalleryStore>()(
       },
 
       // Handle storage version changes
-      version: 1,
+      version: 2,
       migrate: (persistedState: unknown, version: number) => {
         if (version === 0) {
           // Migration from v0 to v1 if needed
           return persistedState
+        }
+        if (version === 1) {
+          // Migration from v1 to v2: Fix duplicate IDs by using filename as ID
+          console.log('[Gallery] Migrating from v1 to v2: Fixing duplicate IDs')
+          const state = persistedState as GalleryStore
+          if (state.contentItems && Array.isArray(state.contentItems)) {
+            console.log('[Gallery] Migration: Processing', state.contentItems.length, 'items')
+            
+            // Log all items before deduplication
+            state.contentItems.forEach((item, idx) => {
+              console.log(`[Gallery] Migration item ${idx}:`, {
+                id: item.id,
+                filename: item.filename,
+                contentType: item.contentType
+              })
+            })
+            
+            // Deduplicate by filename - keep the first occurrence of each filename
+            const seenFilenames = new Set<string>()
+            const seenIds = new Set<string>()
+            const deduplicatedItems: ContentItem[] = []
+            
+            for (const item of state.contentItems) {
+              if (!item.filename) {
+                console.warn('[Gallery] Migration: Skipping item with no filename', item.id)
+                continue
+              }
+              
+              // Check if we've seen this filename or if the ID already matches the filename
+              const targetId = item.filename
+              const isDuplicateFilename = seenFilenames.has(item.filename)
+              const isDuplicateId = seenIds.has(targetId)
+              
+              if (!isDuplicateFilename && !isDuplicateId) {
+                seenFilenames.add(item.filename)
+                seenIds.add(targetId)
+                // Update the ID to match filename for consistency
+                deduplicatedItems.push({
+                  ...item,
+                  id: item.filename
+                })
+                console.log('[Gallery] Migration: Keeping', item.filename, 'with ID', targetId)
+              } else {
+                console.log('[Gallery] Migration: Removing duplicate', item.id, 'for filename', item.filename)
+              }
+            }
+            
+            console.log(`[Gallery] Migration: Reduced ${state.contentItems.length} items to ${deduplicatedItems.length} after deduplication`)
+            
+            return {
+              ...state,
+              contentItems: deduplicatedItems
+            }
+          }
         }
         return persistedState
       },
@@ -1419,8 +1492,9 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
               continue
             }
 
-            // Use consistent ID based on filename if metadata doesn't have one
-            const consistentId = metadata.id || `generation-${metadata.filename}`
+            // Use filename as consistent ID (without generation- prefix)
+            // This ensures the same file synced from disk matches items added via addContentItem
+            const consistentId = metadata.filename
 
             // Skip if we've already processed this ID in this sync
             if (processedIds.has(consistentId)) {
@@ -1473,18 +1547,16 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
           } else {
             console.warn(`⏭️ Skipping unsupported file: ${metadata.filename || file.name} (${metadata.contentType || 'no content type'})`)
           }
-  } else if (VIDEO_EXTENSION_REGEX.test(file.name)) {
+        } else if (VIDEO_EXTENSION_REGEX.test(file.name)) {
           console.warn(`🎥 Processing video file: ${file.name}`)
           // Create uploaded video item
-          const videoId = `uploaded-video-${file.name}`
+          const videoId = file.name // Use filename directly as ID
 
           // Skip if we've already processed this ID
           if (processedIds.has(videoId)) {
             console.warn(`⚠️ Skipping duplicate video ID: ${videoId}`)
             continue
-          }
-
-          processedIds.add(videoId)
+          }          processedIds.add(videoId)
 
           // Get relative path
           const relativePath = normalizeRelativePath(file.nativePath ? file.nativePath.replace(folder.nativePath + '/', '') : file.name, new Date())
