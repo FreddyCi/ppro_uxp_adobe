@@ -339,6 +339,63 @@ export const useUILoading = () => {
   }))
 }
 
+/**
+ * Check if Azure SAS upload is configured
+ * Separate from IMS authentication - this checks environment variables only
+ */
+export const selectHasSAS = () => {
+  const containerSasUrl = import.meta.env.VITE_AZURE_CONTAINER_SAS_URL
+
+  if (containerSasUrl) {
+    return true
+  }
+
+  const accountName = import.meta.env.VITE_AZURE_ACCOUNT_NAME
+  const containerName = import.meta.env.VITE_AZURE_CONTAINER_NAME
+  const sasToken = import.meta.env.VITE_AZURE_SAS_TOKEN
+
+  return !!(accountName && containerName && sasToken)
+}
+
+/**
+ * Get detailed SAS configuration status
+ */
+export const selectSASStatus = (): {
+  configured: boolean
+  method: 'container-url' | 'parts' | 'none'
+  message: string
+} => {
+  const containerSasUrl = import.meta.env.VITE_AZURE_CONTAINER_SAS_URL
+
+  if (containerSasUrl) {
+    return {
+      configured: true,
+      method: 'container-url',
+      message: 'Azure SAS configured via VITE_AZURE_CONTAINER_SAS_URL',
+    }
+  }
+
+  const accountName = import.meta.env.VITE_AZURE_ACCOUNT_NAME
+  const containerName = import.meta.env.VITE_AZURE_CONTAINER_NAME
+  const sasToken = import.meta.env.VITE_AZURE_SAS_TOKEN
+
+  if (accountName && containerName && sasToken) {
+    return {
+      configured: true,
+      method: 'parts',
+      message: 'Azure SAS configured via parts (account + container + token)',
+    }
+  }
+
+  return {
+    configured: false,
+    method: 'none',
+    message:
+      'Azure SAS not configured. Set VITE_AZURE_CONTAINER_SAS_URL or ' +
+      '(VITE_AZURE_ACCOUNT_NAME + VITE_AZURE_CONTAINER_NAME + VITE_AZURE_SAS_TOKEN) in .env',
+  }
+}
+
 export const useUIToasts = () => {
   return useUIStore((state) => ({
     toasts: state.toasts,

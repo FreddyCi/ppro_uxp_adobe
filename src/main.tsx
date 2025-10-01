@@ -19,8 +19,10 @@ import { LumaVideoService } from './services/luma';
 import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, ReframeVideoModel } from './types/luma';
 import { createAzureSDKBlobService } from './services/blob/AzureSDKBlobService';
 import { createSASTokenService } from './services/blob/SASTokenService';
+import { uploadBytes } from './services/sasUpload';
 import axios from 'axios';
 import { useIsAuthenticated, getIMSServiceInstance, getSharedIMSService, ensureAuthenticated, setAuthFromToken, selectStatus, selectToken, selectIsAuthed, selectHydrated } from './store/authStore';
+import { selectHasSAS, selectSASStatus } from './store/uiStore';
 
 // Import components
 import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery, LocalIngestPanel } from "./components";
@@ -584,24 +586,23 @@ const AppContent = () => {
           return existingUrl;
         }
 
-        if (!isAuthed) {
-          await ensureAuthenticated();
-          if (!isAuthed) {
-            const message = 'Sign in with Adobe IMS to upload keyframe assets to Azure before using Luma.';
-            showError('Authentication Required', message);
-            throw new Error(message);
-          }
+        // Check if SAS is configured (separate from IMS auth)
+        if (!selectHasSAS()) {
+          const message = 'Azure SAS token not configured. Set VITE_AZURE_CONTAINER_SAS_URL or SAS parts in .env and rebuild.';
+          showError('Azure SAS Missing', message);
+          throw new Error(message);
         }
 
         if (!contentItem.folderToken || !contentItem.relativePath) {
-          const message = 'Missing local file reference for the selected keyframe. Please resync your gallery after signing in.';
+          const message = 'Missing local file reference for the selected keyframe. Please resync your gallery.';
           showError('Keyframe Unavailable', message);
           throw new Error(message);
         }
 
         try {
-          console.log('☁️ Preparing keyframe URL for Azure upload:', contentItem.filename);
+          console.log('☁️ Preparing keyframe URL for Azure SAS upload:', contentItem.filename);
 
+          // Read the file from UXP file system
           const fs = uxp.storage.localFileSystem;
           const folder = await fs.getEntryForPersistentToken(contentItem.folderToken);
           const file = await folder.getEntry(contentItem.relativePath);
@@ -609,29 +610,28 @@ const AppContent = () => {
           const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
           const fileData = await file.read(readOptions);
 
-          const azureBlobService = getAzureBlobService();
-
+          // Generate unique blob name
           const sanitizedFilename = contentItem.filename || `keyframe-${Date.now()}.jpg`;
-          const blobName = `${new Date().toISOString().split('T')[0]}/${sanitizedFilename}`;
+          const blobName = `luma/${new Date().toISOString().split('T')[0]}/${Date.now()}-${sanitizedFilename}`;
+          const contentType = contentItem.mimeType || 'image/jpeg';
 
-          const uploadResult = await azureBlobService.uploadBlob(
-            fileData,
-            azureContainerName,
-            blobName,
-            {
-              filename: sanitizedFilename,
-              contentType: contentItem.mimeType || 'image/jpeg',
-              source: 'luma-keyframe'
-            }
-          );
+          // Upload using SAS token (no IMS auth required for Azure)
+          const uploadedUrl = await uploadBytes(blobName, fileData, contentType);
 
-          if (!uploadResult.blobUrl || !uploadResult.blobUrl.startsWith('https://')) {
-            throw new Error('Azure upload did not return a secure HTTPS URL');
+          if (!uploadedUrl || !uploadedUrl.startsWith('https://')) {
+            throw new Error('Azure SAS upload did not return a secure HTTPS URL');
           }
 
-          console.log('✅ Keyframe uploaded to Azure:', uploadResult.blobUrl);
-          return uploadResult.blobUrl;
-        } catch (error) {
+          console.log('✅ Keyframe uploaded to Azure via SAS:', uploadedUrl);
+          return uploadedUrl;
+        } catch (error: any) {
+          // Handle SAS-specific errors
+          if (error?.message?.includes('SAS token expired') || error?.message?.includes('AuthenticationFailed')) {
+            const message = 'Azure SAS token expired or invalid. Update VITE_AZURE_* env vars and rebuild.';
+            showError('SAS Token Expired', message);
+            throw new Error(message);
+          }
+
           const message = error instanceof Error ? error.message : 'Unknown error while uploading keyframe to Azure.';
           showError('Azure Upload Failed', message);
           console.error('❌ Failed to upload keyframe to Azure:', error);
