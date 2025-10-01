@@ -20,7 +20,7 @@ import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, Re
 import { createAzureSDKBlobService } from './services/blob/AzureSDKBlobService';
 import { createSASTokenService } from './services/blob/SASTokenService';
 import axios from 'axios';
-import { useIsAuthenticated, getIMSServiceInstance, getSharedIMSService, ensureAuthenticated } from './store/authStore';
+import { useIsAuthenticated, getIMSServiceInstance, getSharedIMSService, ensureAuthenticated, setAuthFromToken } from './store/authStore';
 
 // Import components
 import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery, LocalIngestPanel } from "./components";
@@ -1145,6 +1145,9 @@ const AppContent = () => {
       console.log('✅ IMS authentication successful!');
       console.log('🎟️ Token received:', accessToken.substring(0, 20) + '...');
       
+      // Set authentication state in auth store
+      setAuthFromToken(accessToken);
+      
       setImsToken(accessToken);
       setImsStatus(`✅ Authenticated! Token: ${accessToken.substring(0, 20)}...`);
       
@@ -1152,7 +1155,7 @@ const AppContent = () => {
       showSuccess('Authentication Successful', 'Connected to Adobe Identity Management System');
       
       // Log token storage
-      console.log('🔍 Token storage:', { accessToken: accessToken.substring(0, 20) + '...', imsToken });
+      console.log('🔍 Token storage:', { accessToken: accessToken.substring(0, 20) + '...', imsToken: accessToken });
       
     } catch (error) {
       console.error('❌ IMS authentication failed:', error);
