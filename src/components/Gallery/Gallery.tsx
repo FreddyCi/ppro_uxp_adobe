@@ -1292,16 +1292,6 @@ export const Gallery = () => {
                   {selectedImage.prompt ? `Refining "${selectedImage.prompt}"` : 'Apply smart fixes to this image.'}
                 </p>
               </div>
-              {/* @ts-ignore */}
-              <sp-button
-                quiet
-                size="s"
-                onClick={handleCancelCorrection}
-                disabled={isCorrecting}
-              >
-                Close
-              {/* @ts-ignore */}
-              </sp-button>
             </header>
 
             <div className="dialog-body">
@@ -1349,6 +1339,7 @@ export const Gallery = () => {
                 variant="secondary"
                 onClick={handleCancelCorrection}
                 disabled={isCorrecting}
+                className='sp-button-mr'
               >
                 Cancel
               {/* @ts-ignore */}
