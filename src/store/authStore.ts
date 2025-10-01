@@ -160,13 +160,46 @@ const b64urlDecodeToJSON = (b64url: string): any => {
 // Utility function to decode JWT expiry
 const decodeExp = (jwt: string): number | null => {
   try {
-    const [, payload] = jwt.split('.')
-    if (!payload) return null
-    const json = b64urlDecodeToJSON(payload)
-    return typeof json?.exp === 'number' ? json.exp * 1000 : null
+    console.log('🔐 decodeExp called with JWT:', jwt.substring(0, 50) + '...');
+    const parts = jwt.split('.');
+    console.log('🔐 JWT parts:', parts.length);
+
+    if (parts.length !== 3) {
+      console.warn('🔐 JWT does not have 3 parts');
+      return null;
+    }
+
+    const [, payload] = parts;
+    console.log('🔐 JWT payload (base64url):', payload.substring(0, 50) + '...');
+
+    if (!payload) {
+      console.warn('🔐 JWT payload is empty');
+      return null;
+    }
+
+    const json = b64urlDecodeToJSON(payload);
+    console.log('🔐 Decoded JWT payload:', json);
+
+    const exp = json?.exp;
+    console.log('🔐 JWT exp field:', exp, typeof exp);
+
+    if (typeof exp === 'number') {
+      const expMs = exp * 1000;
+      console.log('🔐 JWT expiry timestamp (ms):', expMs, new Date(expMs).toISOString());
+      return expMs;
+    } else {
+      console.log('🔐 JWT exp field is not a number or missing, using default expiry (1 hour from now)');
+      // Default to 1 hour from now if no exp field
+      const defaultExpiry = Date.now() + (60 * 60 * 1000); // 1 hour in milliseconds
+      console.log('🔐 Using default expiry:', defaultExpiry, new Date(defaultExpiry).toISOString());
+      return defaultExpiry;
+    }
   } catch (error) {
-    console.warn('Failed to decode JWT expiry:', error)
-    return null
+    console.warn('🔐 Failed to decode JWT expiry:', error);
+    // Return default expiry on decode error
+    const defaultExpiry = Date.now() + (60 * 60 * 1000); // 1 hour in milliseconds
+    console.log('🔐 Using default expiry due to decode error:', defaultExpiry, new Date(defaultExpiry).toISOString());
+    return defaultExpiry;
   }
 }
 
@@ -427,11 +460,13 @@ export const useAuthStore = create<AuthStore>()(
           
           // Calculate expiry fields if we have a token
           let expiresAt: Date | null = null
+          let tokenExpiry: Date | null = null
           let secondsUntilExpiry = 0
           
           if (token && status === 'authenticated') {
             const expMs = decodeExp(token)
             expiresAt = expMs ? new Date(expMs) : null
+            tokenExpiry = expiresAt
             secondsUntilExpiry = expiresAt ? Math.max(0, Math.floor((expiresAt.getTime() - now) / 1000)) : 0
           }
           
@@ -439,13 +474,14 @@ export const useAuthStore = create<AuthStore>()(
             status,
             accessToken: token !== undefined ? token : currentStore.accessToken,
             expiresAt,
+            tokenExpiry,
             secondsUntilExpiry,
             isAuthenticated: status === 'authenticated',
             isLoading: status === 'checking',
             error: error !== undefined ? error : (status === 'error' ? currentStore.error : null),
             lastCheckedAt: now,
             // Clear token expiry if unauthenticated or error
-            tokenExpiry: (status === 'unauthenticated' || status === 'error') ? null : currentStore.tokenExpiry
+            // tokenExpiry: (status === 'unauthenticated' || status === 'error') ? null : currentStore.tokenExpiry
           })
         },
 
@@ -562,7 +598,16 @@ export const useAuthError = () => {
 // Selectors for cleaner component usage
 export const selectStatus = (state: AuthStore) => state.status
 export const selectToken = (state: AuthStore) => state.accessToken
-export const selectIsAuthed = (state: AuthStore) => state.isAuthenticated && state.actions.checkAuthStatus()
+export const selectIsAuthed = (state: AuthStore) => {
+  const result = state.status === 'authenticated' && !!state.accessToken && !!state.tokenExpiry;
+  console.log('🔍 selectIsAuthed called:', {
+    status: state.status,
+    hasToken: !!state.accessToken,
+    hasTokenExpiry: !!state.tokenExpiry,
+    result
+  });
+  return result;
+}
 export const selectHydrated = (state: AuthStore) => state._hydrated
 
 // Cleanup on module unload
@@ -587,7 +632,20 @@ export async function ensureAuthenticated(): Promise<void> {
 
   _ensuring = (async () => {
     const store = useAuthStore.getState()
-    if (store.status === 'authenticated') return
+    
+    // Check if we're properly authenticated (status + token + expiry)
+    const isFullyAuthenticated = store.status === 'authenticated' && store.accessToken && store.tokenExpiry
+    
+    if (isFullyAuthenticated) {
+      console.log('🔐 Already fully authenticated, skipping re-auth');
+      return
+    }
+
+    console.log('🔐 Not fully authenticated, starting authentication...', {
+      status: store.status,
+      hasToken: !!store.accessToken,
+      hasTokenExpiry: !!store.tokenExpiry
+    });
 
     // Trigger login/test flow
     await store.actions.login()
@@ -596,11 +654,13 @@ export async function ensureAuthenticated(): Promise<void> {
     await Promise.resolve()
 
     const finalStore = useAuthStore.getState()
-    if (finalStore.status !== 'authenticated') {
+    const isNowFullyAuthenticated = finalStore.status === 'authenticated' && finalStore.accessToken && finalStore.tokenExpiry
+    
+    if (!isNowFullyAuthenticated) {
       throw new Error('IMS sign-in required')
     }
 
-    // Authentication successful - services will be created by individual components
+    console.log('🔐 Authentication completed successfully');
   })().finally(() => { _ensuring = null })
 
   return _ensuring
@@ -624,19 +684,45 @@ export function showAuthRequiredOnce(message: string = 'Please sign in with your
 
 // Helper to set auth state from a token (used by IMS service)
 export function setAuthFromToken(token: string): void {
+  console.log('🔐 setAuthFromToken called with token:', token.substring(0, 20) + '...');
+  
   const expMs = decodeExp(token)
+  console.log('🔐 decodeExp returned:', expMs);
+  
   const expiresAt = expMs ? new Date(expMs) : null
+  const tokenExpiry = expiresAt
   const secondsUntilExpiry = expiresAt ? Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000)) : 0
 
-  useAuthStore.getState().actions.setStatus('authenticated', token)
-  
-  // Also update the expiry fields directly
+  console.log('🔐 Setting auth state:', {
+    status: 'authenticated',
+    hasToken: !!token,
+    tokenExpiry: tokenExpiry?.toISOString(),
+    expiresAt: expiresAt?.toISOString(),
+    secondsUntilExpiry
+  });
+
+  // Update all auth state in a single atomic operation
   useAuthStore.setState({
+    status: 'authenticated',
+    accessToken: token,
+    tokenExpiry,
     expiresAt,
     secondsUntilExpiry,
     isAuthenticated: true,
-    error: null
-  })
+    isLoading: false,
+    error: null,
+    lastCheckedAt: Date.now()
+  });
+
+  // Verify the state was set
+  const newState = useAuthStore.getState();
+  console.log('🔐 Auth state after update:', {
+    status: newState.status,
+    hasToken: !!newState.accessToken,
+    hasTokenExpiry: !!newState.tokenExpiry,
+    isAuthenticated: newState.isAuthenticated,
+    selectIsAuthed: selectIsAuthed(newState)
+  });
 }
 
 export default useAuthStore

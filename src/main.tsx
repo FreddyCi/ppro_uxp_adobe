@@ -175,9 +175,11 @@ const AppContent = () => {
   const hostName = (uxp.host.name as string).toLowerCase();
 
   //* Call Functions Conditionally by App
-  if (hostName === "premierepro") {
-    console.log("Hello from Premiere Pro", premierepro);
-  }
+  useEffect(() => {
+    if (hostName === "premierepro") {
+      console.log("Hello from Premiere Pro", premierepro);
+    }
+  }, [hostName]);
 
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
@@ -1496,23 +1498,6 @@ const AppContent = () => {
                       </div>
                     ) : (
                       <div className="generation-form">
-                        {(() => {
-                          console.log('🎬 Rendering Luma generation form:', {
-                            isGeneratingLuma,
-                            lumaPrompt: lumaPrompt.substring(0, 50) + (lumaPrompt.length > 50 ? '...' : ''),
-                            lumaMode,
-                            lumaModel,
-                            lumaAspectRatio,
-                            lumaDuration,
-                            lumaResolution,
-                            hasFirstFrame: !!lumaFirstFrameItem,
-                            hasLastFrame: !!lumaLastFrameItem,
-                            hasReframeVideo: !!lumaReframeVideoItem,
-                            isHydrated,
-                            isAuthed
-                          });
-                          return null;
-                        })()}
                         {/* Luma Video Prompt */}
                         <div className="form-group">
                           <sp-label className="form-label">Video Prompt *</sp-label>
@@ -1931,13 +1916,6 @@ const AppContent = () => {
                         <div className="form-actions">
                           {(() => {
                             const isButtonDisabled = isGeneratingLuma || !lumaPrompt.trim() || (lumaMode === 'reframe' && !lumaReframeVideoItem);
-                            console.log('🔘 Luma button disabled state:', {
-                              isGeneratingLuma,
-                              hasPrompt: !!lumaPrompt.trim(),
-                              lumaMode,
-                              hasReframeVideo: !!lumaReframeVideoItem,
-                              isDisabled: isButtonDisabled
-                            });
                             return (
                               <sp-button 
                                 variant="accent" 
