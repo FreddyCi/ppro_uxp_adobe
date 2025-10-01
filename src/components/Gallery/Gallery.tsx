@@ -952,7 +952,7 @@ export const Gallery = () => {
   }, [isCorrecting, resetCorrectionDialog]);
 
   return (
-    <div className="gallery-container">
+    <div className={`gallery-container ${isCorrectionDialogOpen ? 'dialog-open' : ''}`}>
       {/* Filters Sidebar */}
       <aside className="gallery-sidebar">
         <h3 className="sidebar-title">Filters</h3>
@@ -1321,7 +1321,7 @@ export const Gallery = () => {
                     rows={4}
                     maxlength={500}
                     value={correctionPrompt}
-                    placeholder="Add or refine the prompt that Gemini should follow..."
+                    placeholder="A cinematic NYC street scene at golden hour, with blurred motion in the background from cars and city lights. In the foreground, a man in a dark hoodie and jeans stands still on the sidewalk, looking down at his phone while the city is moving fast behind him — glowing neon signs, streaks of yellow taxis, and pedestrians passing by in a blur. The lighting is warm and atmospheric, with reflections on windows and pavement. Captured with a shallow depth of field and a 35mm lens look."
                     onInput={handlePromptChange}
                     onChange={handlePromptChange}
                     disabled={isCorrecting}
@@ -1331,22 +1331,6 @@ export const Gallery = () => {
                   <div className="character-counter text-detail">
                     {correctionPrompt.length}/500 characters
                   </div>
-                </div>
-
-                <div className="checkbox-grid">
-                  {correctionOptions.map((option: { id: string; label: string }) => (
-                    <div key={option.id} className="checkbox-option">
-                      {/* @ts-ignore */}
-                      <sp-checkbox
-                        checked={selectedCorrections.includes(option.id)}
-                        onChange={() => toggleCorrectionOption(option.id)}
-                        disabled={isCorrecting}
-                      >
-                        {option.label}
-                      {/* @ts-ignore */}
-                      </sp-checkbox>
-                    </div>
-                  ))}
                 </div>
 
                 {isCorrecting && (
