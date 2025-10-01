@@ -429,6 +429,19 @@ export const Gallery = () => {
           timestamp: item.timestamp
         }))
       });
+      
+      // Check for duplicate IDs in contentItems
+      const idCounts = new Map<string, number>();
+      contentItems.forEach(item => {
+        idCounts.set(item.id, (idCounts.get(item.id) || 0) + 1);
+      });
+      const duplicates = Array.from(idCounts.entries()).filter(([_, count]) => count > 1);
+      if (duplicates.length > 0) {
+        console.error('❌ [Gallery] DUPLICATE IDs IN STORE:', duplicates);
+        console.error('❌ [Gallery] Items with duplicate IDs:', 
+          contentItems.filter(item => duplicates.some(([id]) => id === item.id))
+        );
+      }
     }
   }, [contentItems]);
 
@@ -486,6 +499,19 @@ export const Gallery = () => {
   
   // Convert unified ContentItems to gallery format for display
   const imagesToUse = useMemo(() => {
+    console.log('🔍 [Gallery] displayItems count:', displayItems.length);
+    console.log('🔍 [Gallery] displayItems IDs:', displayItems.map(i => i.id));
+    
+    // Check for duplicate IDs
+    const idCounts = new Map<string, number>();
+    displayItems.forEach(item => {
+      idCounts.set(item.id, (idCounts.get(item.id) || 0) + 1);
+    });
+    const duplicates = Array.from(idCounts.entries()).filter(([_, count]) => count > 1);
+    if (duplicates.length > 0) {
+      console.warn('⚠️ [Gallery] DUPLICATE IDs FOUND:', duplicates);
+    }
+    
     return displayItems.map((item: ContentItem) => {
       // For videos, prefer runtimeUrl (blob:) over data: URLs
       const isVideo = item.contentType === 'video' || item.contentType === 'uploaded-video';
@@ -1039,7 +1065,6 @@ export const Gallery = () => {
             {/* @ts-ignore */}
             <sp-picker
               onChange={(e: any) => setLocalSortBy(e.target.value)}
-              size="s"
             >
               {/* @ts-ignore */}
               <sp-menu slot="options">
@@ -1309,7 +1334,6 @@ export const Gallery = () => {
                     <div key={option.id} className="checkbox-option">
                       {/* @ts-ignore */}
                       <sp-checkbox
-                        value={option.id}
                         checked={selectedCorrections.includes(option.id)}
                         onChange={() => toggleCorrectionOption(option.id)}
                         disabled={isCorrecting}

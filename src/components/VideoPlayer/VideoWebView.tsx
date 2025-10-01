@@ -266,33 +266,33 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
     <div style={{
       width: typeof width === 'number' ? `${width}px` : width,
       height: typeof height === 'number' ? `${height}px` : height,
-      backgroundColor: '#ff0000', // RED background to see if container renders
-      border: '2px solid yellow',
+      backgroundColor: '#000',
       position: 'relative'
     }}>
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        color: 'white',
-        background: 'blue',
-        padding: '5px',
-        fontSize: '10px',
-        zIndex: 1000
-      }}>
-        WEBVIEW CONTAINER (data URL: {videoSrc?.substring(0, 30)}...)
-      </div>
-      <webview
-        key={`webview-${videoSrc.substring(0, 50)}`}
-        ref={webviewRef}
-        src={webviewSrc}
-        style={{
+      {webviewSrc ? (
+        <webview
+          key={`webview-${videoSrc.substring(0, 50)}`}
+          ref={webviewRef}
+          src={webviewSrc}
+          style={{
+            width: '100%',
+            height: '100%',
+            backgroundColor: '#000',
+          }}
+        />
+      ) : (
+        <div style={{
           width: '100%',
           height: '100%',
-          border: '3px solid cyan',
-          backgroundColor: '#00ff00', // GREEN background for webview itself
-        }}
-      />
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#999',
+          fontSize: '12px'
+        }}>
+          Preparing video...
+        </div>
+      )}
     </div>
   );
 };
