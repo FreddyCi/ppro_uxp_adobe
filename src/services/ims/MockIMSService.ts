@@ -5,6 +5,7 @@
 
 import type { IMSTokenValidation } from '../../types/index.js'
 import type { IMSServiceConfig, IIMSService } from './IMSService'
+import { setAuthFromToken } from '../../store/authStore'
 
 interface TokenCache {
   accessToken: string
@@ -39,6 +40,9 @@ export class MockIMSService implements IIMSService {
       accessToken: fakeToken,
       expiresAt: new Date(Date.now() + (3600 * 1000))
     }
+
+    // Publish token to authStore to keep it authoritative
+    setAuthFromToken(this.tokenCache.accessToken)
 
     console.warn('🔓 Using mock IMS authentication for development')
     return this.tokenCache.accessToken

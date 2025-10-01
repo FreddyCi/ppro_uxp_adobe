@@ -18,6 +18,8 @@ export interface AuthStore {
   status: AuthStatus
   accessToken: string | null
   tokenExpiry: Date | null
+  expiresAt: Date | null
+  secondsUntilExpiry: number
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
@@ -91,6 +93,8 @@ const initialState = {
   status: 'idle' as AuthStatus,
   accessToken: null,
   tokenExpiry: null,
+  expiresAt: null,
+  secondsUntilExpiry: 0,
   isAuthenticated: false,
   isLoading: false,
   error: null,
@@ -132,13 +136,29 @@ const ensureDateObject = (date: Date | string | null): Date | null => {
   return date instanceof Date ? date : new Date(date)
 }
 
+// Utility function to safely decode base64url to JSON
+const b64urlDecodeToJSON = (b64url: string): any => {
+  try {
+    // Convert base64url to base64
+    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/')
+    // Add padding if needed
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
+    // Decode and parse JSON
+    const jsonStr = atob(padded)
+    return JSON.parse(jsonStr)
+  } catch (error) {
+    console.warn('Failed to decode base64url:', error)
+    return null
+  }
+}
+
 // Utility function to decode JWT expiry
 const decodeExp = (jwt: string): number | null => {
   try {
     const [, payload] = jwt.split('.')
     if (!payload) return null
-    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
-    return typeof json.exp === 'number' ? json.exp * 1000 : null
+    const json = b64urlDecodeToJSON(payload)
+    return typeof json?.exp === 'number' ? json.exp * 1000 : null
   } catch (error) {
     console.warn('Failed to decode JWT expiry:', error)
     return null
@@ -203,11 +223,15 @@ export const useAuthStore = create<AuthStore>()(
             // Decode token expiry from JWT
             const expMs = decodeExp(accessToken)
             const tokenExpiry = expMs ? new Date(expMs) : null
+            const expiresAt = tokenExpiry
+            const secondsUntilExpiry = tokenExpiry ? Math.max(0, Math.floor((tokenExpiry.getTime() - Date.now()) / 1000)) : 0
 
             set({
               status: 'authenticated',
               accessToken,
               tokenExpiry,
+              expiresAt,
+              secondsUntilExpiry,
               isAuthenticated: true,
               isLoading: false,
               error: null,
@@ -271,11 +295,15 @@ export const useAuthStore = create<AuthStore>()(
             // Decode token expiry from JWT
             const expMs = decodeExp(accessToken)
             const tokenExpiry = expMs ? new Date(expMs) : null
+            const expiresAt = tokenExpiry
+            const secondsUntilExpiry = tokenExpiry ? Math.max(0, Math.floor((tokenExpiry.getTime() - Date.now()) / 1000)) : 0
 
             set({
               status: 'authenticated',
               accessToken,
               tokenExpiry,
+              expiresAt,
+              secondsUntilExpiry,
               isAuthenticated: true,
               isLoading: false,
               error: null,
@@ -390,15 +418,29 @@ export const useAuthStore = create<AuthStore>()(
          */
         setStatus(status: AuthStatus, token?: string | null, error?: string | null): void {
           const now = Date.now()
+          const currentStore = get()
+          
+          // Calculate expiry fields if we have a token
+          let expiresAt: Date | null = null
+          let secondsUntilExpiry = 0
+          
+          if (token && status === 'authenticated') {
+            const expMs = decodeExp(token)
+            expiresAt = expMs ? new Date(expMs) : null
+            secondsUntilExpiry = expiresAt ? Math.max(0, Math.floor((expiresAt.getTime() - now) / 1000)) : 0
+          }
+          
           set({
             status,
-            accessToken: token !== undefined ? token : get().accessToken,
+            accessToken: token !== undefined ? token : currentStore.accessToken,
+            expiresAt,
+            secondsUntilExpiry,
             isAuthenticated: status === 'authenticated',
             isLoading: status === 'checking',
-            error: error !== undefined ? error : (status === 'error' ? get().error : null),
+            error: error !== undefined ? error : (status === 'error' ? currentStore.error : null),
             lastCheckedAt: now,
             // Clear token expiry if unauthenticated or error
-            tokenExpiry: (status === 'unauthenticated' || status === 'error') ? null : get().tokenExpiry
+            tokenExpiry: (status === 'unauthenticated' || status === 'error') ? null : currentStore.tokenExpiry
           })
         }
       }
@@ -412,6 +454,8 @@ export const useAuthStore = create<AuthStore>()(
         status: state.status,
         accessToken: state.accessToken,
         tokenExpiry: state.tokenExpiry,
+        expiresAt: state.expiresAt,
+        secondsUntilExpiry: state.secondsUntilExpiry,
         isAuthenticated: state.isAuthenticated,
         userId: state.userId,
         lastCheckedAt: state.lastCheckedAt,
@@ -501,6 +545,9 @@ export async function ensureAuthenticated(): Promise<void> {
     // Trigger login/test flow
     await store.actions.login()
 
+    // Wait for state to be fully set using a microtask
+    await Promise.resolve()
+
     const finalStore = useAuthStore.getState()
     if (finalStore.status !== 'authenticated') {
       throw new Error('IMS sign-in required')
@@ -521,10 +568,27 @@ export function showAuthRequiredOnce(message: string = 'Please sign in with your
   if (now - lastAuthToast < AUTH_TOAST_COOLDOWN) return
   lastAuthToast = now
 
-  // Import toast helpers dynamically to avoid circular imports
-  import('../components').then(({ useToastHelpers }) => {
-    const { showError } = useToastHelpers.getState()
-    showError('Authentication Required', message)
+  // Import uiStore to add toast directly
+  import('./uiStore').then(({ useUIStore }) => {
+    const addToast = useUIStore.getState().actions.addToast
+    addToast({ type: 'negative', title: 'Authentication Required', message })
+  })
+}
+
+// Helper to set auth state from a token (used by IMS service)
+export function setAuthFromToken(token: string): void {
+  const expMs = decodeExp(token)
+  const expiresAt = expMs ? new Date(expMs) : null
+  const secondsUntilExpiry = expiresAt ? Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000)) : 0
+
+  useAuthStore.getState().actions.setStatus('authenticated', token)
+  
+  // Also update the expiry fields directly
+  useAuthStore.setState({
+    expiresAt,
+    secondsUntilExpiry,
+    isAuthenticated: true,
+    error: null
   })
 }
 

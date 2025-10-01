@@ -8,6 +8,7 @@ import axios from 'axios'
 import type { AxiosResponse } from 'axios'
 import type { IMSTokenResponse, IMSTokenValidation } from '../../types/index.js'
 import { MockIMSService } from './MockIMSService'
+import { setAuthFromToken } from '../../store/authStore'
 
 export interface IMSServiceConfig {
   clientId: string
@@ -118,6 +119,9 @@ export class IMSService implements IIMSService {
         accessToken: response.data.access_token,
         expiresAt: new Date(Date.now() + (expiresIn * 1000))
       }
+
+      // Publish token to authStore to keep it authoritative
+      setAuthFromToken(this.tokenCache.accessToken)
       
       return this.tokenCache.accessToken
 

@@ -11,9 +11,8 @@ import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
 import { FireflyService } from "./services/firefly";
 import { useGenerationStore } from "./store/generationStore";
-import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery, LocalIngestPanel } from "./components";
+import { useAuthStore } from "./store/authStore";
 import "./layout.scss";
-import { v4 as uuidv4 } from 'uuid';
 import { saveGenerationLocally } from './services/local/localBoltStorage';
 import { LtxVideoService } from './services/ltx';
 import { LumaVideoService } from './services/luma';
@@ -21,7 +20,13 @@ import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, Re
 import { createAzureSDKBlobService } from './services/blob/AzureSDKBlobService';
 import { createSASTokenService } from './services/blob/SASTokenService';
 import axios from 'axios';
-import { useAuthStore, useIsAuthenticated, getIMSServiceInstance, getSharedIMSService, ensureAuthenticated } from './store/authStore';
+import { useIsAuthenticated, getIMSServiceInstance, getSharedIMSService, ensureAuthenticated } from './store/authStore';
+
+// Import components
+import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery, LocalIngestPanel } from "./components";
+
+// Import utilities
+import { v4 as uuidv4 } from 'uuid';
 
 // Helper function to upload blob using SAS token (bypasses Azure SDK issues)
 async function uploadBlobWithSAS(
@@ -132,6 +137,7 @@ const AppContent = () => {
 
   // Get authentication status
   const isAuthenticated = useIsAuthenticated();
+  const auth = useAuthStore();
 
   const azureBlobServiceRef = useRef<ReturnType<typeof createAzureSDKBlobService> | null>(null);
   const azureContainerName = import.meta.env.VITE_AZURE_STORAGE_CONTAINER_NAME || 'uxp-images';
@@ -1094,14 +1100,13 @@ const AppContent = () => {
       console.log('✅ Blob URL rehydration complete');
     };
 
-    // Rehydrate on app startup
-    rehydrateBlobUrls();
-
-    // Also rehydrate when switching to gallery tab
-    if (activeTab === 'gallery') {
+    // Rehydrate on auth status change (not only at boot)
+    if (auth.status === 'authenticated') {
       rehydrateBlobUrls();
+    } else {
+      console.log('🔄 Skipping blob URL rehydration - user not authenticated');
     }
-  }, [activeTab]); // Re-run when activeTab changes
+  }, [auth.status]); // Re-run when auth status changes
 
   // Clear any lingering auth dialogs and reset state
   const clearAuthState = () => {
@@ -1146,19 +1151,8 @@ const AppContent = () => {
       // Show success toast
       showSuccess('Authentication Successful', 'Connected to Adobe Identity Management System');
       
-      // Optional: Try to validate the token (non-critical)
-      try {
-        const validation = await imsService.validateToken(accessToken);
-        console.log('🔍 Token validation:', validation);
-        
-        if (validation.valid) {
-          setImsStatus(`✅ Valid token! User: ${validation.user_id || 'Unknown'}`);
-          showInfo('Token Validated', `User: ${validation.user_id || 'Unknown'}`);
-        }
-      } catch (validationError) {
-        console.warn('⚠️ Token validation failed (non-critical):', validationError);
-        // Don't change success status - token acquisition is what matters
-      }
+      // Log token storage
+      console.log('🔍 Token storage:', { accessToken: accessToken.substring(0, 20) + '...', imsToken });
       
     } catch (error) {
       console.error('❌ IMS authentication failed:', error);
