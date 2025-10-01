@@ -921,15 +921,18 @@ export const Gallery = () => {
       correctionSucceeded = true;
 
       showSuccess('Correction complete', 'Gemini created a refined version in your gallery.');
+      
+      // Close dialog after successful correction
+      resetCorrectionDialog();
     } catch (error: any) {
       console.error('Gemini correction failed:', error);
       showError('Correction failed', error?.message || 'Unable to correct the image right now.');
+      
+      // Close dialog after error (user has been notified)
+      resetCorrectionDialog();
     } finally {
-      if (correctionSucceeded) {
-        resetCorrectionDialog();
-      } else {
-        setIsCorrecting(false);
-      }
+      // Ensure we're never stuck in correcting state
+      setIsCorrecting(false);
     }
   }, [
     selectedImage,
