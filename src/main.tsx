@@ -768,10 +768,26 @@ const AppContent = () => {
       } else {
         console.log(`✅ [${generationSessionId}] Luma Dream Machine video saved locally - Job ID: ${jobId}`, localSaveResult);
 
+        // Generate displayable video URL from local file
+        let videoUrl = '';
+        try {
+          if (localSaveResult.folderToken && localSaveResult.relativePath) {
+            const { toTempUrl } = await import('./utils/uxpFs');
+            videoUrl = await toTempUrl(
+              localSaveResult.folderToken,
+              localSaveResult.relativePath,
+              result.contentType
+            );
+            console.log(`🎬 [${generationSessionId}] Created displayable video URL:`, videoUrl.substring(0, 50) + '...');
+          }
+        } catch (urlError) {
+          console.warn(`⚠️ [${generationSessionId}] Failed to create displayable video URL:`, urlError);
+        }
+
         const videoGenerationResult = {
           id: uuidv4(),
-          imageUrl: '',
-          videoUrl: '',
+          imageUrl: videoUrl, // Use video URL for thumbnail
+          videoUrl: videoUrl,
           videoBlob: result.blob,
           seed: computedSeed,
           contentType: 'video' as const,
