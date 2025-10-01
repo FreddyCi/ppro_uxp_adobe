@@ -7,7 +7,7 @@ import type { IMSService as IMSServiceClass } from '../../services/ims/IMSServic
 import { GeminiService } from '../../services/gemini';
 import type { CorrectionParams } from '../../types/gemini';
 import { useToastHelpers } from '../../hooks/useToast';
-import type { ContentItem } from '../../types/content';
+import type { ContentItem, VideoData } from '../../types/content';
 import './Gallery.scss';
 
 // Helper functions for gallery filtering and sorting
@@ -22,9 +22,20 @@ const getAllItems = (
     case 'corrected':
       return state.contentItems.filter(item => item.contentType === 'corrected-image')
     case 'videos':
-      return state.contentItems.filter(item =>
-        item.contentType === 'video' || item.contentType === 'uploaded-video'
-      )
+      return state.contentItems.filter(item => {
+        const isVideo = item.contentType === 'video' || item.contentType === 'uploaded-video';
+        if (!isVideo) return false;
+        
+        // Check if video has a playable URL
+        const videoContent = item.content as VideoData;
+        const hasVideoUrl = videoContent?.videoUrl && 
+          (videoContent.videoUrl.startsWith('blob:') || videoContent.videoUrl.startsWith('data:'));
+        const hasDisplayUrl = item.displayUrl && 
+          (item.displayUrl.startsWith('blob:') || item.displayUrl.startsWith('data:'));
+        
+        // Only include videos that have playable URLs
+        return hasVideoUrl || hasDisplayUrl;
+      })
     case 'images':
       return state.contentItems.filter(item =>
         ['generated-image', 'corrected-image', 'uploaded-image'].includes(item.contentType)
@@ -374,6 +385,121 @@ export const Gallery = () => {
     }
   }, [contentItems]);
 
+  // Refresh URLs for video items that don't have displayable URLs
+  useEffect(() => {
+    const refreshVideoUrls = async () => {
+      console.log(`🔄 [Gallery] Auto-refresh triggered - checking ${contentItems.length} items`);
+      
+      for (const item of contentItems) {
+        // Check if this is a video without a valid displayUrl
+        const isVideo = item.contentType === 'video' || item.contentType === 'uploaded-video';
+        
+        // CRITICAL: Skip if we already have a VALID data URL
+        // Data URLs are persistent (base64-encoded) and always work
+        // Blob URLs are ephemeral and expire on session close
+        if (item.displayUrl?.startsWith('data:')) {
+          // Already has a valid data URL - don't refresh
+          continue;
+        }
+        
+        // Check if URL is invalid (missing, file path, or expired blob)
+        const hasInvalidUrl = 
+          !item.displayUrl || // No URL at all
+          item.displayUrl.startsWith('/Users/') || // Local file path
+          item.displayUrl.startsWith('/') || // Any absolute path
+          item.displayUrl.startsWith('blob:'); // Expired blob URL from previous session
+        
+        if (isVideo && hasInvalidUrl) {
+          // Check if this is a legacy video with blob URLs in relativePath
+          const isLegacyBlobVideo = item.relativePath?.startsWith('blob:');
+          
+          if (isLegacyBlobVideo) {
+            console.warn(`⚠️ [Gallery] Legacy video with expired blob URL - cannot recover: ${item.filename}`);
+            // Mark as unavailable - these videos can't be recovered
+            continue;
+          }
+          
+          // Check if we have valid local file references
+          const hasLocalFiles = item.folderToken && item.relativePath && !item.relativePath.startsWith('blob:');
+          
+          if (!hasLocalFiles) {
+            console.warn(`⚠️ [Gallery] Video missing local file references - skipping refresh: ${item.filename}`, {
+              hasToken: !!item.folderToken,
+              hasPath: !!item.relativePath,
+              relativePath: item.relativePath,
+              displayUrl: item.displayUrl?.substring(0, 30)
+            });
+            continue;
+          }
+          
+          try {
+            console.log(`🔄 [Gallery] Refreshing video to DATA URL for: ${item.filename}`, {
+              currentUrl: item.displayUrl?.substring(0, 50),
+              hasLocalFiles,
+              folderToken: item.folderToken?.substring(0, 20),
+              relativePath: item.relativePath
+            });
+            
+            // Load video as blob from local file and convert to base64 data URL
+            const requireFn = (globalThis as unknown as { require?: (moduleId: string) => any }).require;
+            if (!requireFn) {
+              throw new Error('UXP require function not available');
+            }
+            
+            const uxp = requireFn('uxp') as any;
+            const fs = uxp.storage.localFileSystem;
+            const binaryFormat = uxp.storage.formats?.binary;
+            
+            const folder = await fs.getEntryForPersistentToken(item.folderToken);
+            const file = await folder.getEntry(item.relativePath);
+            const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
+            const fileData = await file.read(readOptions);
+            
+            const blobSource =
+              fileData instanceof ArrayBuffer
+                ? fileData
+                : ArrayBuffer.isView(fileData)
+                  ? fileData.buffer
+                  : fileData;
+            
+            const blob = new Blob([blobSource], { type: item.mimeType || 'video/mp4' });
+            
+            // Convert to base64 data URL
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+            
+            console.log(`✅ [Gallery] Converted to data URL:`, dataUrl.substring(0, 50) + '...');
+            
+            // Update the item in the store with data URL
+            if (item.contentType === 'video' || item.contentType === 'uploaded-video') {
+              const videoContent = item.content as VideoData;
+              galleryActions.updateContentItem(item.id, {
+                displayUrl: dataUrl,
+                thumbnailUrl: dataUrl, // Use data URL as thumbnail
+                content: {
+                  ...videoContent,
+                  videoUrl: dataUrl
+                }
+              });
+            }
+            
+            console.log(`✅ [Gallery] Refreshed video to DATA URL for: ${item.filename}`);
+          } catch (error) {
+            console.error(`❌ [Gallery] Failed to refresh video URL for ${item.filename}:`, error);
+          }
+        }
+      }
+    };
+    
+    if (contentItems.length > 0) {
+      refreshVideoUrls();
+    }
+  }, [contentItems, galleryActions]); // Depend on contentItems array to trigger on any change
+
   // Compute filtered and sorted items using useMemo
   const sortedItems = useMemo(() => {
     const allItems = getAllItems({ contentItems, typeFilter })
@@ -409,30 +535,57 @@ export const Gallery = () => {
   
   // Convert unified ContentItems to gallery format for display
   const imagesToUse = useMemo(() => {
-    return displayItems.map((item: ContentItem) => ({
-      id: item.id,
-      url: item.thumbnailUrl || item.displayUrl, // Use thumbnail for gallery view
-      prompt: item.contentType === 'generated-image' 
-        ? (item.content as any).prompt || 'Generated image'
-        : item.contentType === 'corrected-image'
-        ? (item.content as any).correctionMetadata?.operationsApplied?.join(', ') || 'Corrected image'
-        : item.filename || 'Content',
-      contentType: item.contentType,
-      aspectRatio: 'square', // Default since we're generating square images
-      createdAt: item.timestamp,
-      tags: item.tags,
-      source: item.contentType.includes('corrected') ? 'corrected' as const : 'generated' as const,
-      downloadUrl: item.contentType === 'generated-image' ? (item.content as any).downloadUrl : undefined,
-      localFilePath: item.localPath,
-      storageMode: item.storageMode,
-      persistenceMethod: item.persistenceMethod,
-      // Video support
-      isVideo: item.contentType === 'video' || item.contentType === 'uploaded-video',
-      videoUrl: item.contentType === 'video' ? (item.content as any).videoUrl : undefined,
-      duration: item.contentType === 'video' ? (item.content as any).duration : undefined,
-      fps: item.contentType === 'video' ? (item.content as any).fps : undefined,
-      resolution: item.contentType === 'video' ? (item.content as any).resolution : undefined,
-    }));
+    return displayItems.map((item: ContentItem) => {
+      // For videos, prefer blob URLs over base64 data URLs
+      const isVideo = item.contentType === 'video' || item.contentType === 'uploaded-video';
+      let videoUrl = '';
+      let thumbnailUrl = item.thumbnailUrl || item.displayUrl;
+      
+      if (isVideo) {
+        const videoContent = item.content as VideoData;
+        videoUrl = videoContent?.videoUrl || '';
+        
+        // If we have a blob URL, prefer it over data URLs
+        if (videoUrl && videoUrl.startsWith('data:')) {
+          // Check if displayUrl is a blob URL
+          if (item.displayUrl && item.displayUrl.startsWith('blob:')) {
+            videoUrl = item.displayUrl;
+          }
+        }
+        
+        // For thumbnail, prefer actual thumbnail over displayUrl if it's a blob
+        if (item.displayUrl && item.displayUrl.startsWith('data:')) {
+          thumbnailUrl = videoUrl; // Use the video URL as fallback
+        }
+      }
+      
+      return {
+        id: item.id,
+        url: thumbnailUrl,
+        prompt: item.contentType === 'generated-image' 
+          ? (item.content as any).prompt || 'Generated image'
+          : item.contentType === 'corrected-image'
+          ? (item.content as any).correctionMetadata?.operationsApplied?.join(', ') || 'Corrected image'
+          : (item.contentType === 'video' || item.contentType === 'uploaded-video')
+          ? (item as any).metadata?.prompt || item.filename || 'Video'
+          : item.filename || 'Content',
+        contentType: item.contentType,
+        aspectRatio: 'square', // Default since we're generating square images
+        createdAt: item.timestamp,
+        tags: item.tags,
+        source: item.contentType.includes('corrected') ? 'corrected' as const : 'generated' as const,
+        downloadUrl: item.contentType === 'generated-image' ? (item.content as any).downloadUrl : undefined,
+        localFilePath: item.localPath,
+        storageMode: item.storageMode,
+        persistenceMethod: item.persistenceMethod,
+        // Video support
+        isVideo,
+        videoUrl,
+        duration: isVideo ? (item.content as any).duration : undefined,
+        fps: isVideo ? (item.content as any).fps : undefined,
+        resolution: isVideo ? (item.content as any).resolution : undefined,
+      };
+    });
   }, [displayItems]);
 
   const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
@@ -950,7 +1103,7 @@ export const Gallery = () => {
               onClick={async () => {
                 try {
                   await galleryActions.syncLocalFiles();
-                  showSuccess('Sync complete', 'Local files have been synced to the gallery.');
+                  showSuccess('Sync complete', 'Local files have been synced to the gallery. Videos should now display correctly.');
                 } catch (error) {
                   console.error('Sync failed:', error);
                   showError('Sync failed', 'Could not sync local files. Check the console for details.');

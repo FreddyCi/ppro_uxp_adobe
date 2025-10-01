@@ -172,6 +172,25 @@
         -webkit-user-drag: none;
       }
 
+      video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        background: #000;
+        cursor: pointer;
+        
+        &::-webkit-media-controls-panel {
+          background: rgba(0, 0, 0, 0.8);
+        }
+        
+        &:hover {
+          &::-webkit-media-controls-panel {
+            background: rgba(0, 0, 0, 0.9);
+          }
+        }
+      }
+
       .item-overlay {
         position: absolute;
         top: 0;

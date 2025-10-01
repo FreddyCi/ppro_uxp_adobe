@@ -633,6 +633,7 @@ export const useGalleryStore = create<GalleryStore>()(
                   const approximateFps = rawMetadata?.fps || rawMetadata?.frameRate || 30
                   const width = rawMetadata?.resolution?.width || rawMetadata?.originalSize?.width || 1920
                   const height = rawMetadata?.resolution?.height || rawMetadata?.originalSize?.height || 1080
+                  const prompt = rawMetadata?.prompt || 'Video'
 
                   return {
                     // Base metadata
@@ -664,6 +665,30 @@ export const useGalleryStore = create<GalleryStore>()(
                       codec: rawMetadata?.codec || 'h264',
                       hasAudio: rawMetadata?.hasAudio ?? true,
                       audioCodec: rawMetadata?.audioCodec || 'aac'
+                    },
+
+                    // Video generation metadata (for prompt display)
+                    metadata: {
+                      prompt,
+                      seed: rawMetadata?.seed || 0,
+                      jobId: rawMetadata?.jobId || item.id,
+                      model: rawMetadata?.model || 'unknown',
+                      version: rawMetadata?.version || 'v1',
+                      timestamp: item.timestamp.getTime(),
+                      filename: item.filename,
+                      contentType: inferredMimeType,
+                      fileSize: rawMetadata?.fileSize || 0,
+                      duration: approximateDuration,
+                      fps: approximateFps,
+                      resolution: { width, height },
+                      persistenceMethod: 'local' as const,
+                      storageMode: 'local' as const,
+                      folderToken: item.folderToken ?? null,
+                      localFilePath: item.localFilePath,
+                      localMetadataPath: item.localMetadataPath,
+                      savedAt: item.timestamp.toISOString(),
+                      localPersistenceProvider: 'uxp',
+                      relativePath: item.relativePath
                     },
 
                     // Storage
@@ -778,7 +803,7 @@ export const useGalleryStore = create<GalleryStore>()(
                               : ArrayBuffer.isView(fileData)
                                 ? fileData.buffer
                                 : fileData
-                          const blob = new Blob([blobSource])
+                          const blob = new Blob([blobSource], { type: item.mimeType || 'application/octet-stream' })
                           dataUrl = await blobToDataUrl(blob)
                           console.log('✅ Converted local file to base64 data URL:', dataUrl.substring(0, 50) + '...')
                         } catch (fileError) {

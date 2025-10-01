@@ -86,7 +86,7 @@ export async function extractVideoThumbnail(
         video.remove();
         canvas.remove();
         reject(new Error('Video thumbnail extraction timed out'));
-      }, 10000); // 10 second timeout
+      }, 5000); // 5 second timeout (reduced for faster failure)
 
       // Start loading video
       video.src = videoUrl;
