@@ -1044,7 +1044,7 @@ export const Gallery = () => {
         {/* Filter Actions */}
         <div className="filter-actions">
           {/* @ts-ignore */}
-          <sp-button variant="accent" onClick={handleApplyFilters}>
+          <sp-button className='sp-button-mb' variant="accent" onClick={handleApplyFilters}>
             Apply Filters
           {/* @ts-ignore */}
           </sp-button>
@@ -1080,6 +1080,7 @@ export const Gallery = () => {
           <div className="gallery-actions">
             {/* @ts-ignore */}
             <sp-button
+              className='sp-button-mr'
               variant="secondary"
               size="s"
               onClick={async () => {
