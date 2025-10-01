@@ -1256,37 +1256,70 @@ export const useGalleryStore = create<GalleryStore>()(
               console.log(`[Gallery] Migration item ${idx}:`, {
                 id: item.id,
                 filename: item.filename,
-                contentType: item.contentType
+                contentType: item.contentType,
+                relativePath: item.relativePath,
+                localPath: item.localPath,
+                folderToken: item.folderToken?.substring(0, 20) + '...'
               })
             })
             
-            // Deduplicate by filename - keep the first occurrence of each filename
-            const seenFilenames = new Set<string>()
-            const seenIds = new Set<string>()
-            const deduplicatedItems: ContentItem[] = []
+            // Deduplicate by filename - prefer items with matching relativePath
+            const filenameToItems = new Map<string, ContentItem[]>()
             
+            // Group items by filename
             for (const item of state.contentItems) {
               if (!item.filename) {
                 console.warn('[Gallery] Migration: Skipping item with no filename', item.id)
                 continue
               }
               
-              // Check if we've seen this filename or if the ID already matches the filename
-              const targetId = item.filename
-              const isDuplicateFilename = seenFilenames.has(item.filename)
-              const isDuplicateId = seenIds.has(targetId)
+              if (!filenameToItems.has(item.filename)) {
+                filenameToItems.set(item.filename, [])
+              }
+              filenameToItems.get(item.filename)!.push(item)
+            }
+            
+            const deduplicatedItems: ContentItem[] = []
+            
+            // For each unique filename, pick the best item
+            for (const [filename, items] of filenameToItems.entries()) {
+              console.log(`[Gallery] Migration: Processing filename "${filename}" with ${items.length} items`)
               
-              if (!isDuplicateFilename && !isDuplicateId) {
-                seenFilenames.add(item.filename)
-                seenIds.add(targetId)
-                // Update the ID to match filename for consistency
+              if (items.length === 1) {
+                // Only one item, use it
+                const item = items[0]
                 deduplicatedItems.push({
                   ...item,
                   id: item.filename
                 })
-                console.log('[Gallery] Migration: Keeping', item.filename, 'with ID', targetId)
+                console.log(`[Gallery] Migration: Keeping single item for ${filename}`, {
+                  id: item.id,
+                  relativePath: item.relativePath
+                })
               } else {
-                console.log('[Gallery] Migration: Removing duplicate', item.id, 'for filename', item.filename)
+                // Multiple items - prefer one with matching relativePath
+                let bestItem = items[0]
+                
+                for (const item of items) {
+                  // Prefer item where relativePath contains the filename
+                  if (item.relativePath && item.relativePath.includes(filename)) {
+                    bestItem = item
+                    console.log(`[Gallery] Migration: Found item with matching relativePath for ${filename}:`, item.relativePath)
+                    break
+                  }
+                }
+                
+                deduplicatedItems.push({
+                  ...bestItem,
+                  id: bestItem.filename
+                })
+                
+                console.log(`[Gallery] Migration: Keeping best item for ${filename}`, {
+                  originalId: bestItem.id,
+                  newId: bestItem.filename,
+                  relativePath: bestItem.relativePath,
+                  discarded: items.filter(i => i !== bestItem).map(i => ({ id: i.id, relativePath: i.relativePath }))
+                })
               }
             }
             
