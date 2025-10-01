@@ -1,8 +1,9 @@
 // @ts-ignore
 import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { useGenerationStore } from '../../store/generationStore'
-import type { GenerationResult, GenerationMetadata } from '../../types/firefly'
+import { useGalleryStore } from '../../store/galleryStore'
+import type { ContentItem, VideoData } from '../../types/content'
+import type { GenerationMetadata } from '../../types/firefly'
 import {
   PremiereIngestError,
   PremiereIngestService,
@@ -28,7 +29,6 @@ export interface LocalClip {
   prompt?: string
   model?: string
   seed?: number
-  previewUrl?: string
   createdAt?: number
 }
 
@@ -94,13 +94,6 @@ export function formatSeconds(seconds: number): string {
   return `${minutes}m ${remainingSeconds.toFixed(0)}s`
 }
 
-export function getClipFilePath(result: GenerationResult): string | null {
-  return (
-    result.localPath ||
-    (result.metadata?.localFilePath ?? null)
-  )
-}
-
 export function parseNumericArray(value: unknown): number[] {
   if (!value) {
     return []
@@ -127,7 +120,7 @@ export function parseNumericArray(value: unknown): number[] {
 }
 
 export const LocalIngestPanel: React.FC = () => {
-  const generationHistory = useGenerationStore(state => state.generationHistory)
+  const contentItems = useGalleryStore(state => state.contentItems)
   const serviceRef = useRef<PremiereIngestService | null>(null)
   const [videoTrackIndex, setVideoTrackIndex] = useState(1)
   const [audioTrackIndex, setAudioTrackIndex] = useState(1)
@@ -142,39 +135,43 @@ export const LocalIngestPanel: React.FC = () => {
   const hasConfiguredFolder = Boolean(folderInfo.folderPath && folderInfo.folderToken)
 
   const detectedClips = useMemo<LocalClip[]>(() => {
-    return generationHistory
-      .filter(result => result.contentType === 'video')
-      .map(result => {
-        const filePath = getClipFilePath(result)
-        const prompt = result.metadata?.prompt ?? result.metadata?.prompt ?? 'Generated clip'
-        const durationSeconds =
-          typeof result.duration === 'number'
-            ? result.duration
-            : typeof result.metadata?.duration === 'number'
-              ? result.metadata.duration
-              : undefined
+    // Filter for video content items that have local file paths
+    return contentItems
+      .filter(item => {
+        const isVideo = item.contentType === 'video' || item.contentType === 'uploaded-video'
+        return isVideo && item.localPath
+      })
+      .map(item => {
+        const videoContent = item.content as VideoData
+        const prompt = item.filename || 'Video clip'
+        const durationSeconds = videoContent?.duration
+
+        // Handle timestamp conversion - it might be a Date, number, or undefined
+        let createdAt: number
+        if (item.timestamp instanceof Date) {
+          createdAt = item.timestamp.getTime()
+        } else if (typeof item.timestamp === 'number') {
+          createdAt = item.timestamp
+        } else {
+          createdAt = Date.now()
+        }
 
         return {
-          id: result.id,
+          id: item.id,
           source: 'generated' as const,
-          displayName:
-            result.metadata?.filename ||
-            result.metadata?.prompt?.slice(0, 32) ||
-            result.localPath?.split(/[/\\]/).pop() ||
-            `Generation ${new Date(result.timestamp).toLocaleString()}`,
-          filePath: filePath ?? '',
-          metadata: result.metadata,
-          metadataPath: result.metadata?.localMetadataPath ?? null,
+          displayName: item.filename || item.localPath?.split(/[/\\]/).pop() || 'Video clip',
+          filePath: item.localPath || '',
+          metadata: {} as GenerationMetadata,
+          metadataPath: item.localMetadataPath || null,
           durationSeconds,
           prompt,
-          model: result.metadata?.model,
-          seed: result.metadata?.seed,
-          previewUrl: result.videoUrl || result.imageUrl,
-          createdAt: result.timestamp,
+          model: undefined,
+          seed: undefined,
+          createdAt,
         }
       })
       .filter(clip => clip.filePath.length > 0)
-  }, [generationHistory])
+  }, [contentItems])
 
   const clips = useMemo<LocalClip[]>(() => {
     const combined = [...detectedClips]
@@ -568,15 +565,11 @@ export const LocalIngestPanel: React.FC = () => {
               return (
                 <article key={clip.id} className="clip-card">
                   <div className="clip-card__preview">
-                    {clip.previewUrl ? (
-                      <video src={clip.previewUrl} muted controls preload="metadata" />
-                    ) : (
-                      <div className="clip-card__placeholder">
-                        <span role="img" aria-label="Video">
-                          🎬
-                        </span>
-                      </div>
-                    )}
+                    <div className="clip-card__placeholder">
+                      {/* @ts-ignore */}
+                      <sp-icon name="ui:FileVideo" size="l" />
+                      <div className="text-detail">MP4</div>
+                    </div>
                   </div>
                   <div className="clip-card__body">
                     <div className="clip-card__header">
