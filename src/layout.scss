@@ -1190,6 +1190,7 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   border: 1px solid var(--theme-border-subtle);
   border-radius: $border-radius;
   margin-top: $space-100;
+  max-width: 312px;
 
   .preview-image {
     border-radius: $border-radius-sm;
@@ -1201,6 +1202,7 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
     display: flex;
     flex-direction: column;
     gap: $space-100;
+    margin-left: $space-200;
 
     .text-detail {
       font-weight: 500;

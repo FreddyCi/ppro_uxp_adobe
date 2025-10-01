@@ -321,6 +321,8 @@ export class LumaVideoService {
     const mergedHeaders = this.mergeHeaders(init.headers)
     const { controller, cleanup, timeoutId } = this.createAbortController(signal)
 
+    console.log(`🌐 Luma API request: ${init.method || 'GET'} ${url}`)
+
     let response: Response
 
     try {
@@ -329,6 +331,8 @@ export class LumaVideoService {
         headers: mergedHeaders,
         signal: controller.signal,
       })
+      
+      console.log(`📡 Luma API response: ${response.status} ${response.statusText}`)
     } catch (error) {
       cleanup()
       if (timeoutId) {
@@ -354,6 +358,13 @@ export class LumaVideoService {
     }
 
     if (!response.ok) {
+      console.error(`❌ Luma API request failed: ${response.status} ${response.statusText}`, {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      })
+      
       const parsed = await this.parseErrorBody(response)
       throw new LumaVideoServiceError(parsed.message, response.status, undefined, parsed.body)
     }
@@ -448,9 +459,24 @@ export class LumaVideoService {
 
       const text = await response.text()
       if (text) {
+        // Check if response is HTML (common for 502/503 errors)
+        if (text.trim().startsWith('<')) {
+          console.warn('⚠️ Luma API returned HTML error page:', text.substring(0, 200))
+          
+          // Extract title from HTML if possible
+          const titleMatch = text.match(/<title>(.*?)<\/title>/i)
+          const title = titleMatch ? titleMatch[1] : `HTTP ${response.status}`
+          
+          return { 
+            message: `Luma API error: ${title}`, 
+            body: text 
+          }
+        }
+        
         return { message: text, body: text }
       }
     } catch (error) {
+      console.error('Failed to parse Luma error response:', error)
       return { message: `Luma Dream Machine request failed (HTTP ${response.status})`, body: undefined }
     }
 
