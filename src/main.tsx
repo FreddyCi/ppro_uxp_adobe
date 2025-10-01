@@ -455,6 +455,16 @@ const AppContent = () => {
   };
 
   const handleGenerateLumaVideo = async () => {
+    console.log('🎬 Luma generate button clicked - keyframes mode');
+    console.log('📝 Current state:', {
+      lumaPrompt: lumaPrompt?.substring(0, 50) + '...',
+      lumaMode,
+      isGeneratingLuma,
+      isAuthed,
+      lumaFirstFrameItem: !!lumaFirstFrameItem,
+      lumaLastFrameItem: !!lumaLastFrameItem
+    });
+
     if (!lumaPrompt.trim()) {
       showWarning('Missing Prompt', 'Please enter a description for your video.');
       return;
@@ -819,6 +829,15 @@ const AppContent = () => {
   };
 
   const handleReframeLumaVideo = async () => {
+    console.log('🎬 Luma reframe button clicked - reframe mode');
+    console.log('📝 Current state:', {
+      lumaPrompt: lumaPrompt?.substring(0, 50) + '...',
+      lumaMode,
+      isGeneratingLuma,
+      isAuthed,
+      lumaReframeVideoItem: !!lumaReframeVideoItem
+    });
+
     if (!lumaPrompt.trim()) {
       showWarning('Missing Prompt', 'Please enter a description for the reframed video.');
       return;
@@ -1211,36 +1230,31 @@ const AppContent = () => {
                     
                     {/* Generation Mode Toggle */}
                     <div className="generation-mode-toggle">
-                      {/* @ts-ignore */}
                       <sp-button-group>
-                        {/* @ts-ignore */}
                         <sp-button
                           variant={generationMode === 'firefly' ? 'primary' : 'secondary'}
                           size="s"
                           onClick={() => setGenerationMode('firefly')}
                         >
                           Firefly
-                        {/* @ts-ignore */}
                         </sp-button>
-                        {/* @ts-ignore */}
                         <sp-button
                           variant={generationMode === 'ltx' ? 'primary' : 'secondary'}
                           size="s"
                           onClick={() => setGenerationMode('ltx')}
                         >
                           LTX
-                        {/* @ts-ignore */}
                         </sp-button>
-                          {/* @ts-ignore */}
                           <sp-button
                             variant={generationMode === 'luma' ? 'primary' : 'secondary'}
                             size="s"
-                            onClick={() => setGenerationMode('luma')}
+                            onClick={() => {
+                              console.log('🎯 Switching to Luma generation mode');
+                              setGenerationMode('luma');
+                            }}
                           >
                             Luma
-                          {/* @ts-ignore */}
                           </sp-button>
-                      {/* @ts-ignore */}
                       </sp-button-group>
                     </div>
                   </header>
@@ -1251,19 +1265,15 @@ const AppContent = () => {
                           Please authenticate to generate content
                         </div>
 
-                        {/* @ts-ignore */}
                         <sp-button variant="accent" onClick={testIMSAuthentication} style={{ marginLeft: '12px' }}>
                           Login
-                        {/* @ts-ignore */}
                         </sp-button>
                       </div>
                     ) : generationMode === 'firefly' ? (
                       <div className="generation-form">
                         {/* Prompt Input */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Prompt *</sp-label>
-                          {/* @ts-ignore */}
                           <sp-textarea 
                             id="prompt-input"
                             placeholder="A majestic mountain landscape at sunset with purple clouds..."
@@ -1274,7 +1284,6 @@ const AppContent = () => {
                             value={prompt}
                             onInput={(e: any) => setPrompt(e.target.value)}
                           >
-                          {/* @ts-ignore */}
                           </sp-textarea>
                           <div className="character-counter text-detail">
                             {prompt.length}/1000 characters
@@ -1283,106 +1292,74 @@ const AppContent = () => {
 
                         {/* Style Preset */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Style Preset</sp-label>
                           <div className="text-detail mb-sm">Choose a visual style for your image</div>
-                          {/* @ts-ignore */}
                           <sp-picker 
                             placeholder="No Style" 
                             className="style-dropdown"
                             onChange={(e: any) => setStylePreset(e.target.value)}
                           >
-                            {/* @ts-ignore */}
                             <sp-menu slot="options">
-                              {/* @ts-ignore */}
                               <sp-menu-item value="">No Style</sp-menu-item>
-                              {/* @ts-ignore */}
                               <sp-menu-item value="photographic">Photographic</sp-menu-item>
-                              {/* @ts-ignore */}
                               <sp-menu-item value="digital-art">Digital Art</sp-menu-item>
-                              {/* @ts-ignore */}
                               <sp-menu-item value="graphic-design">Graphic Design</sp-menu-item>
-                              {/* @ts-ignore */}
                               <sp-menu-item value="3d">3D</sp-menu-item>
-                              {/* @ts-ignore */}
                               <sp-menu-item value="painting">Painting</sp-menu-item>
-                              {/* @ts-ignore */}
                               <sp-menu-item value="sketch">Sketch</sp-menu-item>
-                            {/* @ts-ignore */}
                             </sp-menu>
-                          {/* @ts-ignore */}
                           </sp-picker>
                         </div>
 
                         {/* Content Type */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Content Type</sp-label>
                           <div className="text-detail mb-sm">Choose between artistic or photorealistic content</div>
-                          {/* @ts-ignore */}
                           <sp-radio-group 
                             className="content-type-group"
                             onChange={(e: any) => setContentType(e.target.value)}
                           >
-                            {/* @ts-ignore */}
                             <sp-radio value="art" checked={contentType === 'art'}>
                               <span className="radio-label">Art</span>
                               <div className="radio-description text-detail">Creative, artistic content</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                            {/* @ts-ignore */}
                             <sp-radio value="photo" checked={contentType === 'photo'}>
                               <span className="radio-label">Photo</span>
                               <div className="radio-description text-detail">Photorealistic content</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                          {/* @ts-ignore */}
                           </sp-radio-group>
                         </div>
 
                         {/* Aspect Ratio */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Aspect Ratio</sp-label>
                           <div className="text-detail mb-sm">Choose image dimensions</div>
-                          {/* @ts-ignore */}
                           <sp-radio-group 
                             className="content-type-group"
                             onChange={(e: any) => setAspectRatio(e.target.value)}
                           >
-                            {/* @ts-ignore */}
                             <sp-radio value="square" checked={aspectRatio === 'square'}>
                               <span className="radio-label">Square</span>
                               <div className="radio-description text-detail">1024×1024</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                            {/* @ts-ignore */}
                             <sp-radio value="landscape" checked={aspectRatio === 'landscape'}>
                               <span className="radio-label">Landscape</span>
                               <div className="radio-description text-detail">1792×1024</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                            {/* @ts-ignore */}
                             <sp-radio value="portrait" checked={aspectRatio === 'portrait'}>
                               <span className="radio-label">Portrait</span>
                               <div className="radio-description text-detail">1024×1792</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                            {/* @ts-ignore */}
                             <sp-radio value="ultrawide" checked={aspectRatio === 'ultrawide'}>
                               <span className="radio-label">Ultrawide</span>
                               <div className="radio-description text-detail">2048×896</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                          {/* @ts-ignore */}
                           </sp-radio-group>
                         </div>
 
                         {/* Seed (Optional) */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Seed (Optional)</sp-label>
-                          {/* @ts-ignore */}
                           <sp-slider 
                             min={0} 
                             max={999999} 
@@ -1391,13 +1368,11 @@ const AppContent = () => {
                             className="seed-slider"
                             onInput={(e: any) => setSeedValue(parseInt(e.target.value) || 0)}
                           >
-                          {/* @ts-ignore */}
                           </sp-slider>
                         </div>
 
                         {/* Generate Button */}
                         <div className="form-actions">
-                          {/* @ts-ignore */}
                           <sp-button 
                             variant="accent" 
                             size="m"
@@ -1406,7 +1381,6 @@ const AppContent = () => {
                             disabled={isGenerating || !prompt.trim()}
                           >
                             {isGenerating ? 'Generating...' : 'Generate Image'}
-                          {/* @ts-ignore */}
                           </sp-button>
                         </div>
                       </div>
@@ -1414,9 +1388,7 @@ const AppContent = () => {
                       <div className="generation-form">
                         {/* LTX Video Prompt Input */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Video Prompt *</sp-label>
-                          {/* @ts-ignore */}
                           <sp-textarea 
                             id="ltx-prompt-input"
                             placeholder="A cinematic shot of a futuristic city skyline at sunset, camera slowly dolly-in with warm golden light..."
@@ -1427,7 +1399,6 @@ const AppContent = () => {
                             value={ltxPrompt}
                             onInput={(e: any) => setLtxPrompt(e.target.value)}
                           >
-                          {/* @ts-ignore */}
                           </sp-textarea>
                           <div className="character-counter text-detail">
                             {ltxPrompt.length}/1000 characters
@@ -1436,10 +1407,8 @@ const AppContent = () => {
 
                         {/* Duration */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Duration</sp-label>
                           <div className="text-detail mb-sm">Video length in seconds</div>
-                          {/* @ts-ignore */}
                           <sp-slider 
                             min={1} 
                             max={10} 
@@ -1448,43 +1417,33 @@ const AppContent = () => {
                             className="duration-slider"
                             onInput={(e: any) => setLtxDuration(parseInt(e.target.value) || 6)}
                           >
-                          {/* @ts-ignore */}
                           </sp-slider>
                           <div className="text-detail mt-sm">{ltxDuration} seconds</div>
                         </div>
 
                         {/* FPS */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Frame Rate</sp-label>
                           <div className="text-detail mb-sm">Frames per second</div>
-                          {/* @ts-ignore */}
                           <sp-radio-group 
                             className="fps-group"
                             onChange={(e: any) => setLtxFps(parseInt(e.target.value))}
                           >
-                            {/* @ts-ignore */}
                             <sp-radio value="16" checked={ltxFps === 16}>
                               <span className="radio-label">16 FPS</span>
                               <div className="radio-description text-detail">Smooth, cinematic</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                            {/* @ts-ignore */}
                             <sp-radio value="24" checked={ltxFps === 24}>
                               <span className="radio-label">24 FPS</span>
                               <div className="radio-description text-detail">Film standard</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                          {/* @ts-ignore */}
                           </sp-radio-group>
                         </div>
 
                         {/* Resolution */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Resolution</sp-label>
                           <div className="text-detail mb-sm">Video dimensions</div>
-                          {/* @ts-ignore */}
                           <sp-radio-group 
                             className="resolution-group"
                             onChange={(e: any) => {
@@ -1493,33 +1452,24 @@ const AppContent = () => {
                               setLtxHeight(height);
                             }}
                           >
-                            {/* @ts-ignore */}
                             <sp-radio value="1024x576" checked={`${ltxWidth}x${ltxHeight}` === '1024x576'}>
                               <span className="radio-label">1024×576</span>
                               <div className="radio-description text-detail">16:9 SD</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                            {/* @ts-ignore */}
                             <sp-radio value="1280x720" checked={`${ltxWidth}x${ltxHeight}` === '1280x720'}>
                               <span className="radio-label">1280×720</span>
                               <div className="radio-description text-detail">16:9 HD</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                            {/* @ts-ignore */}
                             <sp-radio value="1920x1080" checked={`${ltxWidth}x${ltxHeight}` === '1920x1080'}>
                               <span className="radio-label">1920×1080</span>
                               <div className="radio-description text-detail">16:9 Full HD</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                          {/* @ts-ignore */}
                           </sp-radio-group>
                         </div>
 
                         {/* Seed (Optional) */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Seed (Optional)</sp-label>
-                          {/* @ts-ignore */}
                           <sp-slider 
                             min={0} 
                             max={999999} 
@@ -1528,13 +1478,11 @@ const AppContent = () => {
                             className="seed-slider"
                             onInput={(e: any) => setLtxSeed(parseInt(e.target.value) || 0)}
                           >
-                          {/* @ts-ignore */}
                           </sp-slider>
                         </div>
 
                         {/* Generate Button */}
                         <div className="form-actions">
-                          {/* @ts-ignore */}
                           <sp-button 
                             variant="accent" 
                             size="m"
@@ -1543,17 +1491,31 @@ const AppContent = () => {
                             disabled={isGeneratingLtx || !ltxPrompt.trim()}
                           >
                             {isGeneratingLtx ? 'Generating...' : 'Generate Video'}
-                          {/* @ts-ignore */}
                           </sp-button>
                         </div>
                       </div>
                     ) : (
                       <div className="generation-form">
+                        {(() => {
+                          console.log('🎬 Rendering Luma generation form:', {
+                            isGeneratingLuma,
+                            lumaPrompt: lumaPrompt.substring(0, 50) + (lumaPrompt.length > 50 ? '...' : ''),
+                            lumaMode,
+                            lumaModel,
+                            lumaAspectRatio,
+                            lumaDuration,
+                            lumaResolution,
+                            hasFirstFrame: !!lumaFirstFrameItem,
+                            hasLastFrame: !!lumaLastFrameItem,
+                            hasReframeVideo: !!lumaReframeVideoItem,
+                            isHydrated,
+                            isAuthed
+                          });
+                          return null;
+                        })()}
                         {/* Luma Video Prompt */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Video Prompt *</sp-label>
-                          {/* @ts-ignore */}
                           <sp-textarea 
                             id="luma-prompt-input"
                             placeholder="A sweeping drone shot over bioluminescent waves crashing on a night beach..."
@@ -1564,7 +1526,6 @@ const AppContent = () => {
                             value={lumaPrompt}
                             onInput={(e: any) => setLumaPrompt(e.target.value)}
                           >
-                          {/* @ts-ignore */}
                           </sp-textarea>
                           <div className="character-counter text-detail">
                             {lumaPrompt.length}/1000 characters
@@ -1573,10 +1534,8 @@ const AppContent = () => {
 
                         {/* Mode Selection */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Mode</sp-label>
                           <div className="text-detail mb-sm">Choose generation mode</div>
-                          {/* @ts-ignore */}
                           <sp-radio-group 
                             className="content-type-group"
                             onChange={(e: any) => {
@@ -1590,44 +1549,31 @@ const AppContent = () => {
                               }
                             }}
                           >
-                            {/* @ts-ignore */}
                             <sp-radio value="keyframes" checked={lumaMode === 'keyframes'}>
                               <span className="radio-label">First Frame Last Frame</span>
                               <div className="radio-description text-detail">Generate video with start/end images</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                            {/* @ts-ignore */}
                             <sp-radio value="reframe" checked={lumaMode === 'reframe'}>
                               <span className="radio-label">Reframe</span>
                               <div className="radio-description text-detail">Change aspect ratio of existing video</div>
-                            {/* @ts-ignore */}
                             </sp-radio>
-                          {/* @ts-ignore */}
                           </sp-radio-group>
                         </div>
 
                         {/* Model */}
                         <div className="form-group">
-                          {/* @ts-ignore */}
                           <sp-label className="form-label">Model</sp-label>
                           <div className="text-detail mb-sm">Choose the Dream Machine model</div>
-                          {/* @ts-ignore */}
                           <sp-picker 
                             placeholder="Select model"
                             className="style-dropdown"
                             onChange={(e: any) => setLumaModel(e.target.value)}
                           >
-                            {/* @ts-ignore */}
                             <sp-menu slot="options">
-                              {/* @ts-ignore */}
                               <sp-menu-item value="ray-2">Ray 2</sp-menu-item>
-                              {/* @ts-ignore */}
                               <sp-menu-item value="ray-flash-2">Ray Flash 2</sp-menu-item>
-                              {/* @ts-ignore */}
                               <sp-menu-item value="ray-1-6">Ray 1.6</sp-menu-item>
-                            {/* @ts-ignore */}
                             </sp-menu>
-                          {/* @ts-ignore */}
                           </sp-picker>
                         </div>
 
@@ -1635,103 +1581,74 @@ const AppContent = () => {
                           <>
                             {/* Aspect Ratio */}
                             <div className="form-group">
-                              {/* @ts-ignore */}
                               <sp-label className="form-label">Aspect Ratio</sp-label>
                               <div className="text-detail mb-sm">Select the composition</div>
-                              {/* @ts-ignore */}
                               <sp-radio-group 
                                 className="content-type-group"
                                 onChange={(e: any) => setLumaAspectRatio(e.target.value)}
                               >
-                                {/* @ts-ignore */}
                                 <sp-radio value="16:9" checked={lumaAspectRatio === '16:9'}>
                                   <span className="radio-label">16:9</span>
                                   <div className="radio-description text-detail">Widescreen</div>
-                                {/* @ts-ignore */}
                                 </sp-radio>
-                                {/* @ts-ignore */}
                                 <sp-radio value="9:16" checked={lumaAspectRatio === '9:16'}>
                                   <span className="radio-label">9:16</span>
                                   <div className="radio-description text-detail">Vertical</div>
-                                {/* @ts-ignore */}
                                 </sp-radio>
-                                {/* @ts-ignore */}
                                 <sp-radio value="1:1" checked={lumaAspectRatio === '1:1'}>
                                   <span className="radio-label">1:1</span>
                                   <div className="radio-description text-detail">Square</div>
-                                {/* @ts-ignore */}
                                 </sp-radio>
-                                {/* @ts-ignore */}
                                 <sp-radio value="21:9" checked={lumaAspectRatio === '21:9'}>
                                   <span className="radio-label">21:9</span>
                                   <div className="radio-description text-detail">Ultra-wide</div>
-                                {/* @ts-ignore */}
                                 </sp-radio>
-                              {/* @ts-ignore */}
                               </sp-radio-group>
                             </div>
 
                             {/* Duration */}
                             <div className="form-group">
-                              {/* @ts-ignore */}
                               <sp-label className="form-label">Duration</sp-label>
                               <div className="text-detail mb-sm">Clip length</div>
-                              {/* @ts-ignore */}
                               <sp-radio-group 
                                 className="fps-group"
                                 onChange={(e: any) => setLumaDuration(e.target.value)}
                               >
-                                {/* @ts-ignore */}
                                 <sp-radio value="5s" checked={lumaDuration === '5s'}>
                                   <span className="radio-label">5 seconds</span>
                                   <div className="radio-description text-detail">Quick loop</div>
-                                {/* @ts-ignore */}
                                 </sp-radio>
-                                {/* @ts-ignore */}
                                 <sp-radio value="9s" checked={lumaDuration === '9s'}>
                                   <span className="radio-label">9 seconds</span>
                                   <div className="radio-description text-detail">Longer motion</div>
-                                {/* @ts-ignore */}
                                 </sp-radio>
-                              {/* @ts-ignore */}
                               </sp-radio-group>
                             </div>
 
                             {/* Resolution */}
                             <div className="form-group">
-                              {/* @ts-ignore */}
                               <sp-label className="form-label">Resolution</sp-label>
                               <div className="text-detail mb-sm">Output size</div>
-                              {/* @ts-ignore */}
                               <sp-radio-group 
                                 className="resolution-group"
                                 onChange={(e: any) => setLumaResolution(e.target.value)}
                               >
-                                {/* @ts-ignore */}
                                 <sp-radio value="540p" checked={lumaResolution === '540p'}>
                                   <span className="radio-label">540p</span>
                                   <div className="radio-description text-detail">Lightweight preview</div>
-                                {/* @ts-ignore */}
                                 </sp-radio>
-                                {/* @ts-ignore */}
                                 <sp-radio value="720p" checked={lumaResolution === '720p'}>
                                   <span className="radio-label">720p</span>
                                   <div className="radio-description text-detail">HD</div>
-                                {/* @ts-ignore */}
                                 </sp-radio>
-                                {/* @ts-ignore */}
                                 <sp-radio value="1080p" checked={lumaResolution === '1080p'}>
                                   <span className="radio-label">1080p</span>
                                   <div className="radio-description text-detail">Full HD</div>
-                                {/* @ts-ignore */}
                                 </sp-radio>
-                                {/* @ts-ignore */}
                                 <sp-radio value="4k" checked={lumaResolution === '4k'}>
                                   <span className="radio-label">4K</span>
                                   <div className="radio-description text-detail">Ultra HD</div>
-                                {/* @ts-ignore */}
                                 </sp-radio>
-                              {/* @ts-ignore */}
                               </sp-radio-group>
                             </div>
 
@@ -2012,21 +1929,27 @@ const AppContent = () => {
 
                         {/* Generate Button */}
                         <div className="form-actions">
-                          {/* @ts-ignore */}
-                          <sp-button 
-                            variant="accent" 
-                            size="m"
-                            className="generate-button"
-                            onClick={lumaMode === 'reframe' ? handleReframeLumaVideo : handleGenerateLumaVideo}
-                            disabled={
-                              isGeneratingLuma || 
-                              !lumaPrompt.trim() || 
-                              (lumaMode === 'reframe' && !lumaReframeVideoItem)
-                            }
-                          >
-                            {isGeneratingLuma ? 'Generating...' : lumaMode === 'reframe' ? 'Reframe Video' : 'Generate Video'}
-                          {/* @ts-ignore */}
-                          </sp-button>
+                          {(() => {
+                            const isButtonDisabled = isGeneratingLuma || !lumaPrompt.trim() || (lumaMode === 'reframe' && !lumaReframeVideoItem);
+                            console.log('🔘 Luma button disabled state:', {
+                              isGeneratingLuma,
+                              hasPrompt: !!lumaPrompt.trim(),
+                              lumaMode,
+                              hasReframeVideo: !!lumaReframeVideoItem,
+                              isDisabled: isButtonDisabled
+                            });
+                            return (
+                              <sp-button 
+                                variant="accent" 
+                                size="m"
+                                className="generate-button"
+                                onClick={lumaMode === 'reframe' ? handleReframeLumaVideo : handleGenerateLumaVideo}
+                                disabled={isButtonDisabled}
+                              >
+                                {isGeneratingLuma ? 'Generating...' : lumaMode === 'reframe' ? 'Reframe Video' : 'Generate Video'}
+                              </sp-button>
+                            );
+                          })()}
                         </div>
                       </div>
                     )}
