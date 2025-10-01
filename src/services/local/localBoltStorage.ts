@@ -1,6 +1,6 @@
 import type { GenerationMetadata } from '../../types/firefly'
 import { isLocalMode } from '../storageMode'
-import { extractThumbnailFromBlob } from '../../utils/videoThumbnails'
+import { generateAndSaveVideoThumbnail } from './thumbnailGenerator'
 
 const LOCAL_MODE = isLocalMode()
 
@@ -209,17 +209,10 @@ class LocalBoltStorage {
       throw new Error(`[BoltStorage] Failed to write binary file: ${filePath}`)
     }
 
-    // Generate thumbnail for video content
+    // Generate and save thumbnail for video content
     let thumbnailUrl: string | undefined
     if (options.metadata.contentType === 'video') {
-      try {
-        console.log('[BoltStorage] Generating video thumbnail...')
-        thumbnailUrl = await extractThumbnailFromBlob(options.blob, 1.0, 320, 180)
-        console.log('[BoltStorage] Video thumbnail generated successfully')
-      } catch (error) {
-        console.warn('[BoltStorage] Failed to generate video thumbnail:', error)
-        // Continue without thumbnail - not a fatal error
-      }
+      thumbnailUrl = await generateAndSaveVideoThumbnail(options.blob, filePath, addon) || undefined
     }
 
     const metadataPayload = {
@@ -434,17 +427,10 @@ class UxpLocalStorage {
     }
     await file.write(arrayBuffer)
 
-    // Generate thumbnail for video content
+    // Generate thumbnail for video content (in-memory only for UXP)
     let thumbnailUrl: string | undefined
     if (options.metadata.contentType === 'video') {
-      try {
-        console.log('[UXPLocalStorage] Generating video thumbnail...')
-        thumbnailUrl = await extractThumbnailFromBlob(options.blob, 1.0, 320, 180)
-        console.log('[UXPLocalStorage] Video thumbnail generated successfully')
-      } catch (error) {
-        console.warn('[UXPLocalStorage] Failed to generate video thumbnail:', error)
-        // Continue without thumbnail - not a fatal error
-      }
+      thumbnailUrl = await generateAndSaveVideoThumbnail(options.blob, file.nativePath) || undefined
     }
 
     const metadataPayload = {
