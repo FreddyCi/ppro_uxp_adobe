@@ -20,7 +20,7 @@ import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, Re
 import { createAzureSDKBlobService } from './services/blob/AzureSDKBlobService';
 import { createSASTokenService } from './services/blob/SASTokenService';
 import axios from 'axios';
-import { useIsAuthenticated, getIMSServiceInstance, getSharedIMSService, ensureAuthenticated, setAuthFromToken } from './store/authStore';
+import { useIsAuthenticated, getIMSServiceInstance, getSharedIMSService, ensureAuthenticated, setAuthFromToken, selectStatus, selectToken, selectIsAuthed, selectHydrated } from './store/authStore';
 
 // Import components
 import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery, LocalIngestPanel } from "./components";
@@ -135,9 +135,10 @@ const AppContent = () => {
   // Get generation store actions
   const { actions: { addGeneration } } = useGenerationStore();
 
-  // Get authentication status
-  const isAuthenticated = useIsAuthenticated();
-  const auth = useAuthStore();
+  // Get authentication status using selectors
+  const authStatus = useAuthStore(selectStatus);
+  const isAuthed = useAuthStore(selectIsAuthed);
+  const isHydrated = useAuthStore(selectHydrated);
 
   const azureBlobServiceRef = useRef<ReturnType<typeof createAzureSDKBlobService> | null>(null);
   const azureContainerName = import.meta.env.VITE_AZURE_STORAGE_CONTAINER_NAME || 'uxp-images';
@@ -153,7 +154,7 @@ const AppContent = () => {
   useEffect(() => {
     const checkAuthAndClearService = async () => {
       await ensureAuthenticated();
-      if (!isAuthenticated) {
+      if (!isAuthed) {
         azureBlobServiceRef.current = null;
       }
     };
@@ -163,7 +164,7 @@ const AppContent = () => {
   useEffect(() => {
     const checkAuthAndCreateService = async () => {
       await ensureAuthenticated();
-      if (isAuthenticated && !azureBlobServiceRef.current) {
+      if (isAuthed && !azureBlobServiceRef.current) {
         // Recreate Azure service with authenticated IMS service
         azureBlobServiceRef.current = createAzureSDKBlobService(getSharedIMSService());
       }
@@ -461,7 +462,7 @@ const AppContent = () => {
 
     // Ensure user is authenticated before proceeding
     await ensureAuthenticated();
-    if (!isAuthenticated) {
+    if (!isAuthed) {
       return; // ensureAuthenticated handles the error toast
     }
 
@@ -571,9 +572,9 @@ const AppContent = () => {
           return existingUrl;
         }
 
-        if (!isAuthenticated) {
+        if (!isAuthed) {
           await ensureAuthenticated();
-          if (!isAuthenticated) {
+          if (!isAuthed) {
             const message = 'Sign in with Adobe IMS to upload keyframe assets to Azure before using Luma.';
             showError('Authentication Required', message);
             throw new Error(message);
@@ -830,7 +831,7 @@ const AppContent = () => {
 
     // Ensure user is authenticated before proceeding
     await ensureAuthenticated();
-    if (!isAuthenticated) {
+    if (!isAuthed) {
       return; // ensureAuthenticated handles the error toast
     }
 
@@ -1044,14 +1045,13 @@ const AppContent = () => {
 
   // Blob URL rehydration on app startup and gallery tab switch
   useEffect(() => {
-    const rehydrateBlobUrls = async () => {
-      // Only run rehydration if user is authenticated
-      await ensureAuthenticated();
-      if (!isAuthenticated) {
-        console.log('🔄 Skipping blob URL rehydration - user not authenticated');
-        return;
-      }
+    // Only run rehydration if store is hydrated AND user is authenticated
+    if (!isHydrated || !isAuthed) {
+      console.log('🔄 Skipping blob URL rehydration - store not hydrated or user not authenticated', { isHydrated, isAuthed });
+      return;
+    }
 
+    const rehydrateBlobUrls = async () => {
       console.log('🔄 Starting blob URL rehydration...');
       const { contentItems, actions } = useGalleryStore.getState();
 
@@ -1100,13 +1100,8 @@ const AppContent = () => {
       console.log('✅ Blob URL rehydration complete');
     };
 
-    // Rehydrate on auth status change (not only at boot)
-    if (auth.status === 'authenticated') {
-      rehydrateBlobUrls();
-    } else {
-      console.log('🔄 Skipping blob URL rehydration - user not authenticated');
-    }
-  }, [auth.status]); // Re-run when auth status changes
+    rehydrateBlobUrls();
+  }, [isHydrated, isAuthed]); // Re-run when hydration or auth status changes
 
   // Clear any lingering auth dialogs and reset state
   const clearAuthState = () => {
@@ -1783,12 +1778,18 @@ const AppContent = () => {
                               <div className="text-detail mb-sm">Select an image from your gallery for the video start</div>
                               {lumaFirstFrameItem ? (
                                 <div className="selected-image-preview">
-                                  <img
-                                    src={lumaFirstFrameItem.displayUrl || undefined}
-                                    alt="First frame"
-                                    className="preview-image"
-                                    style={{ maxWidth: '100px', maxHeight: '100px', objectFit: 'cover' }}
-                                  />
+                                  {lumaFirstFrameItem.displayUrl ? (
+                                    <img
+                                      src={lumaFirstFrameItem.displayUrl}
+                                      alt="First frame"
+                                      className="preview-image"
+                                      style={{ maxWidth: '100px', maxHeight: '100px', objectFit: 'cover' }}
+                                    />
+                                  ) : (
+                                    <div className="preview-image-placeholder" style={{ width: '100px', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--theme-surface-secondary)', border: '1px dashed var(--theme-border)' }}>
+                                      <div className="text-detail" style={{ fontSize: '11px', color: 'var(--theme-text-secondary)' }}>No preview</div>
+                                    </div>
+                                  )}
                                   <div className="preview-info">
                                     <div className="text-detail">{lumaFirstFrameItem.filename}</div>
                                     {!lumaFirstFrameItem.blobUrl && (
@@ -1830,12 +1831,18 @@ const AppContent = () => {
                               <div className="text-detail mb-sm">Select an image from your gallery for the video end</div>
                               {lumaLastFrameItem ? (
                                 <div className="selected-image-preview">
-                                  <img
-                                    src={lumaLastFrameItem.displayUrl || undefined}
-                                    alt="Last frame"
-                                    className="preview-image"
-                                    style={{ maxWidth: '100px', maxHeight: '100px', objectFit: 'cover' }}
-                                  />
+                                  {lumaLastFrameItem.displayUrl ? (
+                                    <img
+                                      src={lumaLastFrameItem.displayUrl}
+                                      alt="Last frame"
+                                      className="preview-image"
+                                      style={{ maxWidth: '100px', maxHeight: '100px', objectFit: 'cover' }}
+                                    />
+                                  ) : (
+                                    <div className="preview-image-placeholder" style={{ width: '100px', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--theme-surface-secondary)', border: '1px dashed var(--theme-border)' }}>
+                                      <div className="text-detail" style={{ fontSize: '11px', color: 'var(--theme-text-secondary)' }}>No preview</div>
+                                    </div>
+                                  )}
                                   <div className="preview-info">
                                     <div className="text-detail">{lumaLastFrameItem.filename}</div>
                                     {/* @ts-ignore */}
@@ -1876,12 +1883,18 @@ const AppContent = () => {
                               <div className="text-detail mb-sm">Select a video from your gallery to change its aspect ratio</div>
                               {lumaReframeVideoItem ? (
                                 <div className="selected-video-preview">
-                                  <video
-                                    src={lumaReframeVideoItem.displayUrl || undefined}
-                                    className="preview-video"
-                                    style={{ maxWidth: '200px', maxHeight: '150px', objectFit: 'cover' }}
-                                    controls
-                                  />
+                                  {lumaReframeVideoItem.displayUrl ? (
+                                    <video
+                                      src={lumaReframeVideoItem.displayUrl}
+                                      className="preview-video"
+                                      style={{ maxWidth: '200px', maxHeight: '150px', objectFit: 'cover' }}
+                                      controls
+                                    />
+                                  ) : (
+                                    <div className="preview-video-placeholder" style={{ width: '200px', height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--theme-surface-secondary)', border: '1px dashed var(--theme-border)' }}>
+                                      <div className="text-detail" style={{ fontSize: '11px', color: 'var(--theme-text-secondary)' }}>No preview</div>
+                                    </div>
+                                  )}
                                   <div className="preview-info">
                                     <div className="text-detail">{lumaReframeVideoItem.filename}</div>
                                     {/* @ts-ignore */}

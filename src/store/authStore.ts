@@ -24,6 +24,9 @@ export interface AuthStore {
   isLoading: boolean
   error: string | null
   
+  // Hydration tracking
+  _hydrated: boolean
+  
   // Additional state for better UX
   userId: string | null
   lastLoginAttempt: Date | null
@@ -49,6 +52,7 @@ export interface AuthStore {
     checkAuthStatus(): boolean
     scheduleTokenRefresh(): void
     setStatus(status: AuthStatus, token?: string | null, error?: string | null): void
+    setHydrated(hydrated: boolean): void
   }
 }
 
@@ -98,6 +102,7 @@ const initialState = {
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  _hydrated: false,
   userId: null,
   lastLoginAttempt: null,
   lastCheckedAt: null,
@@ -442,6 +447,13 @@ export const useAuthStore = create<AuthStore>()(
             // Clear token expiry if unauthenticated or error
             tokenExpiry: (status === 'unauthenticated' || status === 'error') ? null : currentStore.tokenExpiry
           })
+        },
+
+        /**
+         * Set hydration status
+         */
+        setHydrated(hydrated: boolean): void {
+          set({ _hydrated: hydrated })
         }
       }
     }),
@@ -457,6 +469,7 @@ export const useAuthStore = create<AuthStore>()(
         expiresAt: state.expiresAt,
         secondsUntilExpiry: state.secondsUntilExpiry,
         isAuthenticated: state.isAuthenticated,
+        _hydrated: state._hydrated,
         userId: state.userId,
         lastCheckedAt: state.lastCheckedAt,
         refreshCount: state.refreshCount,
@@ -467,7 +480,35 @@ export const useAuthStore = create<AuthStore>()(
       // Handle rehydration
       onRehydrateStorage: () => (state) => {
         if (state) {
+          // Mark store as hydrated
+          state.actions.setHydrated(true)
+          
           // Auth store rehydrated from storage
+          
+          // If we have a persisted token, try to bootstrap authentication immediately
+          if (state.accessToken && state.status !== 'authenticated') {
+            console.log('🔄 Attempting immediate authentication bootstrap from persisted token...');
+            // Try to validate and set auth state from persisted token
+            try {
+              const expMs = decodeExp(state.accessToken);
+              const expiresAt = expMs ? new Date(expMs) : null;
+              const secondsUntilExpiry = expiresAt ? Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000)) : 0;
+              
+              // Only auto-authenticate if token is not expired
+              if (expiresAt && expiresAt > new Date()) {
+                state.actions.setStatus('authenticated', state.accessToken);
+                console.log('✅ Authentication bootstrapped from persisted token');
+              } else {
+                console.log('⚠️ Persisted token is expired, will require manual authentication');
+                // Clear expired token
+                state.actions.logout();
+              }
+            } catch (error) {
+              console.warn('⚠️ Failed to bootstrap authentication from persisted token:', error);
+              // Clear invalid token
+              state.actions.logout();
+            }
+          }
           
           // Validate persisted token on rehydration
           if (state.isAuthenticated && state.accessToken && state.tokenExpiry) {
@@ -517,6 +558,12 @@ export const useAuthLoading = () => {
 export const useAuthError = () => {
   return useAuthStore((state) => state.error)
 }
+
+// Selectors for cleaner component usage
+export const selectStatus = (state: AuthStore) => state.status
+export const selectToken = (state: AuthStore) => state.accessToken
+export const selectIsAuthed = (state: AuthStore) => state.isAuthenticated && state.actions.checkAuthStatus()
+export const selectHydrated = (state: AuthStore) => state._hydrated
 
 // Cleanup on module unload
 if (typeof window !== 'undefined') {
