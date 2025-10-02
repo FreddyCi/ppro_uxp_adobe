@@ -513,7 +513,7 @@ export class GeminiService {
             model: this.config.model,
             version: 'v1beta',
             filename: filename,
-            contentType: mimeType,
+            contentType: 'corrected-image', // Use content type identifier for gallery recognition
             fileSize: blob.size,
             userId: undefined,
             sessionId: undefined,

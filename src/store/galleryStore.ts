@@ -1536,6 +1536,22 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
 
           console.warn(`📋 Raw metadata content:`, JSON.stringify(metadata, null, 2))
 
+          // Special debug check for specific file
+          if (metadata.filename && metadata.filename.includes('gemini-corrected-2025-10-01T23-42-12-263Z')) {
+            console.error('🔍 FOUND YOUR FILE! Checking why it might not be added:', {
+              filename: metadata.filename,
+              contentType: metadata.contentType,
+              hasFilename: !!metadata.filename,
+              includesGeminiCorrected: metadata.filename.includes('gemini-corrected'),
+              contentTypeIsCorrectedImage: metadata.contentType === 'corrected-image',
+              contentTypeValue: metadata.contentType,
+              model: metadata.model,
+              relativePath: metadata.relativePath,
+              blobUrl: metadata.blobUrl,
+              correctedUrl: metadata.correctedUrl
+            })
+          }
+
           // Check if this is a supported generation type (Gemini-corrected, LTX video, Luma video, Firefly images, or other generations)
           const isSupportedGeneration = (
             metadata.filename && (
@@ -1556,7 +1572,14 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
             )
           )
 
-          console.log(`🔍 Is supported generation for ${metadata.filename}: ${isSupportedGeneration}`)
+          console.log(`🔍 Is supported generation for ${metadata.filename}: ${isSupportedGeneration}`, {
+            filename: metadata.filename,
+            contentType: metadata.contentType,
+            model: metadata.model,
+            hasFilename: !!metadata.filename,
+            isGeminiName: metadata.filename?.includes('gemini-corrected'),
+            isContentTypeCorrected: metadata.contentType === 'corrected-image'
+          })
 
           if (isSupportedGeneration) {
             console.warn(`✅ Found supported generation: ${metadata.filename} (${metadata.contentType || 'unknown type'})`)
@@ -1677,6 +1700,24 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
     }
 
     console.warn(`📊 Final sync result: ${syncedItems.length} generations found`)
+    
+    // Group items by type for easier debugging
+    const itemsByType = syncedItems.reduce((acc, item) => {
+      const type = item.filename?.includes('gemini-corrected') ? 'gemini-corrected' :
+                   item.filename?.includes('ltx-') ? 'ltx-video' :
+                   item.filename?.includes('luma-') ? 'luma-video' : 'other'
+      if (!acc[type]) acc[type] = []
+      acc[type].push(item)
+      return acc
+    }, {} as Record<string, typeof syncedItems>)
+    
+    console.warn(`📊 Items by type:`, {
+      'gemini-corrected': itemsByType['gemini-corrected']?.length || 0,
+      'ltx-video': itemsByType['ltx-video']?.length || 0,
+      'luma-video': itemsByType['luma-video']?.length || 0,
+      'other': itemsByType['other']?.length || 0
+    })
+    
     syncedItems.forEach((item, index) => {
       console.warn(`  ${index + 1}. ${item.filename} (ID: ${item.id})`)
     })
