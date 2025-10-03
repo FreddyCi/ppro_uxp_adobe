@@ -1175,32 +1175,328 @@ class FalService {
 - Update docs and comments sparingly—focus on accuracy over volume.
 ---
 
-### T024: Create Video Upload and Import Pipeline
+### T024: Implement Complete Luma AI Dream Machine API Integration
 **Status:** To Do
 **Dependencies:** T023
 **Priority:** High
-**Estimate:** 75 minutes
-**Progress Note:** [Progress note for this task]
-**Description:** Upload generated video to Blob storage and import to Premiere
+**Estimate:** 180 minutes
+**Progress Note:** Currently implemented: (1) Video generation with keyframes (first/last frame), (2) Reframe video. Remaining: Image generation APIs, video management APIs, concepts/camera motion APIs, and upscale/audio APIs.
+**Description:** Extend LumaVideoService to support all Luma AI Dream Machine API endpoints for comprehensive image and video generation capabilities
+**Current Implementation Status:**
+- ✅ **Video Generation with Keyframes** (`generateVideo` method) - Text-to-video, image-to-video with first/last frames
+- ✅ **Reframe Video** (`reframeVideo` method) - Aspect ratio conversion and cropping
+- ❌ **Image Generation** - Text-to-image, image reference, style reference, character reference, modify image
+- ❌ **Video Extend & Interpolate** - Extend video forward/reverse, interpolate between videos
+- ❌ **Video Upscale** - 4K upscaling for completed videos
+- ❌ **Video Audio** - Add audio/music to completed videos
+- ❌ **Concepts & Camera Motions** - List available concepts and camera motion presets
+- ❌ **Generation Management** - List all generations, delete generations
+
 **Deliverables:**
-- Video upload to Azure Blob with metadata
-- Premiere Pro import using UXP APIs
-- Automatic marker placement
-- Import progress tracking
-**Import Features:**
-- Auto-placement in project bin
-- Markers at generation start/end
-- Metadata attached to imported clip
-- Sequence auto-creation (optional)
+
+**1. Image Generation Service (`LumaImageService.ts`)**
+```typescript
+class LumaImageService {
+  // Core image generation
+  generateImage(request: LumaImageGenerationRequest): Promise<LumaImageGenerationResult>
+  
+  // Image reference-based generation
+  generateWithImageRef(prompt: string, imageRefs: ImageRef[], options?: ImageGenOptions): Promise<LumaImageGenerationResult>
+  
+  // Style reference generation
+  generateWithStyleRef(prompt: string, styleRef: ImageRef, options?: ImageGenOptions): Promise<LumaImageGenerationResult>
+  
+  // Character reference generation
+  generateWithCharacterRef(prompt: string, characterRefs: ImageRef[], options?: ImageGenOptions): Promise<LumaImageGenerationResult>
+  
+  // Modify existing image
+  modifyImage(imageUrl: string, prompt: string, weight?: number): Promise<LumaImageGenerationResult>
+  
+  // Poll and download (reuse video service patterns)
+  private waitForImageCompletion(id: string, signal?: AbortSignal): Promise<WaitForCompletionResult>
+  private downloadImageAsset(url: string, signal?: AbortSignal): Promise<{ blob: Blob; contentType: string }>
+}
+
+// Type definitions for image generation
+interface LumaImageGenerationRequest {
+  generation_type: 'image'
+  prompt: string
+  aspect_ratio?: LumaAspectRatio
+  model?: LumaImageModel  // 'photon-1' | 'photon-flash-1'
+  image_ref?: ImageRef[]
+  style_ref?: ImageRef
+  character_ref?: ImageRef[]
+  modify_image_ref?: ModifyImageRef
+  callback_url?: string
+}
+
+interface ImageRef {
+  url: string
+  weight?: number  // 0.0 - 1.0
+}
+```
+
+**2. Extended Video Service Methods (`LumaVideoService.ts`)**
+```typescript
+class LumaVideoService {
+  // EXISTING METHODS (already implemented)
+  generateVideo(request: LumaGenerationRequest): Promise<LumaVideoGenerationResult>  // ✅
+  reframeVideo(request: LumaReframeVideoRequest): Promise<LumaReframeVideoResult>    // ✅
+  
+  // NEW METHODS TO IMPLEMENT
+  
+  // Video extension (forward)
+  extendVideo(
+    generationId: string, 
+    prompt: string, 
+    options?: { endFrame?: string }
+  ): Promise<LumaVideoGenerationResult>
+  
+  // Video extension (reverse/leading up to)
+  reverseExtendVideo(
+    generationId: string,
+    prompt: string,
+    options?: { startFrame?: string }
+  ): Promise<LumaVideoGenerationResult>
+  
+  // Interpolate between two videos
+  interpolateVideos(
+    generation1Id: string,
+    generation2Id: string,
+    prompt: string
+  ): Promise<LumaVideoGenerationResult>
+  
+  // Upscale video to 4K
+  upscaleVideo(generationId: string): Promise<LumaUpscaleResult>
+  
+  // Add audio to video
+  addAudioToVideo(
+    generationId: string,
+    audioRequest: LumaAudioRequest
+  ): Promise<LumaAudioResult>
+  
+  // List available concepts
+  getConcepts(): Promise<LumaConcept[]>
+  
+  // List camera motions
+  getCameraMotions(): Promise<string[]>
+  
+  // Generation management
+  listGenerations(limit?: number, offset?: number): Promise<LumaGenerationResponse[]>
+  getGeneration(id: string): Promise<LumaGenerationResponse>
+  deleteGeneration(id: string): Promise<void>
+}
+
+// New type definitions
+interface LumaUpscaleResult {
+  blob: Blob
+  contentType: string
+  filename: string
+  generation: LumaGenerationResponse
+  metadata: LumaUpscaleMetadata
+}
+
+interface LumaAudioRequest {
+  prompt?: string
+  music_style?: string
+  duration?: number
+}
+
+interface LumaAudioResult {
+  blob: Blob
+  contentType: string
+  filename: string
+  generation: LumaGenerationResponse
+  metadata: LumaAudioMetadata
+}
+```
+
+**3. UI Components**
+
+**Image Generation Panel (`LumaImageGeneration.tsx`)**
+- Prompt input with character counter
+- Model selection (photon-1, photon-flash-1)
+- Aspect ratio selector (1:1, 3:4, 4:3, 9:16, 16:9, 9:21, 21:9)
+- Image reference upload (up to 4 images with weight sliders)
+- Style reference upload with weight control
+- Character reference upload (up to 4 images for consistency)
+- Modify image mode with existing image selector
+- Generate button with progress tracking
+- Preview and download generated images
+
+**Video Extension Panel (`LumaVideoExtension.tsx`)**
+- Select existing generated video from gallery
+- Extend forward/reverse toggle
+- Optional end/start frame selector
+- Prompt input for extension direction
+- Progress tracking for extension job
+- Preview extended video
+
+**Video Interpolation Panel (`LumaVideoInterpolation.tsx`)**
+- Select two generated videos from gallery
+- Prompt input for interpolation guidance
+- Preview both source videos
+- Generate interpolation button
+- Progress tracking and preview
+
+**Video Upscale Panel (`LumaVideoUpscale.tsx`)**
+- Select generated video from gallery
+- Upscale to 4K button
+- Progress tracking (upscaling may take longer)
+- Download upscaled video
+
+**Video Audio Panel (`LumaVideoAudio.tsx`)**
+- Select generated video from gallery
+- Audio generation prompt input
+- Music style selector
+- Duration control
+- Generate audio button
+- Preview video with audio
+
+**Concepts Browser (`LumaConcepts.tsx`)**
+- List all available concepts with descriptions
+- Search and filter concepts
+- Apply concept to video generation
+- Concept preview/examples
+
+**Camera Motion Browser (`LumaCameraMotions.tsx`)**
+- List all camera motion options
+- Visual preview of motion types
+- Apply to video generation prompt
+- Motion parameter controls
+
+**Generation Manager (`LumaGenerationManager.tsx`)**
+- List all user generations with pagination
+- Filter by type (image/video/reframe/upscale/audio)
+- Sort by date, status, prompt
+- View generation details
+- Delete generations
+- Download assets
+- Re-run with same parameters
+
+**4. Service Integration & Error Handling**
+- Extend `LumaVideoServiceError` for new error types
+- Add retry logic for upscale operations (longer processing)
+- Implement proper abort signal handling for all new methods
+- Add progress callbacks for UI updates
+- Integrate with existing gallery store for asset management
+- Add proper TypeScript types in `types/luma.ts`
+
+**5. Gallery Integration**
+- Support for displaying generated images alongside videos
+- Thumbnails for image generations
+- Select images as keyframes for video generation
+- Select videos for extension/interpolation
+- Display upscaled versions alongside originals
+- Audio waveform visualization for audio-enhanced videos
+
+**Implementation Plan:**
+1. **Phase 1: Image Generation (60 min)**
+   - Create `LumaImageService.ts` with all image generation methods
+   - Add TypeScript types for image requests/responses
+   - Build `LumaImageGeneration.tsx` UI component
+   - Integrate with gallery for image display and selection
+
+2. **Phase 2: Video Extensions & Operations (60 min)**
+   - Add extend, reverseExtend, interpolate methods to `LumaVideoService.ts`
+   - Add upscale and audio methods
+   - Create UI components for each operation
+   - Add progress tracking and error handling
+
+3. **Phase 3: Metadata & Management (30 min)**
+   - Implement concepts and camera motions endpoints
+   - Build browser/selector UI components
+   - Add generation list/delete endpoints
+   - Create `LumaGenerationManager.tsx` component
+
+4. **Phase 4: Integration & Testing (30 min)**
+   - Update gallery store to handle all generation types
+   - Add navigation between different Luma features
+   - Implement proper error handling and user feedback
+   - Test all workflows end-to-end
+
+**API Endpoint Reference (from docs):**
+```
+Video APIs:
+✅ POST /generations - Generate video (text-to-video, image-to-video with keyframes)
+❌ POST /generations - Extend video (forward with frame0 as generation)
+❌ POST /generations - Reverse extend video (reverse with frame1 as generation)
+❌ POST /generations - Interpolate between videos (both frame0 and frame1 as generations)
+✅ POST /generations/video/reframe - Reframe video aspect ratio
+❌ POST /generations/{id}/upscale - Upscale video to 4K
+❌ POST /generations/{id}/audio - Add audio to video
+❌ GET /generations/concepts/list - Get available concepts
+❌ GET /generations/camera_motion/list - Get camera motions
+❌ GET /generations - List all generations
+✅ GET /generations/{id} - Get single generation (used internally)
+❌ DELETE /generations/{id} - Delete generation
+
+Image APIs:
+❌ POST /generations/image - Generate image (text-to-image)
+❌ POST /generations/image - Generate with image reference
+❌ POST /generations/image - Generate with style reference
+❌ POST /generations/image - Generate with character reference
+❌ POST /generations/image - Modify existing image
+```
+
+**Enhanced Features:**
+- **Batch Operations:** Queue multiple image/video generations
+- **Template System:** Save common generation settings as presets
+- **Generation History:** Track all generations with full metadata
+- **Smart Suggestions:** Recommend concepts/camera motions based on prompt
+- **Cost Tracking:** Monitor API usage and generation costs
+- **Offline Mode:** Queue generations when offline, process when online
+
 **Acceptance Criteria:**
-- Video uploads to Blob successfully
-- Premiere import completes without errors
-- Markers appear at correct timecodes
+- ✅ All 23 Luma AI API endpoints implemented and functional
+- ✅ Image generation produces high-quality images with all reference modes working
+- ✅ Video extension (forward/reverse) creates seamless continuations
+- ✅ Video interpolation produces smooth transitions between clips
+- ✅ Video upscale delivers 4K quality without artifacts
+- ✅ Audio generation adds appropriate music/sound to videos
+- ✅ Concepts and camera motions apply correctly to generations
+- ✅ Generation management allows viewing, downloading, and deleting all assets
+- ✅ All UI components provide clear feedback and error handling
+- ✅ TypeScript compilation passes with complete type safety
+- ✅ Gallery integration displays all generation types with proper previews
+- ✅ Service layer handles all API errors gracefully with retry logic
+- ✅ Progress tracking works for long-running operations (upscale, interpolation)
+
+**Testing Checklist:**
+- [ ] Text-to-image generation with different models and aspect ratios
+- [ ] Image reference generation with multiple reference images
+- [ ] Style reference application to new generations
+- [ ] Character reference for consistent character across images
+- [ ] Image modification with varying weight values
+- [ ] Video extension forward with and without end frames
+- [ ] Video extension reverse with and without start frames
+- [ ] Video interpolation between two generated videos
+- [ ] Video upscale to 4K resolution
+- [ ] Audio generation with different music styles
+- [ ] Concepts listing and application to video prompts
+- [ ] Camera motions listing and application
+- [ ] Generation listing with pagination
+- [ ] Generation deletion and cleanup
+- [ ] Error handling for all API failures
+- [ ] Progress tracking for all async operations
+- [ ] Gallery integration for all generation types
 
 **Coding Rules:**
-- Review docs directory if needed
-- Do not over engineer
+- Review docs directory (`luma-ai-video-api.md`, `luma-ai-image-gen.md`, `lumalabsai.yaml`) thoroughly
+- Follow existing patterns from `LumaVideoService.ts` for consistency
+- Reuse polling, error handling, and download logic where applicable
+- Keep services focused and avoid over-engineering
+- Use proper TypeScript interfaces for all API requests/responses
+- Implement comprehensive error messages for user feedback
+- Add progress callbacks for long-running operations
+- Test with real API keys before considering complete
+
 ---
+
+### T024.5: Create Video Upload and Import Pipeline
+
+---
+
 
 ## Phase 8: Premiere Pro Integration
 
