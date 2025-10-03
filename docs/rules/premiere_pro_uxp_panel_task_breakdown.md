@@ -1423,7 +1423,7 @@ Video APIs:
 ❌ POST /generations - Reverse extend video (reverse with frame1 as generation)
 ❌ POST /generations - Interpolate between videos (both frame0 and frame1 as generations)
 ✅ POST /generations/video/reframe - Reframe video aspect ratio
-❌ POST /generations/{id}/upscale - Upscale video to 4K
+❌ POST /generations/{id}/upscale - Upscale video to 4K `````
 ❌ POST /generations/{id}/audio - Add audio to video
 ❌ GET /generations/concepts/list - Get available concepts
 ❌ GET /generations/camera_motion/list - Get camera motions
