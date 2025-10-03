@@ -421,6 +421,10 @@ svg {
   color: $highlight;
 }
 
+.text-detail-description {
+  margin: 0px 8px;
+}
+
 .text-code {
   font-family: "Source Code Pro", "Monaco", "Menlo", monospace;
   font-size: $font-size-75; /* 12px */
@@ -1170,6 +1174,10 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   }
 }
 
+.local-ingest-panel__section {
+  margin-bottom: 20px;
+}
+
 /* =============================================================================
    Image Selection UI
    ============================================================================= */
@@ -1190,7 +1198,7 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   border: 1px solid var(--theme-border-subtle);
   border-radius: $border-radius;
   margin-top: $space-100;
-  max-width: 312px;
+  max-width: 500px;
 
   .preview-image {
     border-radius: $border-radius-sm;

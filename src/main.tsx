@@ -1301,7 +1301,7 @@ const AppContent = () => {
                 <article className="card">
                   <header className="card-header">
                     <h2 className="card-title">Generate Content</h2>
-                    <div className="text-detail">Create images with Adobe Firefly AI or videos with LTX and Luma Dream Machine</div>
+                    <div className="text-detail-description">Create images with Adobe Firefly AI or videos with LTX and Luma Dream Machine</div>
                     
                     {/* Generation Mode Toggle */}
                     <div className="generation-mode-toggle">

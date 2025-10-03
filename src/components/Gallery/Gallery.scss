@@ -324,6 +324,7 @@
 }
 
 // Responsive Design
+// For narrow UXP panels - make filter elements side-by-side (50% width each)
 @media (max-width: 768px) {
   .gallery-container {
     flex-direction: column;
@@ -335,11 +336,51 @@
     border-bottom: 1px solid var(--theme-border);
     max-height: 300px;
     overflow-y: auto;
+    
+    .filter-group {
+      display: inline-block;
+      padding: 0px 2px;
+      width: calc(50% - #{$space-100}); // 50% width minus gap
+      vertical-align: top;
+      margin-bottom: $space-300; // Add gap between rows
+      
+      // Alternate left/right spacing for side-by-side layout
+      &:nth-child(odd) {
+        margin-right: $space-200;
+      }
+      
+      &:nth-child(even) {
+        margin-left: 0;
+      }
+      
+      // Add gap between dropdown elements
+      sp-picker {
+        margin-bottom: $space-100;
+      }
+    }
+    
+    .filter-actions {
+      width: 300px;
+      display: flex; // Change to flex for horizontal alignment
+      flex-direction: row; // Buttons side by side
+      gap: $space-200; // Add gap between buttons
+      margin-top: $space-400;
+      justify-content: center;
+      
+      sp-button {
+        flex: 1; // Equal width buttons
+      }
+    }
+  }
+
+  .gallery-sidebar .filter-actions sp-button {
+    margin-right: $space-100;
   }
 
   .gallery-grid {
     gap: $space-200; // 12px
     padding: $space-200;
+    justify-content: center; // Center the media items
 
     .gallery-item {
       flex: 1 1 240px;
