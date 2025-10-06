@@ -564,7 +564,7 @@ const AppContent = () => {
     }
 
     // Validate model selection
-    const validModels = ['ray-2', 'ray-flash-2', 'ray-1-6'];
+    const validModels = ['ray-3', 'ray-2', 'ray-flash-2', 'ray-1-6'];
     if (!validModels.includes(lumaModel)) {
       showWarning('Invalid Model', 'Please select a valid Dream Machine model.');
       return;
@@ -2134,6 +2134,8 @@ const AppContent = () => {
                               {lumaGenerationType === 'video' ? (
                                 <>
                                   {/* @ts-ignore */}
+                                  <sp-menu-item value="ray-3" selected={lumaModel === 'ray-3'}>Ray 3</sp-menu-item>
+                                  {/* @ts-ignore */}
                                   <sp-menu-item value="ray-2" selected={lumaModel === 'ray-2'}>Ray 2</sp-menu-item>
                                   {/* @ts-ignore */}
                                   <sp-menu-item value="ray-flash-2" selected={lumaModel === 'ray-flash-2'}>Ray Flash 2</sp-menu-item>
@@ -2534,13 +2536,13 @@ const AppContent = () => {
                                 {/* @ts-ignore */}
                                 <sp-radio value="3:4" checked={lumaAspectRatio === '3:4'}>
                                   <span className="radio-label">3:4</span>
-                                  <div className="radio-description text-detail">Portrait Standard</div>
+                                  <div className="radio-description text-detail">Portrait</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}
                                 <sp-radio value="4:3" checked={lumaAspectRatio === '4:3'}>
                                   <span className="radio-label">4:3</span>
-                                  <div className="radio-description text-detail">Classic Standard</div>
+                                  <div className="radio-description text-detail">Classic</div>
                                 {/* @ts-ignore */}
                                 </sp-radio>
                                 {/* @ts-ignore */}

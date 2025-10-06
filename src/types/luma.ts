@@ -15,7 +15,7 @@ export type LumaAspectRatio =
   | '9:21'
   | string
 
-export type LumaVideoModel = 'ray-1-6' | 'ray-2' | 'ray-flash-2'
+export type LumaVideoModel = 'ray-3' | 'ray-2' | 'ray-flash-2' | 'ray-1-6'
 
 export type LumaVideoResolution =
   | '540p'
