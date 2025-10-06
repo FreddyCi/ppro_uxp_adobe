@@ -195,6 +195,8 @@ const AppContent = () => {
     { file: null, weight: 0.5 },
   ]);
   const [useImageReferences, setUseImageReferences] = useState<boolean>(false);
+  const [lumaStyleReference, setLumaStyleReference] = useState<{file: any | null, weight: number}>({ file: null, weight: 0.5 });
+  const [useStyleReference, setUseStyleReference] = useState<boolean>(false);
   
   // Get toast helpers
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
@@ -1280,7 +1282,7 @@ const AppContent = () => {
         }
       };
 
-      // Check if we're using image references
+      // Check if we're using image references or style reference
       let result;
       if (useImageReferences) {
         // Filter out empty references
@@ -1311,6 +1313,32 @@ const AppContent = () => {
         result = await lumaImageService.generateImageWithReference(
           lumaPrompt,
           uploadedReferences,
+          lumaModel as LumaImageModel,
+          lumaAspectRatio
+        );
+      } else if (useStyleReference) {
+        // Style reference generation
+        if (!lumaStyleReference.file) {
+          showWarning('No Style Reference', 'Please select a style reference image or disable "Use Style Reference".');
+          setIsGeneratingLuma(false);
+          return;
+        }
+
+        console.log(`🎨 [${generationSessionId}] Uploading style reference image...`);
+        
+        // Upload style reference to Azure
+        const styleUrl = await uploadReferenceImage(lumaStyleReference.file, 0);
+        const styleReferences = [{
+          url: styleUrl,
+          weight: lumaStyleReference.weight
+        }];
+
+        console.log(`✅ [${generationSessionId}] Style reference uploaded`);
+        console.log(`🚀 [${generationSessionId}] Sending Luma image request with style reference`);
+
+        result = await lumaImageService.generateImageWithStyle(
+          lumaPrompt,
+          styleReferences,
           lumaModel as LumaImageModel,
           lumaAspectRatio
         );
@@ -2552,6 +2580,94 @@ const AppContent = () => {
                                       )}
                                     </div>
                                   ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Style Reference (Optional) */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-checkbox
+                                checked={useStyleReference}
+                                onChange={(e: any) => setUseStyleReference(e.target.checked)}
+                              >
+                                Use Style Reference (Optional)
+                              {/* @ts-ignore */}
+                              </sp-checkbox>
+                              <div className="text-detail mb-sm">Add a style reference image to guide the artistic style</div>
+                            </div>
+
+                            {useStyleReference && (
+                              <div className="form-group">
+                                {/* @ts-ignore */}
+                                <sp-label className="form-label">Style Reference</sp-label>
+                                <div className="reference-images-container">
+                                  <div className="reference-image-item">
+                                    <div className="reference-image-header">
+                                      <span className="text-detail">Style Image</span>
+                                      {lumaStyleReference.file && (
+                                        <>
+                                          {/* @ts-ignore */}
+                                          <sp-button
+                                            size="s"
+                                            quiet
+                                            onClick={() => {
+                                              setLumaStyleReference({ file: null, weight: 0.5 });
+                                            }}
+                                          >
+                                            Remove
+                                          {/* @ts-ignore */}
+                                          </sp-button>
+                                        </>
+                                      )}
+                                    </div>
+                                    
+                                    {!lumaStyleReference.file ? (
+                                      <>
+                                        {/* @ts-ignore */}
+                                        <sp-button
+                                          size="s"
+                                          onClick={async () => {
+                                            try {
+                                              const fs = uxp.storage.localFileSystem;
+                                              const file = await fs.getFileForOpening({ types: ['jpg', 'jpeg', 'png'] });
+                                              if (file) {
+                                                setLumaStyleReference({ ...lumaStyleReference, file });
+                                              }
+                                            } catch (error) {
+                                              console.error('Failed to select style reference:', error);
+                                              showError('File Selection Failed', 'Could not select the style reference image');
+                                            }
+                                          }}
+                                        >
+                                          Select Style Image
+                                        {/* @ts-ignore */}
+                                        </sp-button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="reference-image-preview">
+                                          <span className="text-detail">{lumaStyleReference.file.name}</span>
+                                        </div>
+                                        <div className="reference-weight-control">
+                                          {/* @ts-ignore */}
+                                          <sp-label className="form-label-small">Weight: {lumaStyleReference.weight.toFixed(1)}</sp-label>
+                                          {/* @ts-ignore */}
+                                          <sp-slider
+                                            min={0.1}
+                                            max={1.0}
+                                            step={0.1}
+                                            value={lumaStyleReference.weight}
+                                            onInput={(e: any) => {
+                                              setLumaStyleReference({ ...lumaStyleReference, weight: parseFloat(e.target.value) });
+                                            }}
+                                          >
+                                          {/* @ts-ignore */}
+                                          </sp-slider>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             )}
