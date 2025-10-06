@@ -1,3 +1,4 @@
+import type { Dispatch, SetStateAction } from 'react';
 import type { ContentItem } from '../../types/content';
 
 // Common props shared between video and image forms
@@ -15,7 +16,7 @@ export interface LumaGenerationBaseProps {
 // Video generation specific props
 export interface LumaVideoFormProps extends LumaGenerationBaseProps {
   lumaMode: string;
-  setLumaMode: (mode: string) => void;
+  setLumaMode: Dispatch<SetStateAction<'keyframes' | 'reframe'>>;
   lumaDuration: string;
   setLumaDuration: (duration: string) => void;
   lumaResolution: string;
@@ -26,7 +27,7 @@ export interface LumaVideoFormProps extends LumaGenerationBaseProps {
   setLumaLastFrameItem: (item: ContentItem | null) => void;
   lumaReframeVideoItem: ContentItem | null;
   setLumaReframeVideoItem: (item: ContentItem | null) => void;
-  setGalleryPickerTarget: (target: string) => void;
+  setGalleryPickerTarget: Dispatch<SetStateAction<'first' | 'last' | 'both' | 'reframe-video' | null>>;
   setShowGalleryPicker: (show: boolean) => void;
   handleGenerateLumaVideo: () => void;
   handleReframeLumaVideo: () => void;

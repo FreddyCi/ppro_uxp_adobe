@@ -63,8 +63,8 @@ export const LumaImageForm: React.FC<LumaImageFormProps> = ({
           onChange={(e: any) => setLumaModel(e.target.value)}
         >
           <sp-menu slot="options">
-            <sp-menu-item value="photon-1" selected={lumaModel === 'photon-1'}>Photon 1</sp-menu-item>
-            <sp-menu-item value="photon-flash-1" selected={lumaModel === 'photon-flash-1'}>Photon Flash 1</sp-menu-item>
+            <sp-menu-item value="photon-1">Photon 1</sp-menu-item>
+            <sp-menu-item value="photon-flash-1">Photon Flash 1</sp-menu-item>
           </sp-menu>
         </sp-picker>
       </div>

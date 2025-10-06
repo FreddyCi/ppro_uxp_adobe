@@ -14,7 +14,6 @@ export const LumaGenerationHeader: React.FC<LumaGenerationHeaderProps> = ({
         // @ts-expect-error - UXP component property
         size="m"
         style={{ width: '100%' }}
-        value={lumaGenerationType}
         onChange={(e: any) => {
           const newType = e.target.value as 'video' | 'image';
           setLumaGenerationType(newType);
@@ -28,10 +27,10 @@ export const LumaGenerationHeader: React.FC<LumaGenerationHeaderProps> = ({
         }}
       >
         <sp-menu slot="options">
-          <sp-menu-item value="video" selected={lumaGenerationType === 'video'}>
+          <sp-menu-item value="video">
             Video Generation
           </sp-menu-item>
-          <sp-menu-item value="image" selected={lumaGenerationType === 'image'}>
+          <sp-menu-item value="image">
             Image Generation
           </sp-menu-item>
         </sp-menu>

@@ -87,10 +87,10 @@ export const LumaVideoForm: React.FC<LumaVideoFormProps> = ({
           onChange={(e: any) => setLumaModel(e.target.value)}
         >
           <sp-menu slot="options">
-            <sp-menu-item value="ray-3" selected={lumaModel === 'ray-3'}>Ray 3</sp-menu-item>
-            <sp-menu-item value="ray-2" selected={lumaModel === 'ray-2'}>Ray 2</sp-menu-item>
-            <sp-menu-item value="ray-flash-2" selected={lumaModel === 'ray-flash-2'}>Ray Flash 2</sp-menu-item>
-            <sp-menu-item value="ray-1-6" selected={lumaModel === 'ray-1-6'}>Ray 1.6</sp-menu-item>
+            <sp-menu-item value="ray-3">Ray 3</sp-menu-item>
+            <sp-menu-item value="ray-2">Ray 2</sp-menu-item>
+            <sp-menu-item value="ray-flash-2">Ray Flash 2</sp-menu-item>
+            <sp-menu-item value="ray-1-6">Ray 1.6</sp-menu-item>
           </sp-menu>
         </sp-picker>
       </div>
