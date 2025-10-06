@@ -150,3 +150,104 @@ export interface LumaVideoGenerationOptions {
   signal?: AbortSignal
   filename?: string
 }
+
+export interface LumaListGenerationsParams {
+  limit?: number
+  offset?: number
+}
+
+export interface LumaListGenerationsResponse {
+  generations: LumaGenerationResponse[]
+  has_more: boolean
+  total?: number
+}
+
+export interface LumaCameraMotion {
+  name: string
+  description?: string
+}
+
+export interface LumaConceptInfo {
+  key: string
+  name?: string
+  description?: string
+}
+
+export interface LumaExtendVideoRequest {
+  prompt: string
+  model?: LumaVideoModel
+  keyframes: {
+    frame0?: LumaKeyframe
+    frame1?: LumaKeyframe
+  }
+  aspect_ratio?: LumaAspectRatio
+  loop?: boolean
+}
+
+// ============================================
+// IMAGE GENERATION TYPES
+// ============================================
+
+export type LumaImageModel = 'photon-1' | 'photon-flash-1'
+
+export interface LumaImageReference {
+  url: string
+  weight?: number // 0.0 to 1.0, default varies by type
+}
+
+export interface LumaCharacterIdentity {
+  images: string[] // Up to 4 images for one character identity
+}
+
+export interface LumaCharacterReference {
+  identity0?: LumaCharacterIdentity
+  identity1?: LumaCharacterIdentity
+  identity2?: LumaCharacterIdentity
+  identity3?: LumaCharacterIdentity
+}
+
+export interface LumaModifyImageReference {
+  url: string
+  weight?: number // Higher weight = closer to input but less creative. For colors, use 0.0-0.1
+}
+
+export interface LumaImageGenerationRequest {
+  generation_type?: 'image'
+  prompt: string
+  model?: LumaImageModel
+  aspect_ratio?: LumaAspectRatio
+  image_ref?: LumaImageReference[] // Up to 4 image references
+  style_ref?: LumaImageReference[] // Style reference images
+  character_ref?: LumaCharacterReference // Character consistency
+  modify_image_ref?: LumaModifyImageReference // Modify existing image
+  callback_url?: string
+}
+
+export interface LumaImageGenerationResponse {
+  id: string
+  type: 'image'
+  state: 'queued' | 'dreaming' | 'completed' | 'failed'
+  failure_reason?: string | null
+  created_at?: string
+  assets?: {
+    image?: string
+    video?: null
+  }
+  model?: string
+  request?: LumaImageGenerationRequest
+}
+
+export interface LumaImageGenerationResult {
+  blob: Blob
+  contentType: string
+  filename: string
+  generation: LumaImageGenerationResponse
+  metadata: {
+    id: string
+    state: string
+    createdAt?: string
+    imageUrl?: string
+    model?: string
+    prompt?: string
+  }
+}

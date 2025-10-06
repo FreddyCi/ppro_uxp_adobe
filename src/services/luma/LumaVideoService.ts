@@ -235,9 +235,199 @@ export class LumaVideoService {
     )
   }
 
-  private async getGeneration(id: string, signal?: AbortSignal): Promise<LumaGenerationResponse> {
+  /**
+   * Get a specific generation by ID
+   */
+  async getGeneration(id: string, signal?: AbortSignal): Promise<LumaGenerationResponse> {
     const encodedId = encodeURIComponent(id)
     return this.request<LumaGenerationResponse>(`/generations/${encodedId}`, { method: 'GET' }, signal)
+  }
+
+  /**
+   * List all generations with pagination
+   */
+  async listGenerations(
+    params: { limit?: number; offset?: number } = {},
+    signal?: AbortSignal
+  ): Promise<{ generations: LumaGenerationResponse[]; has_more: boolean }> {
+    const queryParams = new URLSearchParams()
+    if (params.limit !== undefined) queryParams.set('limit', params.limit.toString())
+    if (params.offset !== undefined) queryParams.set('offset', params.offset.toString())
+    
+    const path = `/generations${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
+    return this.request<{ generations: LumaGenerationResponse[]; has_more: boolean }>(path, { method: 'GET' }, signal)
+  }
+
+  /**
+   * Delete a generation by ID
+   */
+  async deleteGeneration(id: string, signal?: AbortSignal): Promise<void> {
+    const encodedId = encodeURIComponent(id)
+    await this.request<void>(`/generations/${encodedId}`, { method: 'DELETE' }, signal)
+  }
+
+  /**
+   * Get list of available camera motions
+   * Returns array of camera motion strings that can be used in prompts
+   */
+  async getCameraMotions(signal?: AbortSignal): Promise<string[]> {
+    const response = await this.request<{ camera_motions: string[] }>(
+      '/generations/camera_motion/list',
+      { method: 'GET' },
+      signal
+    )
+    return response.camera_motions || []
+  }
+
+  /**
+   * Get list of available concepts
+   * Returns array of concept objects with key and optional metadata
+   */
+  async getConcepts(signal?: AbortSignal): Promise<Array<{ key: string; name?: string; description?: string }>> {
+    const response = await this.request<{ concepts: Array<{ key: string; name?: string; description?: string }> }>(
+      '/generations/concepts/list',
+      { method: 'GET' },
+      signal
+    )
+    return response.concepts || []
+  }
+
+  /**
+   * Extend a video (forward extend)
+   * Uses a completed generation as frame0 to extend the video forward
+   */
+  async extendVideo(
+    generationId: string,
+    prompt: string,
+    model: LumaVideoModel = 'ray-2',
+    options: LumaVideoGenerationOptions = {}
+  ): Promise<LumaVideoGenerationResult> {
+    const request: LumaGenerationRequest = {
+      generation_type: 'video',
+      prompt,
+      model,
+      keyframes: {
+        frame0: {
+          type: 'generation',
+          id: generationId,
+        },
+      },
+    }
+
+    return this.generateVideo(request, options)
+  }
+
+  /**
+   * Reverse extend a video
+   * Uses a completed generation as frame1 to generate video leading up to it
+   */
+  async reverseExtendVideo(
+    generationId: string,
+    prompt: string,
+    model: LumaVideoModel = 'ray-2',
+    options: LumaVideoGenerationOptions = {}
+  ): Promise<LumaVideoGenerationResult> {
+    const request: LumaGenerationRequest = {
+      generation_type: 'video',
+      prompt,
+      model,
+      keyframes: {
+        frame1: {
+          type: 'generation',
+          id: generationId,
+        },
+      },
+    }
+
+    return this.generateVideo(request, options)
+  }
+
+  /**
+   * Interpolate between two videos
+   * Uses two completed generations as frame0 and frame1
+   */
+  async interpolateVideos(
+    startGenerationId: string,
+    endGenerationId: string,
+    prompt: string,
+    model: LumaVideoModel = 'ray-2',
+    options: LumaVideoGenerationOptions = {}
+  ): Promise<LumaVideoGenerationResult> {
+    const request: LumaGenerationRequest = {
+      generation_type: 'video',
+      prompt,
+      model,
+      keyframes: {
+        frame0: {
+          type: 'generation',
+          id: startGenerationId,
+        },
+        frame1: {
+          type: 'generation',
+          id: endGenerationId,
+        },
+      },
+    }
+
+    return this.generateVideo(request, options)
+  }
+
+  /**
+   * Extend video with custom end frame (image)
+   */
+  async extendVideoWithEndFrame(
+    generationId: string,
+    endFrameUrl: string,
+    prompt: string,
+    model: LumaVideoModel = 'ray-2',
+    options: LumaVideoGenerationOptions = {}
+  ): Promise<LumaVideoGenerationResult> {
+    const request: LumaGenerationRequest = {
+      generation_type: 'video',
+      prompt,
+      model,
+      keyframes: {
+        frame0: {
+          type: 'generation',
+          id: generationId,
+        },
+        frame1: {
+          type: 'image',
+          url: endFrameUrl,
+        },
+      },
+    }
+
+    return this.generateVideo(request, options)
+  }
+
+  /**
+   * Reverse extend video with custom start frame (image)
+   */
+  async reverseExtendVideoWithStartFrame(
+    generationId: string,
+    startFrameUrl: string,
+    prompt: string,
+    model: LumaVideoModel = 'ray-2',
+    options: LumaVideoGenerationOptions = {}
+  ): Promise<LumaVideoGenerationResult> {
+    const request: LumaGenerationRequest = {
+      generation_type: 'video',
+      prompt,
+      model,
+      keyframes: {
+        frame0: {
+          type: 'image',
+          url: startFrameUrl,
+        },
+        frame1: {
+          type: 'generation',
+          id: generationId,
+        },
+      },
+    }
+
+    return this.generateVideo(request, options)
   }
 
   private async waitForCompletion(id: string, signal?: AbortSignal): Promise<WaitForCompletionResult> {
