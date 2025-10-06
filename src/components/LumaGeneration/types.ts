@@ -63,6 +63,8 @@ export interface LumaImageFormProps extends LumaGenerationBaseProps {
   setUseModifyImage: (value: boolean) => void;
   
   handleGenerateLumaImage: () => void;
+  showError: (title: string, message: string) => void;
+  uxp: any;
 }
 
 // Header props
