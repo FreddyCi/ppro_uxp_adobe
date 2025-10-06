@@ -581,3 +581,116 @@
   }
 }
 
+// Pagination Styles
+.gallery-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $space-300 $space-400;
+  border-top: 1px solid var(--theme-border);
+  background: var(--theme-bg-layer-1);
+  margin-top: auto; // Push to bottom of gallery
+
+  .pagination-info {
+    color: var(--theme-font-muted);
+    font-size: $font-size-100;
+    white-space: nowrap;
+  }
+
+  .pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: $space-100;
+    flex: 1;
+    justify-content: center;
+
+    .pagination-button {
+      min-width: 32px;
+      height: 32px;
+      padding: 0 $space-100;
+
+      &.active {
+        font-weight: 600;
+      }
+
+      &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+    }
+
+    .pagination-pages {
+      display: flex;
+      align-items: center;
+      gap: $space-50;
+
+      .pagination-ellipsis {
+        padding: 0 $space-100;
+        color: var(--theme-font-muted);
+        user-select: none;
+      }
+    }
+  }
+
+  .pagination-per-page {
+    display: flex;
+    align-items: center;
+    gap: $space-100;
+    white-space: nowrap;
+
+    sp-label {
+      font-size: $font-size-100;
+      color: var(--theme-font-muted);
+    }
+
+    .per-page-picker {
+      min-width: 80px;
+    }
+  }
+}
+
+// Responsive pagination
+@media (max-width: 768px) {
+  .gallery-pagination {
+    flex-direction: column;
+    gap: $space-200;
+    align-items: stretch;
+
+    .pagination-info {
+      text-align: center;
+      order: 3;
+    }
+
+    .pagination-controls {
+      order: 1;
+      justify-content: center;
+    }
+
+    .pagination-per-page {
+      order: 2;
+      justify-content: center;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .gallery-pagination {
+    .pagination-controls {
+      .pagination-pages {
+        gap: 2px;
+
+        .pagination-button {
+          min-width: 28px;
+          height: 28px;
+          padding: 0 4px;
+          font-size: $font-size-75;
+        }
+      }
+
+      .pagination-button {
+        min-width: 28px;
+        height: 28px;
+      }
+    }
+  }
+}

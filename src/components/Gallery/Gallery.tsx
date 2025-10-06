@@ -9,6 +9,7 @@ import type { CorrectionParams } from '../../types/gemini';
 import { useToastHelpers } from '../../hooks/useToast';
 import type { ContentItem, VideoData } from '../../types/content';
 import { VideoWebView } from '../VideoPlayer/VideoWebView';
+import { Pagination } from './Pagination';
 import './Gallery.scss';
 
 // Helper functions for gallery filtering and sorting
@@ -1276,6 +1277,18 @@ export const Gallery = () => {
             <h3>No images found</h3>
             <p>Try adjusting your filters to see more results.</p>
           </div>
+        )}
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={itemsPerPage}
+            onPageChange={(page) => galleryActions.setPage(page)}
+            onItemsPerPageChange={(count) => galleryActions.setItemsPerPage(count)}
+          />
         )}
       </main>
 
