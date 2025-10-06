@@ -1231,15 +1231,102 @@ const AppContent = () => {
         maxPollAttempts: 120,
       });
 
-      const lumaRequest: LumaImageGenerationRequest = {
-        prompt: lumaPrompt,
-        model: lumaModel as LumaImageModel,
-        aspect_ratio: lumaAspectRatio,
+      // Helper function to upload reference image to Azure
+      const uploadReferenceImage = async (file: any, index: number): Promise<string> => {
+        // Check if SAS is configured
+        if (!selectHasSAS()) {
+          const message = 'Azure SAS token not configured. Set VITE_AZURE_CONTAINER_SAS_URL or SAS parts in .env and rebuild.';
+          showError('Azure SAS Missing', message);
+          throw new Error(message);
+        }
+
+        try {
+          console.log(`☁️ [${generationSessionId}] Uploading reference image ${index + 1}:`, file.name);
+
+          // Read file data using UXP API (file is a UXP File object, not web File)
+          const binaryFormat = uxp.storage.formats?.binary;
+          const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
+          const fileData = await file.read(readOptions);
+
+          // Generate unique blob name
+          const sanitizedFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+          const blobName = `luma/references/${new Date().toISOString().split('T')[0]}/${Date.now()}-ref${index}-${sanitizedFilename}`;
+          
+          // Determine content type from file extension
+          const ext = file.name.split('.').pop()?.toLowerCase();
+          const contentType = ext === 'png' ? 'image/png' : 'image/jpeg';
+
+          // Upload using SAS token
+          const uploadedUrl = await uploadBytes(blobName, fileData, contentType);
+
+          if (!uploadedUrl || !uploadedUrl.startsWith('https://')) {
+            throw new Error('Azure SAS upload did not return a secure HTTPS URL');
+          }
+
+          console.log(`✅ [${generationSessionId}] Reference image ${index + 1} uploaded:`, uploadedUrl);
+          return uploadedUrl;
+        } catch (error: any) {
+          // Handle SAS-specific errors
+          if (error?.message?.includes('SAS token expired') || error?.message?.includes('AuthenticationFailed')) {
+            const message = 'Azure SAS token expired or invalid. Update VITE_AZURE_* env vars and rebuild.';
+            showError('SAS Token Expired', message);
+            throw new Error(message);
+          }
+
+          const message = error instanceof Error ? error.message : 'Unknown error while uploading reference image to Azure.';
+          showError('Azure Upload Failed', message);
+          console.error(`❌ [${generationSessionId}] Failed to upload reference image ${index + 1}:`, error);
+          throw error instanceof Error ? error : new Error(message);
+        }
       };
 
-      console.log(`🚀 [${generationSessionId}] Sending Luma Dream Machine image request:`, lumaRequest);
+      // Check if we're using image references
+      let result;
+      if (useImageReferences) {
+        // Filter out empty references
+        const activeReferences = lumaImageReferences.filter(ref => ref.file !== null);
+        
+        if (activeReferences.length === 0) {
+          showWarning('No References Selected', 'Please select at least one reference image or disable "Use Image References".');
+          setIsGeneratingLuma(false);
+          return;
+        }
 
-      const result = await lumaImageService.generateImage(lumaRequest);
+        console.log(`🖼️ [${generationSessionId}] Uploading ${activeReferences.length} reference images...`);
+        
+        // Upload all reference images to Azure
+        const uploadedReferences = await Promise.all(
+          activeReferences.map(async (ref, index) => {
+            const url = await uploadReferenceImage(ref.file!, index);
+            return {
+              url,
+              weight: ref.weight
+            };
+          })
+        );
+
+        console.log(`✅ [${generationSessionId}] All reference images uploaded`);
+        console.log(`🚀 [${generationSessionId}] Sending Luma image request with ${uploadedReferences.length} references`);
+
+        result = await lumaImageService.generateImageWithReference(
+          lumaPrompt,
+          uploadedReferences,
+          lumaModel as LumaImageModel,
+          lumaAspectRatio
+        );
+      } else {
+        // Basic text-to-image generation
+        const lumaRequest: LumaImageGenerationRequest = {
+          prompt: lumaPrompt,
+          model: lumaModel as LumaImageModel,
+          aspect_ratio: lumaAspectRatio,
+        };
+
+        console.log(`🚀 [${generationSessionId}] Sending basic Luma image request:`, lumaRequest);
+
+        result = await lumaImageService.generateImage(lumaRequest);
+      }
+
       const jobId = result.metadata?.id;
       console.log(`✅ [${generationSessionId}] Luma Dream Machine image generation completed - Job ID: ${jobId}`, result);
 
