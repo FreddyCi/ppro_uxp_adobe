@@ -6,41 +6,36 @@ export interface LumaGenerationBaseProps {
   setLumaPrompt: (value: string) => void;
   lumaModel: string;
   setLumaModel: (value: string) => void;
+  lumaAspectRatio: string;
+  setLumaAspectRatio: (value: string) => void;
   isGeneratingLuma: boolean;
   isAuthed: boolean;
 }
 
 // Video generation specific props
 export interface LumaVideoFormProps extends LumaGenerationBaseProps {
-  lumaAspectRatio: string;
-  setLumaAspectRatio: (value: string) => void;
+  lumaMode: string;
+  setLumaMode: (mode: string) => void;
   lumaDuration: string;
-  setLumaDuration: (value: string) => void;
+  setLumaDuration: (duration: string) => void;
   lumaResolution: string;
-  setLumaResolution: (value: string) => void;
-  lumaLoop: boolean;
-  setLumaLoop: (value: boolean) => void;
-  lumaMode: 'keyframes' | 'reframe';
-  setLumaMode: (value: 'keyframes' | 'reframe') => void;
+  setLumaResolution: (resolution: string) => void;
   lumaFirstFrameItem: ContentItem | null;
-  setLumaFirstFrameItem: (value: ContentItem | null) => void;
+  setLumaFirstFrameItem: (item: ContentItem | null) => void;
   lumaLastFrameItem: ContentItem | null;
-  setLumaLastFrameItem: (value: ContentItem | null) => void;
+  setLumaLastFrameItem: (item: ContentItem | null) => void;
   lumaReframeVideoItem: ContentItem | null;
-  setLumaReframeVideoItem: (value: ContentItem | null) => void;
-  showGalleryPicker: boolean;
-  setShowGalleryPicker: (value: boolean) => void;
-  galleryPickerTarget: 'first' | 'last' | 'both' | 'reframe-video' | null;
-  setGalleryPickerTarget: (value: 'first' | 'last' | 'both' | 'reframe-video' | null) => void;
+  setLumaReframeVideoItem: (item: ContentItem | null) => void;
+  setGalleryPickerTarget: (target: string) => void;
+  setShowGalleryPicker: (show: boolean) => void;
   handleGenerateLumaVideo: () => void;
   handleReframeLumaVideo: () => void;
+  useGalleryStore: any;
+  showInfo: (title: string, message: string) => void;
 }
 
 // Image generation specific props
 export interface LumaImageFormProps extends LumaGenerationBaseProps {
-  lumaAspectRatio: string;
-  setLumaAspectRatio: (value: string) => void;
-  
   // Image References
   lumaImageReferences: Array<{file: File | null, weight: number}>;
   setLumaImageReferences: (value: Array<{file: File | null, weight: number}>) => void;
