@@ -1,4 +1,4 @@
-export * from './icons';
+export * from '../assets/icons';
 export * from './Gallery';
 export * from './Toast';
 export * from './LocalIngest/LocalIngestPanel';

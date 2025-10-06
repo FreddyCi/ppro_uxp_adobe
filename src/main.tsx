@@ -1,43 +1,25 @@
 // must be the first import
 import "./shims/domparser";
 
-import { useGalleryStore } from './store'
-import { useShallow } from 'zustand/react/shallow'
-import { ContentItem, isVideo } from './types/content'
 import React, { useState, useEffect, useRef } from "react";
-
+import { useGalleryStore } from './store';
+import { ContentItem } from './types/content';
 import { uxp, premierepro } from "./globals";
-import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
-import { FireflyService } from "./services/firefly";
-import type { GenerationResult } from "./types/firefly";
 import { useGenerationStore } from "./store/generationStore";
 import { useAuthStore } from "./store/authStore";
-import "./layout.scss";
-import { saveGenerationLocally } from './services/local/localBoltStorage';
-import { LtxVideoService } from './services/ltx';
-import { LumaVideoService, LumaImageService } from './services/luma';
-import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, ReframeVideoModel, LumaImageModel, LumaImageGenerationRequest } from './types/luma';
+import { getSharedIMSService, ensureAuthenticated, setAuthFromToken, selectStatus, selectIsAuthed, selectHydrated } from './store/authStore';
 import { createAzureSDKBlobService } from './services/blob/AzureSDKBlobService';
-import { createSASTokenService } from './services/blob/SASTokenService';
-import { uploadBytes } from './services/sasUpload';
-import axios from 'axios';
-import { useIsAuthenticated, getIMSServiceInstance, getSharedIMSService, ensureAuthenticated, setAuthFromToken, selectStatus, selectToken, selectIsAuthed, selectHydrated } from './store/authStore';
-import { selectHasSAS, selectSASStatus } from './store/uiStore';
+import { refreshContentItemUrls } from './utils/blobUrlLifecycle';
+import "./layout.scss";
 
 // Import components
-import { MoonIcon, RefreshIcon, SunIcon, ToastProvider, useToastHelpers, Gallery, LocalIngestPanel, LumaGeneration, FireflyGenerationForm, LtxGenerationForm, GalleryPicker } from "./components";
+import { MoonIcon, SunIcon, ToastProvider, useToastHelpers, Gallery, LocalIngestPanel, LumaGeneration, FireflyGenerationForm, LtxGenerationForm, GalleryPicker } from "./components";
 
 // Import custom hooks
 import { useFireflyGeneration } from './hooks/useFireflyGeneration';
 import { useLtxGeneration } from './hooks/useLtxGeneration';
 import { useLumaGeneration } from './hooks/useLumaGeneration';
-
-// Import utilities
-import { v4 as uuidv4 } from 'uuid';
-import { uploadBlobWithSAS } from './utils/azureUpload';
-import { encodeBase64, convertBlobToDataUrl } from './utils/base64';
-import { refreshContentItemUrls } from './utils/blobUrlLifecycle';
 
 const AppContent = () => {
   const [imsToken, setImsToken] = useState<string | null>(null);

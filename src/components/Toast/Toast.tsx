@@ -1,7 +1,7 @@
 // @ts-ignore
 import React from 'react';
 import { ToastVariant, Toast as ToastType } from './types';
-import { CheckmarkCircleIcon, InfoIcon, AlertIcon } from '../icons';
+import { CheckmarkCircleIcon, InfoIcon, AlertIcon } from '../../assets/icons';
 import './Toast.scss';
 
 interface ToastProps {
