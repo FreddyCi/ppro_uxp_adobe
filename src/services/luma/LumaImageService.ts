@@ -70,6 +70,9 @@ export class LumaImageService {
   ): Promise<LumaImageGenerationResult> {
     const mergedRequest = { ...this.defaultRequest, ...request }
 
+    // Log the full request payload for debugging
+    console.log('🔍 [LumaImageService] Sending request to Luma API:', JSON.stringify(mergedRequest, null, 2))
+
     // Initiate generation
     const response = await this.fetch('/generations/image', {
       method: 'POST',

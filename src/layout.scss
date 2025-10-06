@@ -1263,3 +1263,49 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   }
 }
 
+/* Character Reference Grid */
+.character-identity-selector {
+  display: flex;
+  gap: $space-100;
+  margin-top: $space-100;
+}
+
+.character-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space-200;
+}
+
+.character-grid-item {
+  flex: 0 0 calc(50% - $space-100); /* 2 columns with gap */
+}
+
+.character-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: $space-100;
+  padding: $space-200;
+  background-color: var(--theme-bg-layer-1);
+  border-radius: $border-radius-sm;
+  border: 1px solid var(--theme-border-subtle);
+}
+
+.character-grid-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.character-image-preview {
+  padding: $space-100;
+  background-color: var(--theme-bg-layer-2);
+  border-radius: $border-radius-sm;
+  border: 1px solid var(--theme-border-subtle);
+  
+  .text-detail {
+    word-break: break-all;
+    font-size: $font-size-75;
+  }
+}
+
+

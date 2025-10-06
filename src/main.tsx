@@ -198,6 +198,16 @@ const AppContent = () => {
   const [lumaStyleReference, setLumaStyleReference] = useState<{file: any | null, weight: number}>({ file: null, weight: 0.5 });
   const [useStyleReference, setUseStyleReference] = useState<boolean>(false);
   
+  // Character Consistency: 4 identities, each can have up to 4 images (File or ContentItem before upload)
+  const [lumaCharacterReferences, setLumaCharacterReferences] = useState<Array<Array<File | ContentItem | null>>>([
+    [null, null, null, null], // Identity A
+    [null, null, null, null], // Identity B
+    [null, null, null, null], // Identity C
+    [null, null, null, null], // Identity D
+  ]);
+  const [selectedCharacterIdentity, setSelectedCharacterIdentity] = useState<number>(0); // 0=A, 1=B, 2=C, 3=D
+  const [useCharacterReference, setUseCharacterReference] = useState<boolean>(false);
+  
   // Get toast helpers
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
   
@@ -1234,7 +1244,7 @@ const AppContent = () => {
       });
 
       // Helper function to upload reference image to Azure
-      const uploadReferenceImage = async (file: any, index: number): Promise<string> => {
+      const uploadReferenceImage = async (fileOrItem: any, index: number): Promise<string> => {
         // Check if SAS is configured
         if (!selectHasSAS()) {
           const message = 'Azure SAS token not configured. Set VITE_AZURE_CONTAINER_SAS_URL or SAS parts in .env and rebuild.';
@@ -1243,19 +1253,37 @@ const AppContent = () => {
         }
 
         try {
-          console.log(`☁️ [${generationSessionId}] Uploading reference image ${index + 1}:`, file.name);
+          let fileData: any;
+          let filename: string;
 
-          // Read file data using UXP API (file is a UXP File object, not web File)
-          const binaryFormat = uxp.storage.formats?.binary;
-          const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
-          const fileData = await file.read(readOptions);
+          // Check if it's a ContentItem (from gallery) or a File (from file picker)
+          if (fileOrItem.folderToken && fileOrItem.relativePath) {
+            // It's a ContentItem from gallery - read from UXP filesystem
+            console.log(`☁️ [${generationSessionId}] Uploading reference image ${index + 1} from gallery:`, fileOrItem.filename);
+            
+            const fs = uxp.storage.localFileSystem;
+            const folder = await fs.getEntryForPersistentToken(fileOrItem.folderToken);
+            const file = await folder.getEntry(fileOrItem.relativePath);
+            const binaryFormat = uxp.storage.formats?.binary;
+            const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
+            fileData = await file.read(readOptions);
+            filename = fileOrItem.filename || 'reference.jpg';
+          } else {
+            // It's a File object from file picker - read directly
+            console.log(`☁️ [${generationSessionId}] Uploading reference image ${index + 1}:`, fileOrItem.name);
+            
+            const binaryFormat = uxp.storage.formats?.binary;
+            const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
+            fileData = await fileOrItem.read(readOptions);
+            filename = fileOrItem.name || 'reference.jpg';
+          }
 
           // Generate unique blob name
-          const sanitizedFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+          const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
           const blobName = `luma/references/${new Date().toISOString().split('T')[0]}/${Date.now()}-ref${index}-${sanitizedFilename}`;
           
           // Determine content type from file extension
-          const ext = file.name.split('.').pop()?.toLowerCase();
+          const ext = filename.split('.').pop()?.toLowerCase();
           const contentType = ext === 'png' ? 'image/png' : 'image/jpeg';
 
           // Upload using SAS token
@@ -1339,6 +1367,55 @@ const AppContent = () => {
         result = await lumaImageService.generateImageWithStyle(
           lumaPrompt,
           styleReferences,
+          lumaModel as LumaImageModel,
+          lumaAspectRatio
+        );
+      } else if (useCharacterReference) {
+        // Character reference generation
+        // Check if at least one identity has images
+        const hasAnyCharacterImages = lumaCharacterReferences.some(identity => 
+          identity.some(img => img !== null)
+        );
+
+        if (!hasAnyCharacterImages) {
+          showWarning('No Character References', 'Please select at least one character reference image or disable "Use Character Reference".');
+          setIsGeneratingLuma(false);
+          return;
+        }
+
+        console.log(`👤 [${generationSessionId}] Uploading character reference images...`);
+        
+        // Build character reference object
+        const characterRef: any = {};
+        let totalImages = 0;
+
+        for (let identityIndex = 0; identityIndex < lumaCharacterReferences.length; identityIndex++) {
+          const identity = lumaCharacterReferences[identityIndex];
+          const activeImages = identity.filter(img => img !== null);
+          
+          if (activeImages.length > 0) {
+            // Upload all images for this identity
+            const uploadedUrls = await Promise.all(
+              activeImages.map(async (fileOrItem, imgIndex) => {
+                const url = await uploadReferenceImage(fileOrItem, totalImages++);
+                return url;
+              })
+            );
+
+            // Add to character reference (identity0, identity1, identity2, identity3)
+            characterRef[`identity${identityIndex}`] = {
+              images: uploadedUrls
+            };
+          }
+        }
+
+        console.log(`✅ [${generationSessionId}] Character references uploaded:`, Object.keys(characterRef));
+        console.log(`� [${generationSessionId}] Character reference object:`, JSON.stringify(characterRef, null, 2));
+        console.log(`�🚀 [${generationSessionId}] Sending Luma image request with character references`);
+
+        result = await lumaImageService.generateImageWithCharacter(
+          lumaPrompt,
+          characterRef,
           lumaModel as LumaImageModel,
           lumaAspectRatio
         );
@@ -2671,6 +2748,106 @@ const AppContent = () => {
                                 </div>
                               </div>
                             )}
+
+                            {/* Character Reference (Optional) */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-checkbox
+                                checked={useCharacterReference}
+                                onChange={(e: any) => setUseCharacterReference(e.target.checked)}
+                              >
+                                Use Character Reference (Optional)
+                              {/* @ts-ignore */}
+                              </sp-checkbox>
+                              <div className="text-detail mb-sm">Add reference images for character consistency (up to 4 identities)</div>
+                            </div>
+
+                            {useCharacterReference && (
+                              <div className="form-group">
+                                {/* @ts-ignore */}
+                                <sp-label className="form-label">Character References</sp-label>
+                                
+                                {/* Identity Selector */}
+                                <div className="mb-md">
+                                  {/* @ts-ignore */}
+                                  <sp-label className="form-label-small">Select Identity</sp-label>
+                                  <div className="character-identity-selector">
+                                    {['A', 'B', 'C', 'D'].map((label, index) => (
+                                      /* @ts-ignore */
+                                      <sp-button
+                                        key={index}
+                                        size="s"
+                                        variant={selectedCharacterIdentity === index ? 'accent' : 'secondary'}
+                                        onClick={() => setSelectedCharacterIdentity(index)}
+                                      >
+                                        {label} ({lumaCharacterReferences[index].filter(img => img !== null).length}/4)
+                                      {/* @ts-ignore */}
+                                      </sp-button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Character Images for Selected Identity */}
+                                <div className="reference-images-container">
+                                  {lumaCharacterReferences[selectedCharacterIdentity].map((file, imgIndex) => (
+                                    <div key={imgIndex} className="reference-image-item">
+                                      <div className="reference-image-header">
+                                        <span className="text-detail">Reference {imgIndex + 1}</span>
+                                        {file && (
+                                          <>
+                                            {/* @ts-ignore */}
+                                            <sp-button
+                                              size="s"
+                                              quiet
+                                              onClick={() => {
+                                                const newRefs = [...lumaCharacterReferences];
+                                                newRefs[selectedCharacterIdentity][imgIndex] = null;
+                                                setLumaCharacterReferences(newRefs);
+                                              }}
+                                            >
+                                              Remove
+                                            {/* @ts-ignore */}
+                                            </sp-button>
+                                          </>
+                                        )}
+                                      </div>
+                                      
+                                      {!file ? (
+                                        <>
+                                          {/* @ts-ignore */}
+                                          <sp-button
+                                            variant="accent"
+                                            onClick={async () => {
+                                              try {
+                                                const fs = uxp.storage.localFileSystem;
+                                                const selectedFile = await fs.getFileForOpening({ types: ['jpg', 'jpeg', 'png'] });
+                                                if (selectedFile) {
+                                                  const newRefs = [...lumaCharacterReferences];
+                                                  newRefs[selectedCharacterIdentity][imgIndex] = selectedFile;
+                                                  setLumaCharacterReferences(newRefs);
+                                                }
+                                              } catch (error) {
+                                                console.error('Failed to select character image:', error);
+                                                showError('File Selection Failed', 'Could not select the character image');
+                                              }
+                                            }}
+                                          >
+                                            Select Image
+                                          {/* @ts-ignore */}
+                                          </sp-button>
+                                        </>
+                                      ) : (
+                                        <div className="reference-image-preview">
+                                          <span className="text-detail">
+                                            {(file as File).name || (file as ContentItem).filename}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </>
                         )}
 
@@ -2862,7 +3039,7 @@ const AppContent = () => {
 
 // Gallery Picker Component
 const GalleryPicker = ({ target, onSelect, onCancel }: {
-  target: 'first' | 'last' | 'both' | 'reframe-video' | null;
+  target: string | null;
   onSelect: (item: ContentItem) => void;
   onCancel: () => void;
 }) => {
