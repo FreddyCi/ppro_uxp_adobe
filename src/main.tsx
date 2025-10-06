@@ -187,6 +187,15 @@ const AppContent = () => {
   const [galleryPickerTarget, setGalleryPickerTarget] = useState<'first' | 'last' | 'both' | 'reframe-video' | null>(null);
   const [isGeneratingLuma, setIsGeneratingLuma] = useState<boolean>(false);
   
+  // Luma image reference state (up to 4 references)
+  const [lumaImageReferences, setLumaImageReferences] = useState<Array<{file: File | null, weight: number}>>([
+    { file: null, weight: 0.5 },
+    { file: null, weight: 0.5 },
+    { file: null, weight: 0.5 },
+    { file: null, weight: 0.5 },
+  ]);
+  const [useImageReferences, setUseImageReferences] = useState<boolean>(false);
+  
   // Get toast helpers
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
   
@@ -2363,6 +2372,102 @@ const AppContent = () => {
                               {/* @ts-ignore */}
                               </sp-radio-group>
                             </div>
+
+                            {/* Image References (Optional) */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-checkbox
+                                checked={useImageReferences}
+                                onChange={(e: any) => setUseImageReferences(e.target.checked)}
+                              >
+                                Use Image References (Optional)
+                              {/* @ts-ignore */}
+                              </sp-checkbox>
+                              <div className="text-detail mb-sm">Add up to 4 reference images to guide the generation</div>
+                            </div>
+
+                            {useImageReferences && (
+                              <div className="form-group">
+                                {/* @ts-ignore */}
+                                <sp-label className="form-label">Reference Images</sp-label>
+                                <div className="reference-images-container">
+                                  {lumaImageReferences.map((ref, index) => (
+                                    <div key={index} className="reference-image-item">
+                                      <div className="reference-image-header">
+                                        <span className="text-detail">Reference {index + 1}</span>
+                                        {ref.file && (
+                                          <>
+                                            {/* @ts-ignore */}
+                                            <sp-button
+                                              size="s"
+                                              quiet
+                                              onClick={() => {
+                                                const newRefs = [...lumaImageReferences];
+                                                newRefs[index] = { file: null, weight: 0.5 };
+                                                setLumaImageReferences(newRefs);
+                                              }}
+                                            >
+                                              Remove
+                                            {/* @ts-ignore */}
+                                            </sp-button>
+                                          </>
+                                        )}
+                                      </div>
+                                      
+                                      {!ref.file ? (
+                                        <>
+                                          {/* @ts-ignore */}
+                                          <sp-button
+                                            size="s"
+                                            onClick={async () => {
+                                              try {
+                                                const fs = uxp.storage.localFileSystem;
+                                                const file = await fs.getFileForOpening({ types: ['jpg', 'jpeg', 'png'] });
+                                                if (file) {
+                                                  const newRefs = [...lumaImageReferences];
+                                                  newRefs[index] = { ...newRefs[index], file };
+                                                  setLumaImageReferences(newRefs);
+                                                }
+                                              } catch (error) {
+                                                console.error('Failed to select reference image:', error);
+                                                showError('File Selection Failed', 'Could not select the reference image');
+                                              }
+                                            }}
+                                          >
+                                            Select Image
+                                          {/* @ts-ignore */}
+                                          </sp-button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <div className="reference-image-preview">
+                                            <span className="text-detail">{ref.file.name}</span>
+                                          </div>
+                                          <div className="reference-weight-control">
+                                            {/* @ts-ignore */}
+                                            <sp-label className="form-label-small">Weight: {ref.weight.toFixed(1)}</sp-label>
+                                            {/* @ts-ignore */}
+                                            <sp-slider
+                                              min={0.1}
+                                              max={1.0}
+                                              step={0.1}
+                                              value={ref.weight}
+                                              onInput={(e: any) => {
+                                                const newRefs = [...lumaImageReferences];
+                                                newRefs[index] = { ...newRefs[index], weight: parseFloat(e.target.value) };
+                                                setLumaImageReferences(newRefs);
+                                              }}
+                                            >
+                                            {/* @ts-ignore */}
+                                            </sp-slider>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </>
                         )}
 
