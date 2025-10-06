@@ -15,8 +15,8 @@ import { useAuthStore } from "./store/authStore";
 import "./layout.scss";
 import { saveGenerationLocally } from './services/local/localBoltStorage';
 import { LtxVideoService } from './services/ltx';
-import { LumaVideoService } from './services/luma';
-import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, ReframeVideoModel } from './types/luma';
+import { LumaVideoService, LumaImageService } from './services/luma';
+import type { LumaGenerationRequest, LumaVideoModel, LumaReframeVideoRequest, ReframeVideoModel, LumaImageModel, LumaImageGenerationRequest } from './types/luma';
 import { createAzureSDKBlobService } from './services/blob/AzureSDKBlobService';
 import { createSASTokenService } from './services/blob/SASTokenService';
 import { uploadBytes } from './services/sasUpload';
@@ -117,6 +117,7 @@ const AppContent = () => {
   const [isGeneratingLtx, setIsGeneratingLtx] = useState<boolean>(false);
 
   // Luma Dream Machine generation form state
+  const [lumaGenerationType, setLumaGenerationType] = useState<'video' | 'image'>('video');
   const [lumaPrompt, setLumaPrompt] = useState<string>('');
   const [lumaModel, setLumaModel] = useState<string>('ray-2');
   const [lumaAspectRatio, setLumaAspectRatio] = useState<string>('16:9');
@@ -1106,6 +1107,201 @@ const AppContent = () => {
       setIsGeneratingLuma(false);
     }
   };
+
+  const handleGenerateLumaImage = async () => {
+    console.log('🎨 Luma image generate button clicked');
+    console.log('📝 Current state:', {
+      lumaPrompt: lumaPrompt?.substring(0, 50) + '...',
+      lumaModel,
+      lumaAspectRatio,
+      isGeneratingLuma,
+      isAuthed
+    });
+
+    if (!lumaPrompt.trim()) {
+      showWarning('Missing Prompt', 'Please enter a description for your image.');
+      return;
+    }
+
+    // Ensure user is authenticated before proceeding
+    await ensureAuthenticated();
+    if (!isAuthed) {
+      return; // ensureAuthenticated handles the error toast
+    }
+
+    // Input validation
+    if (lumaPrompt.length > 1000) {
+      showWarning('Prompt Too Long', 'Please keep your prompt under 1000 characters.');
+      return;
+    }
+
+    // Validate model selection
+    const validModels = ['photon-1', 'photon-flash-1'];
+    if (!validModels.includes(lumaModel)) {
+      showWarning('Invalid Model', 'Please select a valid Photon model.');
+      return;
+    }
+
+    // Validate aspect ratio
+    const validAspectRatios = ['16:9', '9:16', '1:1', '21:9', '9:21', '3:4', '4:3'];
+    if (!validAspectRatios.includes(lumaAspectRatio)) {
+      showWarning('Invalid Aspect Ratio', 'Please select a valid aspect ratio.');
+      return;
+    }
+
+    setIsGeneratingLuma(true);
+
+    try {
+      const generationSessionId = `luma-img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      showInfo('Generating Image', `Dreaming up "${lumaPrompt.substring(0, 50)}${lumaPrompt.length > 50 ? '...' : ''}"}`);
+
+      console.log(`🎨 [${generationSessionId}] Starting Luma Dream Machine image generation...`);
+      console.log(`📝 [${generationSessionId}] Luma image generation parameters:`, {
+        prompt: lumaPrompt,
+        model: lumaModel,
+        aspect_ratio: lumaAspectRatio,
+      });
+
+      const lumaImageService = new LumaImageService({
+        pollIntervalMs: 5_000,
+        maxPollAttempts: 120,
+      });
+
+      const lumaRequest: LumaImageGenerationRequest = {
+        prompt: lumaPrompt,
+        model: lumaModel as LumaImageModel,
+        aspect_ratio: lumaAspectRatio,
+      };
+
+      console.log(`🚀 [${generationSessionId}] Sending Luma Dream Machine image request:`, lumaRequest);
+
+      const result = await lumaImageService.generateImage(lumaRequest);
+      const jobId = result.metadata?.id;
+      console.log(`✅ [${generationSessionId}] Luma Dream Machine image generation completed - Job ID: ${jobId}`, result);
+
+      const computedSeed = Math.floor(Math.random() * 999999);
+
+      console.log(`💾 [${generationSessionId}] Saving Luma Dream Machine image to local storage - Job ID: ${jobId}...`);
+      const localSaveResult = await saveGenerationLocally({
+        blob: result.blob,
+        metadata: {
+          prompt: result.metadata.prompt || lumaPrompt,
+          seed: computedSeed,
+          jobId: result.metadata.id,
+          model: result.metadata.model || lumaModel,
+          version: 'Photon 1.0.0',
+          timestamp: Date.now(),
+          filename: result.filename,
+          contentType: result.contentType,
+          fileSize: result.blob.size,
+          persistenceMethod: 'local' as const,
+          storageMode: 'local' as const,
+        },
+        filename: result.filename,
+      });
+
+      if (!localSaveResult) {
+        console.warn('⚠️ Local save failed, falling back to data URL');
+        // Fallback to data URL if local save fails
+        const arrayBuffer = await result.blob.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        const base64 = btoa(String.fromCharCode(...bytes));
+        const imageUrl = `data:${result.contentType};base64,${base64}`;
+        
+        // Create generation result for the image (using same structure as LTX/Luma video)
+        const generationResult = {
+          id: result.filename,
+          imageUrl: imageUrl,
+          seed: computedSeed,
+          contentType: 'image' as const,
+          metadata: {
+            prompt: lumaPrompt,
+            seed: computedSeed,
+            model: lumaModel,
+            aspectRatio: lumaAspectRatio,
+            jobId: result.metadata.id,
+            version: 'Photon 1.0.0',
+            timestamp: Date.now(),
+            filename: result.filename,
+            contentType: result.contentType,
+            fileSize: result.blob.size,
+            persistenceMethod: 'dataUrl' as const,
+          },
+          timestamp: Date.now(),
+          status: 'generated' as const,
+        };
+
+        // Add to generation store
+        addGeneration(generationResult);
+
+        console.log(`✅ [${generationSessionId}] Luma image added to gallery (data URL fallback):`, generationResult.id);
+        showSuccess('Image Generated', `Your Luma image has been created! (${result.filename})`);
+      } else {
+        console.log(`✅ [${generationSessionId}] Luma image saved to local storage:`, localSaveResult);
+        
+        // Create generation result with local file reference (using same structure as LTX/Luma video)
+        const generationResult = {
+          id: result.filename,
+          imageUrl: '', // Will be set by toTempUrl in gallery
+          seed: computedSeed,
+          contentType: 'image' as const,
+          metadata: {
+            prompt: lumaPrompt,
+            seed: computedSeed,
+            model: lumaModel,
+            aspectRatio: lumaAspectRatio,
+            jobId: result.metadata.id,
+            version: 'Photon 1.0.0',
+            timestamp: Date.now(),
+            filename: result.filename,
+            contentType: result.contentType,
+            fileSize: result.blob.size,
+            storageMode: 'local' as const,
+            persistenceMethod: 'local' as const,
+            folderToken: localSaveResult.folderToken,
+            relativePath: localSaveResult.relativePath,
+            localFilePath: localSaveResult.filePath,
+          },
+          timestamp: Date.now(),
+          status: 'generated' as const,
+          localPath: localSaveResult.filePath,
+        };
+
+        // Add to generation store
+        addGeneration(generationResult);
+
+        console.log(`✅ [${generationSessionId}] Luma image added to gallery:`, generationResult.id);
+        showSuccess('Image Generated', `Your Luma image has been created and saved locally! (${result.filename})`);
+      }
+
+    } catch (error: any) {
+      console.error('❌ Luma Dream Machine image generation failed:', error);
+      
+      // Provide more user-friendly error messages for common issues
+      let errorMessage = error?.message || 'An unexpected error occurred.';
+      let errorTitle = 'Image Generation Failed';
+      
+      // Check for specific error patterns
+      if (error?.message?.includes('502') || error?.message?.includes('Bad Gateway')) {
+        errorMessage = 'The Luma API is temporarily unavailable. Please try again in a moment.';
+        errorTitle = 'Service Unavailable';
+      } else if (error?.message?.includes('503') || error?.message?.includes('Service Unavailable')) {
+        errorMessage = 'Luma servers are experiencing high demand. Please try again shortly.';
+        errorTitle = 'Service Busy';
+      } else if (error?.message?.includes('429') || error?.message?.includes('rate limit')) {
+        errorMessage = 'Rate limit exceeded. Please wait a moment before generating again.';
+        errorTitle = 'Rate Limited';
+      } else if (error?.message?.includes('401') || error?.message?.includes('unauthorized')) {
+        errorMessage = 'Invalid API key. Please check your Luma API configuration.';
+        errorTitle = 'Authentication Error';
+      }
+      
+      showError(errorTitle, errorMessage);
+    } finally {
+      setIsGeneratingLuma(false);
+    }
+  };
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
@@ -1571,12 +1767,45 @@ const AppContent = () => {
                       </div>
                     ) : (
                       <div className="generation-form">
-                        {/* Luma Video Prompt */}
+                        {/* Generation Type Selector */}
                         <div className="form-group">
-                          <sp-label className="form-label">Video Prompt *</sp-label>
+                          {/* @ts-ignore */}
+                          <sp-label className="form-label">Generation Type</sp-label>
+                          <div className="text-detail mb-sm">Choose what to generate</div>
+                          {/* @ts-ignore */}
+                          <sp-picker
+                            onChange={(e: any) => {
+                              const newType = e.target.value as 'video' | 'image';
+                              setLumaGenerationType(newType);
+                              // Reset model to appropriate default when switching types
+                              if (newType === 'image') {
+                                setLumaModel('photon-1');
+                              } else {
+                                setLumaModel('ray-2');
+                              }
+                            }}
+                          >
+                            {/* @ts-ignore */}
+                            <sp-menu slot="options">
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="video" selected={lumaGenerationType === 'video'}>Video Generation</sp-menu-item>
+                              {/* @ts-ignore */}
+                              <sp-menu-item value="image" selected={lumaGenerationType === 'image'}>Image Generation</sp-menu-item>
+                            {/* @ts-ignore */}
+                            </sp-menu>
+                          {/* @ts-ignore */}
+                          </sp-picker>
+                        </div>
+
+                        {/* Luma Prompt */}
+                        <div className="form-group">
+                          <sp-label className="form-label">{lumaGenerationType === 'video' ? 'Video' : 'Image'} Prompt *</sp-label>
                           <sp-textarea 
                             id="luma-prompt-input"
-                            placeholder="A sweeping drone shot over bioluminescent waves crashing on a night beach..."
+                            placeholder={lumaGenerationType === 'video' 
+                              ? "A sweeping drone shot over bioluminescent waves crashing on a night beach..."
+                              : "A teddy bear in sunglasses playing electric guitar and dancing..."
+                            }
                             className="prompt-input"
                             multiline
                             rows={3}
@@ -1590,7 +1819,8 @@ const AppContent = () => {
                           </div>
                         </div>
 
-                        {/* Mode Selection */}
+                        {/* Mode Selection - Only show for Video */}
+                        {lumaGenerationType === 'video' && (
                         <div className="form-group">
                           <sp-label className="form-label">Mode</sp-label>
                           <div className="text-detail mb-sm">Choose generation mode</div>
@@ -1617,25 +1847,46 @@ const AppContent = () => {
                             </sp-radio>
                           </sp-radio-group>
                         </div>
+                        )}
 
-                        {/* Model */}
+                        {/* Model Selection */}
                         <div className="form-group">
+                          {/* @ts-ignore */}
                           <sp-label className="form-label">Model</sp-label>
                           <div className="text-detail mb-sm">Choose the Dream Machine model</div>
+                          {/* @ts-ignore */}
                           <sp-picker 
                             placeholder="Select model"
                             className="style-dropdown"
                             onChange={(e: any) => setLumaModel(e.target.value)}
                           >
+                            {/* @ts-ignore */}
                             <sp-menu slot="options">
-                              <sp-menu-item value="ray-2">Ray 2</sp-menu-item>
-                              <sp-menu-item value="ray-flash-2">Ray Flash 2</sp-menu-item>
-                              <sp-menu-item value="ray-1-6">Ray 1.6</sp-menu-item>
+                              {lumaGenerationType === 'video' ? (
+                                <>
+                                  {/* @ts-ignore */}
+                                  <sp-menu-item value="ray-2" selected={lumaModel === 'ray-2'}>Ray 2</sp-menu-item>
+                                  {/* @ts-ignore */}
+                                  <sp-menu-item value="ray-flash-2" selected={lumaModel === 'ray-flash-2'}>Ray Flash 2</sp-menu-item>
+                                  {/* @ts-ignore */}
+                                  <sp-menu-item value="ray-1-6" selected={lumaModel === 'ray-1-6'}>Ray 1.6</sp-menu-item>
+                                </>
+                              ) : (
+                                <>
+                                  {/* @ts-ignore */}
+                                  <sp-menu-item value="photon-1" selected={lumaModel === 'photon-1'}>Photon 1</sp-menu-item>
+                                  {/* @ts-ignore */}
+                                  <sp-menu-item value="photon-flash-1" selected={lumaModel === 'photon-flash-1'}>Photon Flash 1</sp-menu-item>
+                                </>
+                              )}
+                            {/* @ts-ignore */}
                             </sp-menu>
+                          {/* @ts-ignore */}
                           </sp-picker>
                         </div>
 
-                        {lumaMode === 'keyframes' ? (
+                        {/* Video-specific options */}
+                        {lumaGenerationType === 'video' && lumaMode === 'keyframes' ? (
                           <>
                             {/* Aspect Ratio */}
                             <div className="form-group">
@@ -1850,7 +2101,7 @@ const AppContent = () => {
                               )}
                             </div>
                           </>
-                        ) : (
+                        ) : lumaGenerationType === 'video' && lumaMode === 'reframe' ? (
                           <>
                             {/* Reframe Video Selection */}
                             <div className="form-group">
@@ -1984,23 +2235,104 @@ const AppContent = () => {
                               </sp-radio-group>
                             </div>
                           </>
+                        ) : null}
+
+                        {/* Image-specific options */}
+                        {lumaGenerationType === 'image' && (
+                          <>
+                            {/* Aspect Ratio for Images */}
+                            <div className="form-group">
+                              {/* @ts-ignore */}
+                              <sp-label className="form-label">Aspect Ratio</sp-label>
+                              <div className="text-detail mb-sm">Select the image composition</div>
+                              {/* @ts-ignore */}
+                              <sp-radio-group 
+                                className="content-type-group"
+                                onChange={(e: any) => setLumaAspectRatio(e.target.value)}
+                              >
+                                {/* @ts-ignore */}
+                                <sp-radio value="16:9" checked={lumaAspectRatio === '16:9'}>
+                                  <span className="radio-label">16:9</span>
+                                  <div className="radio-description text-detail">Widescreen</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="1:1" checked={lumaAspectRatio === '1:1'}>
+                                  <span className="radio-label">1:1</span>
+                                  <div className="radio-description text-detail">Square</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="3:4" checked={lumaAspectRatio === '3:4'}>
+                                  <span className="radio-label">3:4</span>
+                                  <div className="radio-description text-detail">Portrait Standard</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="4:3" checked={lumaAspectRatio === '4:3'}>
+                                  <span className="radio-label">4:3</span>
+                                  <div className="radio-description text-detail">Classic Standard</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="9:16" checked={lumaAspectRatio === '9:16'}>
+                                  <span className="radio-label">9:16</span>
+                                  <div className="radio-description text-detail">Vertical</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="21:9" checked={lumaAspectRatio === '21:9'}>
+                                  <span className="radio-label">21:9</span>
+                                  <div className="radio-description text-detail">Ultra-wide</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                                {/* @ts-ignore */}
+                                <sp-radio value="9:21" checked={lumaAspectRatio === '9:21'}>
+                                  <span className="radio-label">9:21</span>
+                                  <div className="radio-description text-detail">Ultra-tall</div>
+                                {/* @ts-ignore */}
+                                </sp-radio>
+                              {/* @ts-ignore */}
+                              </sp-radio-group>
+                            </div>
+                          </>
                         )}
 
                         {/* Generate Button */}
                         <div className="form-actions">
                           {(() => {
-                            const isButtonDisabled = isGeneratingLuma || !lumaPrompt.trim() || (lumaMode === 'reframe' && !lumaReframeVideoItem);
-                            return (
-                              <sp-button 
-                                variant="accent" 
-                                size="m"
-                                className="generate-button"
-                                onClick={lumaMode === 'reframe' ? handleReframeLumaVideo : handleGenerateLumaVideo}
-                                disabled={isButtonDisabled}
-                              >
-                                {isGeneratingLuma ? 'Generating...' : lumaMode === 'reframe' ? 'Reframe Video' : 'Generate Video'}
-                              </sp-button>
-                            );
+                            if (lumaGenerationType === 'image') {
+                              // Image generation button
+                              return (
+                                /* @ts-ignore */
+                                <sp-button 
+                                  variant="accent" 
+                                  size="m"
+                                  className="generate-button"
+                                  onClick={handleGenerateLumaImage}
+                                  disabled={isGeneratingLuma || !lumaPrompt.trim()}
+                                >
+                                  {isGeneratingLuma ? 'Generating...' : 'Generate Image'}
+                                {/* @ts-ignore */}
+                                </sp-button>
+                              );
+                            } else {
+                              // Video generation button
+                              const isButtonDisabled = isGeneratingLuma || !lumaPrompt.trim() || (lumaMode === 'reframe' && !lumaReframeVideoItem);
+                              return (
+                                /* @ts-ignore */
+                                <sp-button 
+                                  variant="accent" 
+                                  size="m"
+                                  className="generate-button"
+                                  onClick={lumaMode === 'reframe' ? handleReframeLumaVideo : handleGenerateLumaVideo}
+                                  disabled={isButtonDisabled}
+                                >
+                                  {isGeneratingLuma ? 'Generating...' : lumaMode === 'reframe' ? 'Reframe Video' : 'Generate Video'}
+                                {/* @ts-ignore */}
+                                </sp-button>
+                              );
+                            }
                           })()}
                         </div>
                       </div>
