@@ -334,7 +334,7 @@ export class LumaImageService {
     const contentType = response.headers.get('content-type') || 'image/jpeg'
     const extension = contentType.split('/')[1] || 'jpg'
     const filename =
-      customFilename || `luma-image-${generation.id}-${Date.now()}.${extension}`
+      customFilename || `${generation.model}-${generation.id}-${Date.now()}.${extension}`
 
     return {
       blob,

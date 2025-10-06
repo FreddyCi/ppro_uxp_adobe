@@ -619,14 +619,21 @@ export const useGalleryStore = create<GalleryStore>()(
                 const isFireflyGeneration = Boolean(
                   rawMetadata?.model && rawMetadata.model.toLowerCase().includes('firefly')
                 )
+                
+                const isLumaImage = Boolean(
+                  rawMetadata?.model && (rawMetadata.model.includes('photon-1') || rawMetadata.model.includes('photon-flash-1')) ||
+                  item.filename?.includes('photon-')
+                )
 
                 console.log(`🔍 Content type detection for ${item.filename}:`, {
                   filename: item.filename,
                   rawMetadataContentType: rawMetadata?.contentType,
                   model: rawMetadata?.model,
                   isFireflyGeneration,
+                  isLumaImage,
                   hasLtx: item.filename?.includes('ltx-'),
                   hasLuma: item.filename?.includes('luma-'),
+                  hasPhoton: item.filename?.includes('photon-'),
                   hasGemini: item.filename?.includes('gemini-corrected'),
                   isVideoExtension,
                   isUploadedVideo
@@ -638,11 +645,12 @@ export const useGalleryStore = create<GalleryStore>()(
                   console.log(`🎥 Detected video by extension or upload flag: ${item.filename}`)
                 } else if (item.filename?.includes('ltx-') || rawMetadata?.model === 'ltx-video' || rawMetadata?.model === 'LTX Video') {
                   contentType = 'video'
-                } else if (item.filename?.includes('luma-') || (rawMetadata?.model && (rawMetadata.model.includes('ray') || rawMetadata.model.includes('luma')))) {
+                } else if (item.filename?.includes('luma-video-') || (rawMetadata?.model && (rawMetadata.model.includes('ray')))) {
+                  // Only check for 'luma-video-' prefix or 'ray' models (Luma video), NOT 'photon' (Luma image)
                   contentType = 'video'
                 } else if (rawMetadata?.contentType === 'video' || rawMetadata?.contentType === 'video/mp4') {
                   contentType = 'video'
-                } else if (isFireflyGeneration || rawMetadata?.contentType === 'generated-image') {
+                } else if (isLumaImage || isFireflyGeneration || rawMetadata?.contentType === 'generated-image') {
                   contentType = 'generated-image'
                 } else if (item.filename?.includes('gemini-corrected')) {
                   contentType = 'corrected-image'
@@ -1552,19 +1560,23 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
             })
           }
 
-          // Check if this is a supported generation type (Gemini-corrected, LTX video, Luma video, Firefly images, or other generations)
+          // Check if this is a supported generation type (Gemini-corrected, LTX video, Luma video/image, Firefly images, or other generations)
           const isSupportedGeneration = (
             metadata.filename && (
               metadata.filename.includes('gemini-corrected') || // Gemini corrections
               metadata.filename.includes('ltx-') || // LTX videos
               metadata.filename.includes('luma-') || // Luma videos
+              metadata.filename.includes('photon-') || // Luma images (photon-1, photon-flash-1)
               metadata.contentType === 'video' || // Any video content
               metadata.contentType === 'video/mp4' || // MP4 videos
               metadata.contentType === 'generated-image' || // Firefly images
               metadata.contentType === 'corrected-image' || // Gemini corrections
-              // Check for Luma video models
+              metadata.contentType === 'image/jpeg' || // JPEG images (Luma, Firefly, etc.)
+              metadata.contentType === 'image/png' || // PNG images
+              // Check for model types
               (metadata.model && (
-                metadata.model.includes('ray') || // ray-2, ray-flash-2
+                metadata.model.includes('ray') || // ray-2, ray-flash-2 (Luma video)
+                metadata.model.includes('photon') || // photon-1, photon-flash-1 (Luma image)
                 metadata.model === 'LTX Video' || // LTX videos
                 metadata.model.includes('luma') || // Any luma model
                 metadata.model.includes('firefly') // Firefly images (firefly-v3, etc.)
