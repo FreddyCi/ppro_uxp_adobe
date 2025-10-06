@@ -154,6 +154,16 @@ export const convertGenerationResultToContentItem = (result: import('./firefly')
                        !!(result as any).videoBlob ||
                        result.metadata.contentType?.includes('video')
 
+  console.log('🔄 [ContentConversion] Converting GenerationResult to ContentItem:', {
+    id: result.id,
+    contentType: result.contentType,
+    hasVideoUrl: !!(result as any).videoUrl,
+    hasVideoBlob: !!(result as any).videoBlob,
+    metadataContentType: result.metadata.contentType,
+    isVideoResult,
+    willConvertAs: isVideoResult ? 'VIDEO' : 'IMAGE'
+  });
+
   if (isVideoResult) {
     // Convert as video content
     const videoResult = result as any

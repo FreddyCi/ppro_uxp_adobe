@@ -10,6 +10,7 @@ import { uxp, premierepro } from "./globals";
 import { api } from "./api/api";
 import { createIMSService } from "./services/ims/IMSService";
 import { FireflyService } from "./services/firefly";
+import type { GenerationResult } from "./types/firefly";
 import { useGenerationStore } from "./store/generationStore";
 import { useAuthStore } from "./store/authStore";
 import "./layout.scss";
@@ -88,6 +89,60 @@ async function uploadBlobWithSAS(
   }
 }
 import { refreshContentItemUrls } from './utils/blobUrlLifecycle';
+
+// Base64 conversion helpers (matching Firefly pattern)
+function encodeBase64(bytes: Uint8Array): string {
+  if (typeof btoa === 'function') {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += Array.from(chunk, byte => String.fromCharCode(byte)).join('');
+    }
+    return btoa(binary);
+  }
+
+  const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let result = '';
+  let i = 0;
+
+  for (; i + 3 <= bytes.length; i += 3) {
+    const triplet = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    result += base64Chars[(triplet >> 18) & 63];
+    result += base64Chars[(triplet >> 12) & 63];
+    result += base64Chars[(triplet >> 6) & 63];
+    result += base64Chars[triplet & 63];
+  }
+
+  if (i < bytes.length) {
+    const remaining = bytes.length - i;
+    const chunk = bytes[i] << 16 | (remaining > 1 ? bytes[i + 1] << 8 : 0);
+    result += base64Chars[(chunk >> 18) & 63];
+    result += base64Chars[(chunk >> 12) & 63];
+    if (remaining > 1) {
+      result += base64Chars[(chunk >> 6) & 63];
+      result += '=';
+    } else {
+      result += '==';
+    }
+  }
+
+  return result;
+}
+
+async function convertBlobToDataUrl(blob: Blob): Promise<string> {
+  try {
+    const arrayBuffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    const base64 = encodeBase64(bytes);
+    const mimeType = blob.type || 'application/octet-stream';
+
+    return `data:${mimeType};base64,${base64}`;
+  } catch (error) {
+    console.error('Failed to convert blob to data URL:', error);
+    throw error;
+  }
+}
 
 const AppContent = () => {
   const [imsToken, setImsToken] = useState<string | null>(null);
@@ -1239,17 +1294,27 @@ const AppContent = () => {
       } else {
         console.log(`✅ [${generationSessionId}] Luma image saved to local storage:`, localSaveResult);
         
-        // Create generation result with local file reference (using same structure as LTX/Luma video)
-        const generationResult = {
+        // Convert blob to base64 data URL (matching Firefly pattern)
+        let imageUrl = '';
+        try {
+          const dataUrl = await convertBlobToDataUrl(result.blob);
+          imageUrl = dataUrl;
+          console.log(`🖼️ [${generationSessionId}] Converted image to base64 data URL:`, dataUrl.substring(0, 50) + '...');
+        } catch (conversionError) {
+          console.warn(`⚠️ [${generationSessionId}] Failed to convert to data URL, falling back to file path:`, conversionError);
+          imageUrl = localSaveResult.filePath;
+        }
+        
+        // Create generation result matching Firefly's structure exactly
+        const generationResult: GenerationResult = {
           id: result.filename,
-          imageUrl: '', // Will be set by toTempUrl in gallery
+          imageUrl: imageUrl, // Use base64 data URL (or file path as fallback)
+          downloadUrl: localSaveResult.filePath, // File path for download
           seed: computedSeed,
-          contentType: 'image' as const,
           metadata: {
             prompt: lumaPrompt,
             seed: computedSeed,
             model: lumaModel,
-            aspectRatio: lumaAspectRatio,
             jobId: result.metadata.id,
             version: 'Photon 1.0.0',
             timestamp: Date.now(),
@@ -1257,14 +1322,17 @@ const AppContent = () => {
             contentType: result.contentType,
             fileSize: result.blob.size,
             storageMode: 'local' as const,
-            persistenceMethod: 'local' as const,
+            persistenceMethod: 'dataUrl' as const, // We're using data URL
             folderToken: localSaveResult.folderToken,
             relativePath: localSaveResult.relativePath,
             localFilePath: localSaveResult.filePath,
+            localMetadataPath: localSaveResult.metadataPath,
           },
           timestamp: Date.now(),
           status: 'generated' as const,
           localPath: localSaveResult.filePath,
+          blobUrl: imageUrl, // Also set blobUrl for clarity (even though it's a data URL)
+          // DO NOT set contentType, videoUrl, or videoBlob for images
         };
 
         // Add to generation store
