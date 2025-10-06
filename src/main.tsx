@@ -208,6 +208,10 @@ const AppContent = () => {
   const [selectedCharacterIdentity, setSelectedCharacterIdentity] = useState<number>(0); // 0=A, 1=B, 2=C, 3=D
   const [useCharacterReference, setUseCharacterReference] = useState<boolean>(false);
   
+  // Modify Image: modify existing image with prompt and weight
+  const [lumaModifyImage, setLumaModifyImage] = useState<{file: File | ContentItem | null, weight: number}>({ file: null, weight: 0.5 });
+  const [useModifyImage, setUseModifyImage] = useState<boolean>(false);
+  
   // Get toast helpers
   const { showSuccess, showError, showInfo, showWarning } = useToastHelpers();
   
@@ -1416,6 +1420,32 @@ const AppContent = () => {
         result = await lumaImageService.generateImageWithCharacter(
           lumaPrompt,
           characterRef,
+          lumaModel as LumaImageModel,
+          lumaAspectRatio
+        );
+      } else if (useModifyImage) {
+        // Modify existing image
+        if (!lumaModifyImage.file) {
+          showWarning('No Image Selected', 'Please select an image to modify or disable "Use Modify Image".');
+          setIsGeneratingLuma(false);
+          return;
+        }
+
+        console.log(`🖼️ [${generationSessionId}] Uploading image to modify...`);
+        
+        // Upload the modify image to Azure
+        const modifyUrl = await uploadReferenceImage(lumaModifyImage.file, 0);
+        const modifyReference = {
+          url: modifyUrl,
+          weight: lumaModifyImage.weight
+        };
+
+        console.log(`✅ [${generationSessionId}] Modify image uploaded:`, modifyUrl);
+        console.log(`🚀 [${generationSessionId}] Sending Luma modify image request`);
+
+        result = await lumaImageService.modifyImage(
+          lumaPrompt,
+          modifyReference,
           lumaModel as LumaImageModel,
           lumaAspectRatio
         );
@@ -2847,6 +2877,102 @@ const AppContent = () => {
                                       )}
                                     </div>
                                   ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {/* Modify Image */}
+                        {lumaGenerationType === 'image' && (
+                          <>
+                            <sp-divider size="medium"></sp-divider>
+                            <div className="form-group">
+                              <sp-checkbox 
+                                checked={useModifyImage}
+                                onChange={(e: any) => {
+                                  const newValue = e.target.checked;
+                                  setUseModifyImage(newValue);
+                                  // Disable other reference types when modify is enabled
+                                  if (newValue) {
+                                    setUseImageReferences(false);
+                                    setUseStyleReference(false);
+                                    setUseCharacterReference(false);
+                                  }
+                                }}
+                              >
+                                Use Modify Image
+                              </sp-checkbox>
+                              <div className="text-detail mb-sm">Modify an existing image with a prompt (Note: For colors, use weight 0.0-0.1)</div>
+                            </div>
+
+                            {useModifyImage && (
+                              <div className="reference-images-container">
+                                <div className="reference-image-item">
+                                  <div className="reference-image-header">
+                                    <span className="form-label-small">Base Image to Modify</span>
+                                    {lumaModifyImage.file && (
+                                      <sp-button
+                                        variant="secondary"
+                                        size="s"
+                                        quiet
+                                        onClick={() => setLumaModifyImage({ file: null, weight: 0.5 })}
+                                      >
+                                        Remove
+                                      </sp-button>
+                                    )}
+                                  </div>
+
+                                  {!lumaModifyImage.file ? (
+                                    <>
+                                      <sp-button
+                                        variant="accent"
+                                        size="m"
+                                        style={{ width: '100%' }}
+                                        onClick={async () => {
+                                          try {
+                                            const fs = uxp.storage.localFileSystem;
+                                            const file = await fs.getFileForOpening({
+                                              types: ['png', 'jpg', 'jpeg', 'webp']
+                                            });
+                                            if (file) {
+                                              setLumaModifyImage({ ...lumaModifyImage, file });
+                                            }
+                                          } catch (error) {
+                                            console.error('Failed to select image:', error);
+                                            showError('File Selection Failed', 'Could not select the image to modify');
+                                          }
+                                        }}
+                                      >
+                                        Select Image to Modify
+                                      </sp-button>
+                                    </>
+                                  ) : (
+                                    <div className="reference-image-preview">
+                                      <span className="text-detail">
+                                        {(lumaModifyImage.file as File).name || (lumaModifyImage.file as ContentItem).filename}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {lumaModifyImage.file && (
+                                    <div className="reference-weight-control">
+                                      <label className="form-label-small">
+                                        Modification Weight: {lumaModifyImage.weight.toFixed(2)}
+                                        <span className="text-detail"> (Higher = closer to original, Lower for colors: 0.0-0.1)</span>
+                                      </label>
+                                      <sp-slider
+                                        min={0}
+                                        max={1}
+                                        step={0.05}
+                                        value={lumaModifyImage.weight}
+                                        onInput={(e: any) => {
+                                          setLumaModifyImage({ ...lumaModifyImage, weight: parseFloat(e.target.value) });
+                                        }}
+                                      >
+                                      </sp-slider>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
