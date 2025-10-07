@@ -73,7 +73,6 @@ export const Toast = ({ toast, onClose, onAction }: ToastProps) => {
         <div className="toast__close">
           {/* @ts-ignore */}
           <sp-action-button 
-            size="s" 
             quiet 
             onClick={handleClose}
             className="toast__close-button"

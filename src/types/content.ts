@@ -15,7 +15,9 @@ export interface ContentItem extends BaseMetadata {
 
   // Common display properties
   displayUrl: string // Primary URL for display (blob URL, data URL, or local path)
-  thumbnailUrl?: string // Thumbnail for gallery view
+  thumbnailUrl?: string // Thumbnail for gallery view (blob URL or data URL)
+  thumbnailFilePath?: string // Local filesystem path to thumbnail file
+  thumbnailRelativePath?: string // Relative path to thumbnail within UXP storage
   blobUrl?: string // Azure Blob storage URL
   localPath?: string // Local filesystem path
   localMetadataPath?: string // Path to metadata JSON file
