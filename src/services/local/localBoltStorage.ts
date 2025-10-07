@@ -211,8 +211,13 @@ class LocalBoltStorage {
 
     // Generate and save thumbnail for video content
     let thumbnailUrl: string | undefined
+    let thumbnailFilePath: string | undefined
     if (options.metadata.contentType === 'video') {
       thumbnailUrl = await generateAndSaveVideoThumbnail(options.blob, filePath, addon) || undefined
+      if (thumbnailUrl) {
+        // Also save the thumbnail file path (relative to base path)
+        thumbnailFilePath = filePath.replace(/\.(mp4|mov|avi|webm)$/i, '_thumbnail.jpg')
+      }
     }
 
     const metadataPayload = {
@@ -224,7 +229,8 @@ class LocalBoltStorage {
       filename: safeFilename,
       filePath,
       relativePath: joinPath('/', dateFolder, safeFilename),
-      thumbnailUrl // Include generated thumbnail
+      thumbnailUrl, // Include generated thumbnail (base64 data URL for fallback)
+      thumbnailFilePath // Include thumbnail file path for UXP loading
     }
 
     const metadataPath = joinPath(separator, directory, `${safeFilename}.json`)

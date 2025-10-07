@@ -30,6 +30,7 @@ export interface LocalClip {
   model?: string
   seed?: number
   createdAt?: number
+  thumbnailUrl?: string
 }
 
 interface ClipStatusMap {
@@ -168,6 +169,7 @@ export const LocalIngestPanel: React.FC = () => {
           model: undefined,
           seed: undefined,
           createdAt,
+          thumbnailUrl: item.thumbnailUrl,
         }
       })
       .filter(clip => clip.filePath.length > 0)
@@ -565,11 +567,19 @@ export const LocalIngestPanel: React.FC = () => {
               return (
                 <article key={clip.id} className="clip-card">
                   <div className="clip-card__preview">
-                    <div className="clip-card__placeholder">
-                      {/* @ts-ignore */}
-                      <sp-icon name="ui:FileVideo" size="l" />
-                      <div className="text-detail">MP4</div>
-                    </div>
+                    {clip.thumbnailUrl ? (
+                      <img
+                        src={clip.thumbnailUrl}
+                        alt={clip.displayName}
+                        className="clip-card__thumbnail"
+                      />
+                    ) : (
+                      <div className="clip-card__placeholder">
+                        {/* @ts-ignore */}
+                        <sp-icon name="ui:FileVideo" size="l" />
+                        <div className="text-detail">MP4</div>
+                      </div>
+                    )}
                   </div>
                   <div className="clip-card__body">
                     <div className="clip-card__header">
