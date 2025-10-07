@@ -187,6 +187,7 @@ export const convertGenerationResultToContentItem = (result: import('./firefly')
       thumbnailUrl: result.thumbnailUrl,
       blobUrl: result.blobUrl,
       localPath: result.localPath,
+      localMetadataPath: result.metadata.localMetadataPath,
 
       // Content data
       content: {
@@ -228,6 +229,7 @@ export const convertGenerationResultToContentItem = (result: import('./firefly')
     thumbnailUrl: result.thumbnailUrl,
     blobUrl: result.blobUrl,
     localPath: result.localPath,
+    localMetadataPath: result.metadata.localMetadataPath,
 
     // Content data
     content: {

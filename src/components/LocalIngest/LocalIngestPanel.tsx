@@ -1,5 +1,5 @@
 // @ts-ignore
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { useGalleryStore } from '../../store/galleryStore'
 import type { ContentItem, VideoData } from '../../types/content'
@@ -134,6 +134,85 @@ export const LocalIngestPanel: React.FC = () => {
   const [folderInfo, setFolderInfo] = useState(getConfiguredLocalFolderInfo())
   const { showError, showInfo, showSuccess, showWarning } = useToastHelpers()
   const hasConfiguredFolder = Boolean(folderInfo.folderPath && folderInfo.folderToken)
+  const [thumbnailOverrides, setThumbnailOverrides] = useState<Record<string, string>>({})
+
+  // Load thumbnails from JSON metadata files for videos that don't have them
+  useEffect(() => {
+    const loadMissingThumbnails = async () => {
+      console.log('[LocalIngest] useEffect triggered - checking for missing thumbnails')
+      const requireFn = (globalThis as unknown as { require?: (moduleId: string) => any }).require
+      if (!requireFn) {
+        console.log('[LocalIngest] No require function available')
+        return
+      }
+
+      const uxp = requireFn('uxp') as any
+      const localFs = uxp?.storage?.localFileSystem
+      if (!localFs) {
+        console.log('[LocalIngest] No localFileSystem available')
+        return
+      }
+
+      console.log('[LocalIngest] Checking', contentItems.length, 'content items for missing thumbnails')
+      
+      for (const item of contentItems) {
+        const isVideo = item.contentType === 'video' || item.contentType === 'uploaded-video'
+        
+        // Derive metadata path from video path if not stored
+        let metadataPath = item.localMetadataPath
+        if (!metadataPath && item.localPath) {
+          metadataPath = `${item.localPath}.json`
+        }
+        
+        console.log(`[LocalIngest] Item "${item.filename}":`, {
+          isVideo,
+          hasThumbnailUrl: !!item.thumbnailUrl,
+          hasMetadataPath: !!metadataPath,
+          metadataPath,
+          hasLocalPath: !!item.localPath
+        })
+        
+        if (!isVideo || item.thumbnailUrl || !metadataPath) {
+          console.log(`[LocalIngest] Skipping "${item.filename}" - not eligible for thumbnail loading`)
+          continue
+        }
+
+        try {
+          console.log(`[LocalIngest] Attempting to load metadata file for "${item.filename}": ${metadataPath}`)
+          
+          // Convert native path to file:// URL for UXP
+          const fileUrl = metadataPath.startsWith('file://') ? metadataPath : `file://${metadataPath}`
+          const metadataEntry = await localFs.getEntryWithUrl(fileUrl)
+          
+          if (metadataEntry && metadataEntry.isFile) {
+            const metadataText = await metadataEntry.read() // UXP reads as text by default
+            const metadata = JSON.parse(metadataText)
+            console.log(`[LocalIngest] Loaded metadata for "${item.filename}":`, {
+              hasThumbnailUrl: !!metadata.thumbnailUrl,
+              thumbnailUrlType: typeof metadata.thumbnailUrl,
+              thumbnailUrlPrefix: metadata.thumbnailUrl?.substring(0, 50)
+            })
+            
+            if (metadata.thumbnailUrl && metadata.thumbnailUrl.startsWith('data:image/')) {
+              setThumbnailOverrides(prev => ({
+                ...prev,
+                [item.id]: metadata.thumbnailUrl
+              }))
+              console.log(`[LocalIngest] ✅ Loaded thumbnail from JSON for ${item.filename}`)
+            } else {
+              console.log(`[LocalIngest] ❌ Metadata has no valid thumbnailUrl for ${item.filename}`)
+            }
+          } else {
+            console.log(`[LocalIngest] Metadata file not found or not a file for ${item.filename}`)
+          }
+        } catch (error) {
+          console.warn(`[LocalIngest] Failed to load thumbnail from metadata for ${item.filename}:`, error)
+        }
+      }
+    }
+
+    loadMissingThumbnails()
+  }, [contentItems])
 
   const detectedClips = useMemo<LocalClip[]>(() => {
     // Filter for video content items that have local file paths
@@ -157,6 +236,9 @@ export const LocalIngestPanel: React.FC = () => {
           createdAt = Date.now()
         }
 
+        // Try to get thumbnailUrl from item, or use override from JSON metadata
+        const thumbnailUrl = thumbnailOverrides[item.id] || item.thumbnailUrl
+
         return {
           id: item.id,
           source: 'generated' as const,
@@ -169,11 +251,11 @@ export const LocalIngestPanel: React.FC = () => {
           model: undefined,
           seed: undefined,
           createdAt,
-          thumbnailUrl: item.thumbnailUrl,
+          thumbnailUrl,
         }
       })
       .filter(clip => clip.filePath.length > 0)
-  }, [contentItems])
+  }, [contentItems, thumbnailOverrides])
 
   const clips = useMemo<LocalClip[]>(() => {
     const combined = [...detectedClips]
@@ -565,16 +647,23 @@ export const LocalIngestPanel: React.FC = () => {
             {clips.map(clip => {
               const status = statusMap[clip.id]
               
-              // Debug logging for thumbnails
-              if (clip.thumbnailUrl) {
-                console.log(`[LocalIngest] Found thumbnail for ${clip.displayName}:`, {
-                  thumbnailUrl: clip.thumbnailUrl.substring(0, 100) + (clip.thumbnailUrl.length > 100 ? '...' : ''),
-                  isBase64: clip.thumbnailUrl.startsWith('data:'),
-                  length: clip.thumbnailUrl.length
-                })
-              } else {
-                console.log(`[LocalIngest] No thumbnail for ${clip.displayName}`)
-              }
+              // Comprehensive debug logging for thumbnails
+              console.log(`[LocalIngest] Clip "${clip.displayName}":`, {
+                id: clip.id,
+                hasThumbnailUrl: !!clip.thumbnailUrl,
+                thumbnailUrlType: typeof clip.thumbnailUrl,
+                thumbnailUrlValue: clip.thumbnailUrl ? 
+                  (clip.thumbnailUrl.substring(0, 100) + (clip.thumbnailUrl.length > 100 ? '...' : '')) : 
+                  'undefined/null/empty',
+                thumbnailUrlLength: clip.thumbnailUrl?.length || 0,
+                isBase64: clip.thumbnailUrl?.startsWith('data:') || false,
+                metadataPath: clip.metadataPath,
+                hasMetadataPath: !!clip.metadataPath,
+                thumbnailOverrideExists: !!thumbnailOverrides[clip.id],
+                thumbnailOverrideValue: thumbnailOverrides[clip.id] ? 
+                  (thumbnailOverrides[clip.id].substring(0, 50) + '...') : 
+                  'none'
+              })
               
               return (
                 <article key={clip.id} className="clip-card">
