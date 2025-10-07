@@ -82,6 +82,7 @@ interface VideoWebViewProps {
   controls?: boolean;
   muted?: boolean;
   autoPlay?: boolean;
+  loop?: boolean;
 }
 
 /**
@@ -103,6 +104,7 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
   controls = true,
   muted = true,
   autoPlay = false,
+  loop = true,
 }) => {
   const webviewRef = useRef<any>(null);
   const [videoSrc, setVideoSrc] = useState<string>('');
@@ -186,7 +188,7 @@ export const VideoWebView: React.FC<VideoWebViewProps> = ({
   </style>
 </head>
 <body>
-  <video id="videoElement" ${controls ? 'controls' : ''} ${muted ? 'muted' : ''} ${autoPlay ? 'autoplay' : ''} ${poster ? `poster="${poster}"` : ''} preload="metadata" src="${escapedVideoSrc}">
+  <video id="videoElement" ${controls ? 'controls' : ''} ${muted ? 'muted' : ''} ${autoPlay ? 'autoplay' : ''} ${loop ? 'loop' : ''} ${poster ? `poster="${poster}"` : ''} preload="metadata" src="${escapedVideoSrc}">
     Your browser does not support the video tag.
   </video>
   <script>

@@ -531,13 +531,13 @@ export const Gallery = () => {
           hasVideoBlob: !!videoContent?.videoBlob,
           hasVideoDataUrl: !!(item.content as any)?.videoDataUrl,
           videoDataUrlLength: (item.content as any)?.videoDataUrl?.length,
-          videoMimeType: (item.content as any)?.videoMimeType
+          videoMimeType: (item.content as any)?.videoMimeType,
+          thumbnailUrl: item.thumbnailUrl
         });
         
-        // Also use runtimeUrl for thumbnail if available
-        if ((item as any).runtimeUrl) {
-          thumbnailUrl = (item as any).runtimeUrl;
-        }
+        // Keep thumbnailUrl separate from videoUrl - don't overwrite with runtimeUrl
+        // thumbnailUrl should be the first frame image (base64 data URL)
+        // videoUrl should be the video blob URL
       }
       
       return {
@@ -1148,6 +1148,7 @@ export const Gallery = () => {
                       height="200px"
                       controls={true}
                       muted={true}
+                      autoPlay={true}
                       onLoadedMetadata={() => {
                         console.log('✅ Video metadata loaded successfully for:', image.prompt);
                       }}
