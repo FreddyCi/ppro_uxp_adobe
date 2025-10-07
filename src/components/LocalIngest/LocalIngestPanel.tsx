@@ -135,6 +135,7 @@ export const LocalIngestPanel: React.FC = () => {
   const { showError, showInfo, showSuccess, showWarning } = useToastHelpers()
   const hasConfiguredFolder = Boolean(folderInfo.folderPath && folderInfo.folderToken)
   const [thumbnailOverrides, setThumbnailOverrides] = useState<Record<string, string>>({})
+  const [metadataOverrides, setMetadataOverrides] = useState<Record<string, any>>({})
 
   // Load thumbnails from JSON metadata files for videos that don't have them
   useEffect(() => {
@@ -190,8 +191,17 @@ export const LocalIngestPanel: React.FC = () => {
             console.log(`[LocalIngest] Loaded metadata for "${item.filename}":`, {
               hasThumbnailUrl: !!metadata.thumbnailUrl,
               thumbnailUrlType: typeof metadata.thumbnailUrl,
-              thumbnailUrlPrefix: metadata.thumbnailUrl?.substring(0, 50)
+              thumbnailUrlPrefix: metadata.thumbnailUrl?.substring(0, 50),
+              prompt: metadata.prompt,
+              model: metadata.model,
+              seed: metadata.seed
             })
+            
+            // Store full metadata for this video
+            setMetadataOverrides(prev => ({
+              ...prev,
+              [item.id]: metadata
+            }))
             
             if (metadata.thumbnailUrl && metadata.thumbnailUrl.startsWith('data:image/')) {
               setThumbnailOverrides(prev => ({
@@ -223,8 +233,13 @@ export const LocalIngestPanel: React.FC = () => {
       })
       .map(item => {
         const videoContent = item.content as VideoData
-        const prompt = item.filename || 'Video clip'
-        const durationSeconds = videoContent?.duration
+        
+        // Get metadata from override (loaded from JSON) or use defaults
+        const loadedMetadata = metadataOverrides[item.id]
+        const prompt = loadedMetadata?.prompt || item.filename || 'Video clip'
+        const model = loadedMetadata?.model
+        const seed = loadedMetadata?.seed
+        const durationSeconds = loadedMetadata?.duration || videoContent?.duration
 
         // Handle timestamp conversion - it might be a Date, number, or undefined
         let createdAt: number
@@ -244,18 +259,18 @@ export const LocalIngestPanel: React.FC = () => {
           source: 'generated' as const,
           displayName: item.filename || item.localPath?.split(/[/\\]/).pop() || 'Video clip',
           filePath: item.localPath || '',
-          metadata: {} as GenerationMetadata,
+          metadata: loadedMetadata || ({} as GenerationMetadata),
           metadataPath: item.localMetadataPath || null,
           durationSeconds,
           prompt,
-          model: undefined,
-          seed: undefined,
+          model,
+          seed,
           createdAt,
           thumbnailUrl,
         }
       })
       .filter(clip => clip.filePath.length > 0)
-  }, [contentItems, thumbnailOverrides])
+  }, [contentItems, thumbnailOverrides, metadataOverrides])
 
   const clips = useMemo<LocalClip[]>(() => {
     const combined = [...detectedClips]
