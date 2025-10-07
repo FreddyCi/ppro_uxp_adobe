@@ -199,6 +199,10 @@ export interface GenerationMetadata {
   fps?: number // Video frame rate
   videoCodec?: string // Video codec information
   audioCodec?: string // Audio codec information
+  
+  // Thumbnail metadata
+  thumbnailUrl?: string // Thumbnail image URL (usually first frame for videos)
+  firstImageId?: string // ID of the first frame image used for video generation (Luma)
 }
 
 // Service configuration

@@ -212,8 +212,66 @@ class LocalBoltStorage {
     // Generate and save thumbnail for video content
     let thumbnailUrl: string | undefined
     let thumbnailFilePath: string | undefined
+    let firstFrameImagePath: string | undefined
+    let firstFrameImageRelativePath: string | undefined
+    
     if (options.metadata.contentType === 'video') {
-      thumbnailUrl = await generateAndSaveVideoThumbnail(options.blob, filePath, addon) || undefined
+      // For Luma videos, try to use the first frame image as thumbnail
+      if (options.metadata.firstImageId) {
+        console.log('[BoltStorage] Looking for first frame image:', options.metadata.firstImageId)
+        // Import gallery store to get the first frame image
+        const { useGalleryStore } = await import('../../store/galleryStore')
+        const galleryState = useGalleryStore.getState()
+        const firstFrameItem = galleryState.contentItems.find(item => item.id === options.metadata.firstImageId)
+        
+        if (firstFrameItem) {
+          // Save the first frame image paths for reference
+          firstFrameImagePath = firstFrameItem.localPath
+          // Extract relative path if available
+          if (firstFrameItem.localPath) {
+            const pathParts = firstFrameItem.localPath.split('/')
+            const dateFolder = pathParts[pathParts.length - 2] // e.g., "2025-10-06"
+            const filename = pathParts[pathParts.length - 1]   // e.g., "image.jpeg"
+            firstFrameImageRelativePath = `${dateFolder}/${filename}`
+          }
+          
+          // Use the first frame image's thumbnail or displayUrl
+          if (firstFrameItem.thumbnailUrl && firstFrameItem.thumbnailUrl.startsWith('data:image/')) {
+            thumbnailUrl = firstFrameItem.thumbnailUrl
+            console.log('[BoltStorage] Using first frame thumbnailUrl as video thumbnail')
+          } else if (firstFrameItem.displayUrl && firstFrameItem.displayUrl.startsWith('data:image/')) {
+            thumbnailUrl = firstFrameItem.displayUrl
+            console.log('[BoltStorage] Using first frame displayUrl as video thumbnail')
+          } else {
+            console.log('[BoltStorage] First frame image found but no valid thumbnail data')
+          }
+          
+          // Try to copy the first frame image to the video folder for easy access
+          if (firstFrameItem.localPath && addon.readFile) {
+            try {
+              const imageData = addon.readFile(firstFrameItem.localPath, true) // Read as base64
+              if (imageData) {
+                const thumbnailFileName = safeFilename.replace(/\.(mp4|mov|avi|webm)$/i, '_firstframe.jpeg')
+                const thumbnailFilePath = joinPath(separator, directory, thumbnailFileName)
+                const writeSuccess = addon.writeFile?.(thumbnailFilePath, imageData, true)
+                if (writeSuccess !== false) {
+                  console.log('[BoltStorage] Copied first frame image to video folder:', thumbnailFileName)
+                }
+              }
+            } catch (error) {
+              console.warn('[BoltStorage] Failed to copy first frame image:', error)
+            }
+          }
+        } else {
+          console.log('[BoltStorage] First frame image not found in gallery, generating from video')
+          thumbnailUrl = await generateAndSaveVideoThumbnail(options.blob, filePath, addon) || undefined
+        }
+      } else {
+        // Fallback to generating thumbnail from video
+        console.log('[BoltStorage] No firstImageId provided, generating thumbnail from video')
+        thumbnailUrl = await generateAndSaveVideoThumbnail(options.blob, filePath, addon) || undefined
+      }
+      
       if (thumbnailUrl) {
         // Also save the thumbnail file path (relative to base path)
         thumbnailFilePath = filePath.replace(/\.(mp4|mov|avi|webm)$/i, '_thumbnail.jpg')
@@ -230,7 +288,9 @@ class LocalBoltStorage {
       filePath,
       relativePath: joinPath('/', dateFolder, safeFilename),
       thumbnailUrl, // Include generated thumbnail (base64 data URL for fallback)
-      thumbnailFilePath // Include thumbnail file path for UXP loading
+      thumbnailFilePath, // Include thumbnail file path for UXP loading
+      firstFrameImagePath, // Path to the original first frame image
+      firstFrameImageRelativePath // Relative path to the first frame image
     }
 
     const metadataPath = joinPath(separator, directory, `${safeFilename}.json`)
@@ -433,10 +493,121 @@ class UxpLocalStorage {
     }
     await file.write(arrayBuffer)
 
-    // Generate thumbnail for video content (in-memory only for UXP)
+    // Generate thumbnail for video content
     let thumbnailUrl: string | undefined
-    if (options.metadata.contentType === 'video') {
-      thumbnailUrl = await generateAndSaveVideoThumbnail(options.blob, file.nativePath) || undefined
+    let firstFrameImagePath: string | undefined
+    let firstFrameImageRelativePath: string | undefined
+    
+    if (options.metadata.contentType === 'video' || options.metadata.contentType === 'video/mp4') {
+      // For Luma videos, try to use the first frame image as thumbnail
+      if (options.metadata.firstImageId) {
+        console.log('[UXPLocalStorage] Looking for first frame image:', options.metadata.firstImageId)
+        // Import gallery store to get the first frame image
+        const { useGalleryStore } = await import('../../store/galleryStore')
+        const galleryState = useGalleryStore.getState()
+        
+        // Debug: log all available content items
+        console.log('[UXPLocalStorage] Gallery items available:', {
+          count: galleryState.contentItems.length,
+          itemIds: galleryState.contentItems.map(item => item.id)
+        })
+        
+        const firstFrameItem = galleryState.contentItems.find(item => item.id === options.metadata.firstImageId)
+        
+        if (firstFrameItem) {
+          console.log('[UXPLocalStorage] Found first frame item:', {
+            id: firstFrameItem.id,
+            filename: firstFrameItem.filename,
+            localPath: firstFrameItem.localPath,
+            hasThumbnailUrl: !!firstFrameItem.thumbnailUrl,
+            hasDisplayUrl: !!firstFrameItem.displayUrl,
+            thumbnailUrlPrefix: firstFrameItem.thumbnailUrl?.substring(0, 50),
+            displayUrlPrefix: firstFrameItem.displayUrl?.substring(0, 50)
+          })
+          
+          // Copy the first frame image to the video folder
+          try {
+            if (firstFrameItem.localPath && this.localFileSystem) {
+              const sourceFile = await this.localFileSystem.getFileForPath(firstFrameItem.localPath)
+              if (sourceFile && sourceFile.isFile) {
+                // Create thumbnail filename based on video name
+                const imageExtension = firstFrameItem.localPath.split('.').pop() || 'jpeg'
+                const thumbnailFileName = `${safeFilename.replace(/\.mp4$/, '')}_thumbnail.${imageExtension}`
+                
+                // Copy the image file to the video folder
+                const copiedFile = await targetFolder.createFile?.(thumbnailFileName, { overwrite: true })
+                if (copiedFile) {
+                  const sourceData = await sourceFile.read({ format: this.localFileSystem.formats.binary })
+                  await copiedFile.write(sourceData, { format: this.localFileSystem.formats.binary })
+                  
+                  // Update paths to point to copied file
+                  firstFrameImagePath = copiedFile.nativePath
+                  firstFrameImageRelativePath = joinPath('/', dateFolder, thumbnailFileName)
+                  
+                  console.log('[UXPLocalStorage] Successfully copied first frame image:', {
+                    originalPath: firstFrameItem.localPath,
+                    copiedPath: firstFrameImagePath,
+                    relativePath: firstFrameImageRelativePath
+                  })
+                  
+                  // Read the copied file as base64 for immediate use
+                  const imageData = await copiedFile.read({ format: this.localFileSystem.formats.binary })
+                  const base64String = btoa(String.fromCharCode(...new Uint8Array(imageData)))
+                  thumbnailUrl = `data:image/${imageExtension};base64,${base64String}`
+                  console.log('[UXPLocalStorage] Generated base64 thumbnail from copied image')
+                } else {
+                  console.log('[UXPLocalStorage] Failed to create copied image file')
+                }
+              } else {
+                console.log('[UXPLocalStorage] Source image file not found or not accessible')
+              }
+            }
+          } catch (error) {
+            console.log('[UXPLocalStorage] Error copying first frame image:', error)
+          }
+          
+          // Fallback: Use original image data if copying failed
+          if (!thumbnailUrl) {
+            // Save the first frame image paths for reference
+            firstFrameImagePath = firstFrameItem.localPath
+            // Extract relative path if available
+            if (firstFrameItem.localPath) {
+              const pathParts = firstFrameItem.localPath.split('/')
+              const dateFolder = pathParts[pathParts.length - 2] // e.g., "2025-10-06"
+              const filename = pathParts[pathParts.length - 1]   // e.g., "image.jpeg"
+              firstFrameImageRelativePath = `${dateFolder}/${filename}`
+              console.log('[UXPLocalStorage] Extracted paths:', {
+                firstFrameImagePath,
+                firstFrameImageRelativePath
+              })
+            }
+            
+            // Use the first frame image's thumbnail or displayUrl
+            if (firstFrameItem.thumbnailUrl && firstFrameItem.thumbnailUrl.startsWith('data:image/')) {
+              thumbnailUrl = firstFrameItem.thumbnailUrl
+              console.log('[UXPLocalStorage] Using first frame thumbnailUrl as video thumbnail')
+            } else if (firstFrameItem.displayUrl && firstFrameItem.displayUrl.startsWith('data:image/')) {
+              thumbnailUrl = firstFrameItem.displayUrl
+              console.log('[UXPLocalStorage] Using first frame displayUrl as video thumbnail')
+            } else {
+              console.log('[UXPLocalStorage] First frame image found but no valid thumbnail data:', {
+                thumbnailUrlType: typeof firstFrameItem.thumbnailUrl,
+                displayUrlType: typeof firstFrameItem.displayUrl,
+                thumbnailUrlPrefix: firstFrameItem.thumbnailUrl?.substring(0, 20),
+                displayUrlPrefix: firstFrameItem.displayUrl?.substring(0, 20)
+              })
+            }
+          }
+        } else {
+          console.log('[UXPLocalStorage] First frame image not found in gallery. Available IDs:', 
+            galleryState.contentItems.map(item => item.id).join(', '))
+          thumbnailUrl = await generateAndSaveVideoThumbnail(options.blob, file.nativePath) || undefined
+        }
+      } else {
+        // Fallback to generating thumbnail from video
+        console.log('[UXPLocalStorage] No firstImageId provided, generating thumbnail from video')
+        thumbnailUrl = await generateAndSaveVideoThumbnail(options.blob, file.nativePath) || undefined
+      }
     }
 
     const metadataPayload = {
@@ -449,7 +620,9 @@ class UxpLocalStorage {
       filePath: this.buildDisplayPath(separator, folderPath, dateFolder, safeFilename),
       folderToken: this.getStoredToken(),
       relativePath: joinPath('/', dateFolder, safeFilename),
-      thumbnailUrl // Include generated thumbnail
+      thumbnailUrl, // Include generated thumbnail
+      firstFrameImagePath, // Path to the original first frame image
+      firstFrameImageRelativePath // Relative path to the first frame image
     }
 
     const metadataFile = await targetFolder.createFile?.(`${safeFilename}.json`, { overwrite: true })

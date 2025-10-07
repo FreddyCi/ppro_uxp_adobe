@@ -682,7 +682,17 @@ export const useGalleryStore = create<GalleryStore>()(
                     // Type and display
                     contentType: 'video',
                     displayUrl: '', // Will be set by base64 conversion
-                    thumbnailUrl: item.thumbnailUrl || '', // Use stored thumbnail
+                    thumbnailUrl: (() => {
+                      const thumbnail = rawMetadata?.thumbnailUrl || item.thumbnailUrl || '';
+                      console.log(`[GalleryStore] Video ${item.filename} thumbnail:`, {
+                        fromMetadata: !!rawMetadata?.thumbnailUrl,
+                        fromItem: !!item.thumbnailUrl,
+                        hasValue: !!thumbnail,
+                        isBase64: thumbnail.startsWith('data:'),
+                        length: thumbnail.length
+                      });
+                      return thumbnail;
+                    })(),
                     blobUrl: item.blobUrl,
                     localPath: item.localFilePath,
                     localMetadataPath: item.localMetadataPath,
@@ -850,7 +860,7 @@ export const useGalleryStore = create<GalleryStore>()(
                         updatedItem = {
                           ...item,
                           displayUrl: dataUrl,
-                          thumbnailUrl: item.thumbnailUrl || dataUrl, // Use dataUrl as thumbnail if none exists
+                          thumbnailUrl: item.thumbnailUrl && item.thumbnailUrl.startsWith('data:image/') ? item.thumbnailUrl : undefined, // Only use actual image thumbnails
                           content: {
                             ...existingVideoContent,
                             videoUrl: dataUrl
@@ -860,7 +870,7 @@ export const useGalleryStore = create<GalleryStore>()(
                         updatedItem = {
                           ...item,
                           displayUrl: dataUrl,
-                          thumbnailUrl: item.thumbnailUrl || dataUrl
+                          thumbnailUrl: item.thumbnailUrl && item.thumbnailUrl.startsWith('data:image/') ? item.thumbnailUrl : dataUrl // Use dataUrl for images, but validate for videos
                         }
                       }
                     } else {
@@ -872,7 +882,7 @@ export const useGalleryStore = create<GalleryStore>()(
 
                   if (!dataUrl) {
                     const fallbackDisplayUrl = item.displayUrl || item.blobUrl || item.thumbnailUrl || ''
-                    const fallbackThumbnail = item.thumbnailUrl || fallbackDisplayUrl
+                    const fallbackThumbnail = item.thumbnailUrl && item.thumbnailUrl.startsWith('data:image/') ? item.thumbnailUrl : undefined // Only use actual image thumbnails
 
                     if (item.contentType === 'video') {
                       const existingContent = item.content as VideoData
@@ -890,7 +900,7 @@ export const useGalleryStore = create<GalleryStore>()(
                       updatedItem = {
                         ...item,
                         displayUrl: fallbackDisplayUrl,
-                        thumbnailUrl: fallbackThumbnail
+                        thumbnailUrl: fallbackThumbnail && fallbackThumbnail.startsWith('data:image/') ? fallbackThumbnail : fallbackDisplayUrl // For images, use displayUrl as thumbnail if no proper thumbnail
                       }
                     }
                   }

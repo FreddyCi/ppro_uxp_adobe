@@ -300,6 +300,10 @@ export function useLumaGeneration(params: LumaGenerationParams) {
       const resolutionSize = resolutionLookup[resolutionKey] ?? undefined;
 
       console.log(`💾 [${generationSessionId}] Saving Luma Dream Machine video to local storage - Job ID: ${jobId}...`);
+      
+      // Use first frame image as thumbnail if available
+      const firstFrameThumbnail = lumaFirstFrameItem?.thumbnailUrl || lumaFirstFrameItem?.displayUrl || lumaFirstFrameItem?.blobUrl
+      
       const localSaveResult = await saveGenerationLocally({
         blob: result.blob,
         metadata: {
@@ -317,6 +321,8 @@ export function useLumaGeneration(params: LumaGenerationParams) {
           resolution: resolutionSize,
           persistenceMethod: 'local' as const,
           storageMode: 'local' as const,
+          thumbnailUrl: firstFrameThumbnail, // Use first frame image as thumbnail
+          firstImageId: lumaFirstFrameItem?.id, // Save first frame image ID for thumbnail lookup
         },
         filename: result.filename,
       });
@@ -393,9 +399,8 @@ export function useLumaGeneration(params: LumaGenerationParams) {
           console.warn(`⚠️ [${generationSessionId}] Failed to create displayable video URL:`, urlError);
         }
 
-        // Note: Thumbnail generation is skipped here for performance
-        // The gallery auto-refresh will generate thumbnails asynchronously
-        const thumbnailUrl = '';
+        // Use the thumbnail URL from the local save result (contains first frame image)
+        const thumbnailUrl = localSaveResult.thumbnailUrl || '';
 
         const videoGenerationResult = {
           id: result.filename,
@@ -556,6 +561,10 @@ export function useLumaGeneration(params: LumaGenerationParams) {
       const computedSeed = Math.floor(Math.random() * 999999);
 
       console.log(`💾 [${generationSessionId}] Saving Luma Dream Machine reframed video to local storage - Job ID: ${jobId}...`);
+      
+      // Use first frame image as thumbnail if available
+      const firstFrameThumbnail = lumaFirstFrameItem?.thumbnailUrl || lumaFirstFrameItem?.displayUrl || lumaFirstFrameItem?.blobUrl
+      
       const localSaveResult = await saveGenerationLocally({
         blob: result.blob,
         metadata: {
@@ -573,6 +582,8 @@ export function useLumaGeneration(params: LumaGenerationParams) {
           resolution: undefined, // Will be determined from aspect ratio
           persistenceMethod: 'local' as const,
           storageMode: 'local' as const,
+          thumbnailUrl: firstFrameThumbnail, // Use first frame image as thumbnail
+          firstImageId: lumaFirstFrameItem?.id, // Save first frame image ID for thumbnail lookup
         },
         filename: result.filename,
       });
@@ -994,6 +1005,10 @@ export function useLumaGeneration(params: LumaGenerationParams) {
       const computedSeed = Math.floor(Math.random() * 999999);
 
       console.log(`💾 [${generationSessionId}] Saving Luma Dream Machine image to local storage - Job ID: ${jobId}...`);
+      
+      // Use first frame image as thumbnail if available (for reference)
+      const firstFrameThumbnail = lumaFirstFrameItem?.thumbnailUrl || lumaFirstFrameItem?.displayUrl || lumaFirstFrameItem?.blobUrl
+      
       const localSaveResult = await saveGenerationLocally({
         blob: result.blob,
         metadata: {
@@ -1008,6 +1023,8 @@ export function useLumaGeneration(params: LumaGenerationParams) {
           fileSize: result.blob.size,
           persistenceMethod: 'local' as const,
           storageMode: 'local' as const,
+          thumbnailUrl: firstFrameThumbnail, // Use first frame image as reference
+          firstImageId: lumaFirstFrameItem?.id, // Save first frame image ID for reference
         },
         filename: result.filename,
       });

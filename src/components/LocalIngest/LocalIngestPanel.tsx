@@ -564,6 +564,18 @@ export const LocalIngestPanel: React.FC = () => {
 
             {clips.map(clip => {
               const status = statusMap[clip.id]
+              
+              // Debug logging for thumbnails
+              if (clip.thumbnailUrl) {
+                console.log(`[LocalIngest] Found thumbnail for ${clip.displayName}:`, {
+                  thumbnailUrl: clip.thumbnailUrl.substring(0, 100) + (clip.thumbnailUrl.length > 100 ? '...' : ''),
+                  isBase64: clip.thumbnailUrl.startsWith('data:'),
+                  length: clip.thumbnailUrl.length
+                })
+              } else {
+                console.log(`[LocalIngest] No thumbnail for ${clip.displayName}`)
+              }
+              
               return (
                 <article key={clip.id} className="clip-card">
                   <div className="clip-card__preview">
