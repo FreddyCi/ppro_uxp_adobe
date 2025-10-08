@@ -8,6 +8,7 @@ import { useGeminiCorrection } from '../../hooks/useGeminiCorrection';
 import type { ContentItem, VideoData } from '../../types/content';
 import { VideoWebView } from '../VideoPlayer/VideoWebView';
 import { Pagination } from './Pagination';
+import { uxp } from '../../globals';
 import './Gallery.scss';
 
 // Helper functions for gallery filtering and sorting
@@ -581,6 +582,7 @@ export const Gallery = () => {
   const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
   const [correctionPrompt, setCorrectionPrompt] = useState('');
   const [isCorrecting, setIsCorrecting] = useState(false);
+  const [referenceImageFile, setReferenceImageFile] = useState<any | null>(null);
 
   // Filter and sort images (using local state for UI filters)
   const filteredImages = useMemo(() => {
@@ -715,6 +717,7 @@ export const Gallery = () => {
     setIsCorrectionDialogOpen(false);
     setSelectedImage(null);
     setIsCorrecting(false);
+    setReferenceImageFile(null);
   }, []);
 
   const handlePromptChange = useCallback((event: any) => {
@@ -726,6 +729,29 @@ export const Gallery = () => {
           : '';
 
     setCorrectionPrompt(targetValue);
+  }, []);
+
+  const handleSelectReferenceImage = useCallback(async () => {
+    try {
+      // Use UXP file picker
+      const fs = uxp.storage.localFileSystem;
+      const file = await fs.getFileForOpening({ types: ['jpg', 'jpeg', 'png'] });
+      
+      if (!file) {
+        return; // User cancelled
+      }
+
+      // Just store the file object directly (like Luma does)
+      setReferenceImageFile(file);
+      showInfo('Reference image selected');
+    } catch (error) {
+      console.error('Error selecting reference image:', error);
+      showError('Failed to load reference image');
+    }
+  }, [showInfo, showError]);
+
+  const handleClearReferenceImage = useCallback(() => {
+    setReferenceImageFile(null);
   }, []);
 
   const getImageDimensions = useCallback((url: string) => {
@@ -770,13 +796,14 @@ export const Gallery = () => {
   const geminiCorrectionParams = useMemo(() => ({
     selectedImage,
     corrections: buildCorrectionParams(),
+    referenceImageFile: referenceImageFile || undefined,
     loadLocalFileAsBlob,
     getImageDimensions,
     addContentItem: galleryActions.addContentItem,
     setIsCorrecting,
     resetDialog: resetCorrectionDialog,
     toastHelpers: { showSuccess, showError, showInfo, showWarning }
-  }), [selectedImage, correctionPrompt, galleryActions, showSuccess, showError, showInfo, showWarning]);
+  }), [selectedImage, correctionPrompt, referenceImageFile, galleryActions, showSuccess, showError, showInfo, showWarning]);
 
   const { handleCorrectImage } = useGeminiCorrection(geminiCorrectionParams);
 
@@ -1180,6 +1207,44 @@ export const Gallery = () => {
                   <div className="character-counter text-detail">
                     {correctionPrompt.length}/500 characters
                   </div>
+                </div>
+
+                <div className="reference-image-group" style={{ marginTop: '12px' }}>
+                  {/* @ts-ignore */}
+                  <sp-label className="form-label">Reference Image (Optional)</sp-label>
+                  <div className="text-detail" style={{ marginBottom: '8px', opacity: 0.8 }}>
+                    Add a reference image to guide the enhancement
+                  </div>
+                  
+                  {referenceImageFile ? (
+                    <div className="reference-image-preview" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'var(--theme-background-secondary)', borderRadius: '4px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div className="text-detail">{referenceImageFile.name}</div>
+                      </div>
+                      {/* @ts-ignore */}
+                      <sp-button
+                        variant="secondary"
+                        size="s"
+                        quiet
+                        onClick={handleClearReferenceImage}
+                        disabled={isCorrecting}
+                      >
+                        Remove
+                      {/* @ts-ignore */}
+                      </sp-button>
+                    </div>
+                  ) : (
+                    /* @ts-ignore */
+                    <sp-button
+                      variant="secondary"
+                      onClick={handleSelectReferenceImage}
+                      disabled={isCorrecting}
+                      style={{ width: '100%' }}
+                    >
+                      Select Reference Image
+                    {/* @ts-ignore */}
+                    </sp-button>
+                  )}
                 </div>
 
                 {isCorrecting && (

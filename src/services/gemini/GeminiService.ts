@@ -75,7 +75,8 @@ export class GeminiService {
    */
   async correctImage(
     imageBlob: Blob,
-    corrections: CorrectionParams
+    corrections: CorrectionParams,
+    referenceImages?: Blob[]
   ): Promise<GeminiServiceResponse<CorrectedImage>> {
     try {
       // Validate inputs
@@ -93,14 +94,27 @@ export class GeminiService {
       // Convert image to base64
       const imageBase64 = await this.blobToBase64(imageBlob)
 
+      // Convert reference images to base64 if provided
+      const referenceImagesBase64: Array<{ data: string; mimeType: string }> = []
+      if (referenceImages && referenceImages.length > 0) {
+        for (const refBlob of referenceImages) {
+          const refBase64 = await this.blobToBase64(refBlob)
+          referenceImagesBase64.push({
+            data: refBase64,
+            mimeType: refBlob.type || 'image/png'
+          })
+        }
+      }
+
       // Create correction prompt based on parameters
       const correctionPrompt = this.createCorrectionPrompt(corrections)
 
-      // Make request to Gemini API
+      // Make request to Gemini API with reference images
       const response = await this.makeGeminiRequest(
         imageBase64,
         imageBlob.type,
-        correctionPrompt
+        correctionPrompt,
+        referenceImagesBase64
       )
 
       if (!response.success || !response.data) {
@@ -387,7 +401,8 @@ export class GeminiService {
   private async makeGeminiRequest(
     imageBase64: string,
     mimeType: string,
-    prompt: string
+    prompt: string,
+    referenceImages?: Array<{ data: string; mimeType: string }>
   ): Promise<GeminiServiceResponse<{ data: string }>> {
     try {
       const endpoint = `/v1beta/models/${this.config.model}:generateContent`
@@ -395,20 +410,37 @@ export class GeminiService {
       const resolvedMimeType =
         mimeType && mimeType.startsWith('image/') ? mimeType : 'image/png'
 
+      // Build parts array with main image, reference images, and prompt
+      const parts: any[] = [
+        {
+          inlineData: {
+            mimeType: resolvedMimeType,
+            data: imageBase64,
+          },
+        },
+      ]
+
+      // Add reference images if provided
+      if (referenceImages && referenceImages.length > 0) {
+        for (const refImage of referenceImages) {
+          parts.push({
+            inlineData: {
+              mimeType: refImage.mimeType,
+              data: refImage.data,
+            },
+          })
+        }
+      }
+
+      // Add text prompt at the end
+      parts.push({
+        text: prompt,
+      })
+
       const requestBody = {
         contents: [
           {
-            parts: [
-              {
-                inlineData: {
-                  mimeType: resolvedMimeType,
-                  data: imageBase64,
-                },
-              },
-              {
-                text: prompt,
-              },
-            ],
+            parts,
           },
         ],
       }

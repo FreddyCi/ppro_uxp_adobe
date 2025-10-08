@@ -21,6 +21,7 @@ interface GeminiCorrectionParams {
     parentId?: string;
   } | null;
   corrections: CorrectionParams;
+  referenceImageFile?: any; // UXP File object from getFileForOpening
   loadLocalFileAsBlob: (filePath: string) => Promise<Blob>;
   getImageDimensions: (url: string) => Promise<{ width: number; height: number; aspectRatio: number } | null>;
   addContentItem: (item: ContentItem) => void;
@@ -51,6 +52,7 @@ export function useGeminiCorrection(params: GeminiCorrectionParams) {
   const {
     selectedImage,
     corrections,
+    referenceImageFile,
     loadLocalFileAsBlob,
     getImageDimensions,
     addContentItem,
@@ -138,7 +140,33 @@ export function useGeminiCorrection(params: GeminiCorrectionParams) {
       const geminiService = new GeminiService(imsService as any);
 
       console.log('🚀 [Gemini Hook] Sending correction request...');
-      const result = await geminiService.correctImage(imageBlob, corrections);
+      
+      // Read reference image file if provided (like Luma does)
+      let referenceImages: Blob[] | undefined;
+      if (referenceImageFile) {
+        try {
+          console.log('📎 [Gemini Hook] Reading reference image file:', referenceImageFile.name);
+          // Import uxp to read the file
+          const requireFn = (globalThis as any).require;
+          const uxp = requireFn('uxp');
+          const binaryFormat = uxp.storage.formats?.binary;
+          const readOptions = binaryFormat ? { format: binaryFormat } : undefined;
+          const fileData = await referenceImageFile.read(readOptions);
+          
+          // Determine content type from file extension
+          const ext = referenceImageFile.name.split('.').pop()?.toLowerCase();
+          const contentType = ext === 'png' ? 'image/png' : 'image/jpeg';
+          
+          // Create blob from file data
+          const refBlob = new Blob([fileData], { type: contentType });
+          referenceImages = [refBlob];
+          console.log('✅ [Gemini Hook] Reference image loaded:', referenceImageFile.name, contentType);
+        } catch (refError) {
+          console.warn('⚠️ [Gemini Hook] Failed to read reference image, continuing without it:', refError);
+        }
+      }
+      
+      const result = await geminiService.correctImage(imageBlob, corrections, referenceImages);
 
       if (!result.success || !result.data) {
         throw new Error(result.error?.message || 'Gemini did not return a corrected image.');
