@@ -148,30 +148,18 @@ export function useGeminiCorrection(params: GeminiCorrectionParams) {
       console.log('📦 [Gemini Hook] Received corrected image:', {
         id: correctedImage.id,
         filename: correctedImage.filename,
-        hasBlobUrl: !!correctedImage.blobUrl,
+        hasDataUrl: !!correctedImage.dataUrl,
         hasCorrectedUrl: !!correctedImage.correctedUrl,
         hasLocalFilePath: !!correctedImage.localFilePath,
         storageMode: correctedImage.storageMode,
+        persistenceMethod: correctedImage.persistenceMethod,
       });
       
-      const previewUrl = correctedImage.blobUrl || correctedImage.correctedUrl;
+      // Use the data URL from GeminiService (same as Firefly/Luma pattern)
+      const displayUrl = correctedImage.dataUrl || correctedImage.correctedUrl;
       
-      // For local files, create a blob URL from the file path for display
-      let displayBlobUrl = previewUrl;
-      if (correctedImage.localFilePath && correctedImage.storageMode === 'local') {
-        try {
-          console.log('📁 [Gemini Hook] Loading local corrected image as blob:', correctedImage.localFilePath);
-          const localBlob = await loadLocalFileAsBlob(correctedImage.localFilePath);
-          displayBlobUrl = URL.createObjectURL(localBlob);
-          console.log('✅ [Gemini Hook] Created blob URL for display:', displayBlobUrl);
-        } catch (blobError) {
-          console.error('❌ [Gemini Hook] Failed to load local file as blob:', blobError);
-          displayBlobUrl = previewUrl; // Fallback
-        }
-      }
-      
+      console.log('🔍 [Gemini Hook] Using data URL for display:', displayUrl?.substring(0, 50) + '...');
       console.log('🔍 [Gemini Hook] Getting image dimensions...');
-      const persistedUrl = correctedImage.localFilePath || correctedImage.correctedUrl || previewUrl;
       
       // Get dimensions with timeout to prevent hanging
       const getDimensionsWithTimeout = (url: string, timeoutMs: number = 5000) => {
@@ -185,15 +173,15 @@ export function useGeminiCorrection(params: GeminiCorrectionParams) {
       };
       
       const originalSize = await getDimensionsWithTimeout(selectedImage.url);
-      const correctedSize = await getDimensionsWithTimeout(displayBlobUrl || previewUrl || persistedUrl);
+      const correctedSize = await getDimensionsWithTimeout(displayUrl);
       console.log('✅ [Gemini Hook] Image dimensions retrieved', { originalSize, correctedSize });
 
       const enhancedImage = {
         ...correctedImage,
         originalUrl: selectedImage.url,
-        correctedUrl: displayBlobUrl,
-        thumbnailUrl: displayBlobUrl,
-        blobUrl: displayBlobUrl,
+        correctedUrl: displayUrl,
+        thumbnailUrl: displayUrl,
+        dataUrl: displayUrl,
         parentGenerationId:
           selectedImage.source === 'generated'
             ? selectedImage.id
@@ -232,9 +220,8 @@ export function useGeminiCorrection(params: GeminiCorrectionParams) {
 
         // Type and display
         contentType: 'corrected-image',
-        displayUrl: enhancedImage.correctedUrl,
+        displayUrl: enhancedImage.correctedUrl, // Data URL - persists across reloads!
         thumbnailUrl: enhancedImage.thumbnailUrl,
-        blobUrl: enhancedImage.blobUrl,
         localPath: enhancedImage.localFilePath,
         localMetadataPath: enhancedImage.localMetadataPath,
 

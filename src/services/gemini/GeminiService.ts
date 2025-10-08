@@ -485,7 +485,7 @@ export class GeminiService {
     const byteArray = new Uint8Array(byteNumbers)
     const blob = new Blob([byteArray], { type: mimeType })
 
-    // Convert blob to data URL for persistence (best practice - survives page reloads)
+    // Create data URL for persistent display (same as Firefly - survives page reloads)
     const dataUrl = `data:${mimeType};base64,${base64Data}`
     const imageId = crypto.randomUUID()
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
@@ -493,9 +493,10 @@ export class GeminiService {
 
     let localFilePath: string | undefined
     let localMetadataPath: string | undefined
-    let storageMode: 'local' | 'azure' = 'azure'
-    let persistenceMethod: 'blob' | 'dataUrl' | 'presigned' | 'local' = 'dataUrl' // Use dataUrl for persistence
-    let correctedUrl = dataUrl // Use data URL for persistent display
+    let storageMode: 'local' | 'azure' = 'local'
+    let persistenceMethod: 'blob' | 'dataUrl' | 'presigned' | 'local' = 'dataUrl'
+    // Use data URL for display - this is what Firefly does and it persists!
+    let correctedUrl = dataUrl
 
     // Try to save locally if local storage is enabled
     let saveResult: any = null
@@ -529,27 +530,10 @@ export class GeminiService {
           localFilePath = saveResult.filePath
           localMetadataPath = saveResult.metadataPath
           storageMode = 'local'
-          persistenceMethod = 'local'
-
-          // For local files, use temporary URL instead of blob URL
-          try {
-            correctedUrl = await toTempUrl(saveResult.folderToken, saveResult.relativePath)
-            console.warn(
-              '💾 Gemini: Created temporary URL for local corrected image',
-              {
-                id: imageId,
-                filename: filename,
-                tempUrl: correctedUrl,
-                filePath: saveResult.filePath,
-              }
-            )
-          } catch (tempUrlError) {
-            console.error('❌ Gemini: Failed to create temporary URL, falling back to blob URL:', tempUrlError)
-            // Keep blob URL as fallback
-          }
+          // Keep dataUrl as persistenceMethod - don't change to 'local'
 
           console.warn(
-            '💾 Gemini: Saved corrected image locally',
+            '💾 Gemini: Saved corrected image locally (using data URL for display)',
             {
               id: imageId,
               filename: filename,
@@ -557,6 +541,7 @@ export class GeminiService {
               metadataPath: saveResult.metadataPath,
               provider: saveResult.provider,
               relativePath: saveResult.relativePath,
+              displayUrl: 'data URL (persistent)',
             }
           )
         } else {
