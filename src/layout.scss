@@ -887,6 +887,86 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
     }
   }
 
+  /* FPS group - same styling as content-type-group */
+  .fps-group {
+    display: flex;
+    justify-content: center;
+    gap: $space-400;
+    
+    sp-radio {
+      flex: 1;
+      height: 70px;
+      padding: $space-200;
+      border: 1px solid var(--theme-border-subtle);
+      border-radius: $border-radius;
+      background-color: var(--theme-bg-layer-1);
+      transition: all 0.2s ease;
+      cursor: pointer;
+      
+      &:hover {
+        background-color: var(--theme-bg-layer-2);
+        border-color: var(--theme-accent);
+      }
+      
+      &[checked] {
+        border-color: var(--theme-accent);
+        background-color: color.mix($active, transparent, 10%);
+      }
+      
+      .radio-label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: $space-50;
+      }
+      
+      .radio-description {
+        color: var(--theme-text-muted);
+        font-size: $font-size-75;
+      }
+    }
+  }
+
+  /* Resolution group - flexbox for 3 options */
+  .resolution-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $space-400;
+    justify-content: center;
+    
+    sp-radio {
+      flex: 1 1 calc(33.333% - $space-400);
+      min-width: 140px;
+      height: 70px;
+      padding: $space-200;
+      border: 1px solid var(--theme-border-subtle);
+      border-radius: $border-radius;
+      background-color: var(--theme-bg-layer-1);
+      transition: all 0.2s ease;
+      cursor: pointer;
+      
+      &:hover {
+        background-color: var(--theme-bg-layer-2);
+        border-color: var(--theme-accent);
+      }
+      
+      &[checked] {
+        border-color: var(--theme-accent);
+        background-color: color.mix($active, transparent, 10%);
+      }
+      
+      .radio-label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: $space-50;
+      }
+      
+      .radio-description {
+        color: var(--theme-text-muted);
+        font-size: $font-size-75;
+      }
+    }
+  }
+
   /* Aspect ratio radio group */
 
   .aspect-ratio-group {
@@ -1031,8 +1111,14 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
   .generation-form {
     .aspect-ratio-group,
     .content-type-group,
+    .fps-group,
+    .resolution-group,
     .size-presets {
       flex-direction: column;
+      
+      sp-radio {
+        width: 100%;
+      }
     }
   }
 }

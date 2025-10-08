@@ -38,7 +38,7 @@ export const LumaImageForm: React.FC<LumaImageFormProps> = ({
       <div className="form-group">
         <sp-label className="form-label">Image Prompt *</sp-label>
         <sp-textarea 
-          id="luma-prompt-input"
+          id="prompt-input"
           placeholder="A teddy bear in sunglasses playing electric guitar and dancing..."
           className="prompt-input"
           multiline

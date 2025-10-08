@@ -34,7 +34,7 @@ export const LumaVideoForm: React.FC<LumaVideoFormProps> = ({
       <div className="form-group">
         <sp-label className="form-label">Video Prompt *</sp-label>
         <sp-textarea 
-          id="luma-prompt-input"
+          id="prompt-input"
           placeholder="A sweeping drone shot over bioluminescent waves crashing on a night beach..."
           className="prompt-input"
           multiline
