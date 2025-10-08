@@ -44,12 +44,18 @@ export const LumaGenerationHeader: React.FC<LumaGenerationHeaderProps> = ({
             }}
           >
             <sp-menu slot="options">
-              <sp-menu-item value="luma-ray">Luma Ray (Recommended)</sp-menu-item>
-              <sp-menu-item value="luma-dream-1.7">Luma Dream Machine 1.7</sp-menu-item>
-              <sp-menu-item value="luma-dream-1.6">Luma Dream Machine 1.6</sp-menu-item>
-              <sp-menu-item value="luma-dream-1.5">Luma Dream Machine 1.5</sp-menu-item>
-              <sp-menu-item value="luma-photon-flash-1">Luma Photon Flash (Fast)</sp-menu-item>
-              <sp-menu-item value="luma-photon-1">Luma Photon</sp-menu-item>
+              {lumaGenerationType === 'video' ? (
+                <>
+                  <sp-menu-item value="ray-3">Ray 3</sp-menu-item>
+                  <sp-menu-item value="ray-2">Ray 2</sp-menu-item>
+                  <sp-menu-item value="ray-flash-2">Ray Flash 2</sp-menu-item>
+                </>
+              ) : (
+                <>
+                  <sp-menu-item value="photon-1">Photon 1 (Default)</sp-menu-item>
+                  <sp-menu-item value="photon-flash-1">Photon Flash 1</sp-menu-item>
+                </>
+              )}
             </sp-menu>
           </sp-picker>
         </div>
