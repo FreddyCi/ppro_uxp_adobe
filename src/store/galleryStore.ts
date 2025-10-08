@@ -693,7 +693,6 @@ export const useGalleryStore = create<GalleryStore>()(
                       });
                       return thumbnail;
                     })(),
-                    blobUrl: item.blobUrl,
                     localPath: item.localFilePath,
                     localMetadataPath: item.localMetadataPath,
 
@@ -767,7 +766,6 @@ export const useGalleryStore = create<GalleryStore>()(
                     contentType: 'generated-image',
                     displayUrl: '', // Will be set by base64 conversion
                     thumbnailUrl: item.thumbnailUrl || '',
-                    blobUrl: item.blobUrl,
                     localPath: item.localFilePath,
                     localMetadataPath: item.localMetadataPath,
 
@@ -1651,7 +1649,6 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
                 resourceUsage: metadata.resourceUsage || { computeTime: 0, memoryUsed: 0 },
               },
               timestamp: new Date(metadata.timestamp || metadata.savedAt || Date.now()),
-              blobUrl: metadata.blobUrl || '',
               filename: metadata.filename,
               storageLocation: 'local',
               localFilePath: metadata.filePath,
@@ -1700,7 +1697,6 @@ async function scanAndLoadLocalFiles(): Promise<CorrectedImage[]> {
               resourceUsage: { computeTime: 0, memoryUsed: 0 }
             },
             timestamp: new Date(),
-            blobUrl: '', // Will be set from file
             filename: file.name,
             storageLocation: 'local',
             localFilePath: file.nativePath || file.name,
