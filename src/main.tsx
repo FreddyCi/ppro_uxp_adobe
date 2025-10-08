@@ -498,7 +498,9 @@ const AppContent = () => {
                           handleGenerateLumaVideo,
                           handleReframeLumaVideo,
                           useGalleryStore,
-                          showInfo
+                          showInfo,
+                          showError,
+                          uxp,
                         }}
                         imageFormProps={{
                           lumaPrompt,

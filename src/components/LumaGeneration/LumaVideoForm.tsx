@@ -27,6 +27,8 @@ export const LumaVideoForm: React.FC<LumaVideoFormProps> = ({
   handleReframeLumaVideo,
   useGalleryStore,
   showInfo,
+  showError,
+  uxp,
 }) => {
   return (
     <div className="generation-form">
@@ -287,7 +289,7 @@ export const LumaVideoForm: React.FC<LumaVideoFormProps> = ({
           {/* Reframe Video Selection */}
           <div className="form-group">
             <sp-label className="form-label">Video to Reframe *</sp-label>
-            <div className="text-detail mb-sm">Select a video from your gallery to change its aspect ratio</div>
+            <div className="text-detail mb-sm">Select a video file from your content directory</div>
             {lumaReframeVideoItem ? (
               <div className="selected-video-preview">
                 {lumaReframeVideoItem.displayUrl ? (
@@ -318,35 +320,29 @@ export const LumaVideoForm: React.FC<LumaVideoFormProps> = ({
                 <sp-button
                   variant="secondary"
                   size="m"
-                  onClick={() => {
-                    console.log('🎥 Opening gallery picker for reframe-video selection');
-                    setGalleryPickerTarget('reframe-video');
-                    setShowGalleryPicker(true);
-                  }}
-                >
-                  Choose Video from Gallery
-                </sp-button>
-                <sp-button
-                  variant="outline"
-                  size="s"
                   onClick={async () => {
-                    console.log('🔄 Syncing local files to load videos...');
-                    const { actions } = useGalleryStore.getState();
-                    await actions.syncLocalFiles();
-                    console.log('✅ Local files synced');
-                    
-                    const { contentItems } = useGalleryStore.getState();
-                    const videos = contentItems.filter((item: any) => ['video', 'uploaded-video'].includes(item.contentType));
-                    console.log('🎥 Videos after sync:', videos.length);
-                    videos.forEach((video: any, index: number) => {
-                      console.log(`  ${index + 1}. ${video.filename} (${video.contentType})`);
-                    });
-                    
-                    showInfo('Sync Complete', 'Local files have been synced to gallery');
+                    try {
+                      const fs = uxp.storage.localFileSystem;
+                      const file = await fs.getFileForOpening({ types: ['mp4', 'mov', 'webm', 'avi'] });
+                      if (file) {
+                        // Create a ContentItem from the local file
+                        const contentItem = {
+                          id: `local-video-${Date.now()}`,
+                          filename: file.name,
+                          contentType: 'uploaded-video' as const,
+                          displayUrl: file.nativePath,
+                          localPath: file.nativePath,
+                          file: file,
+                        };
+                        setLumaReframeVideoItem(contentItem as any);
+                      }
+                    } catch (error) {
+                      console.error('Failed to select video:', error);
+                      showError('File Selection Failed', 'Could not select the video file');
+                    }
                   }}
-                  style={{ marginLeft: '8px' }}
                 >
-                  Sync Local Files
+                  Choose from Local
                 </sp-button>
               </div>
             )}

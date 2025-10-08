@@ -33,6 +33,8 @@ export interface LumaVideoFormProps extends LumaGenerationBaseProps {
   handleReframeLumaVideo: () => void;
   useGalleryStore: any;
   showInfo: (title: string, message: string) => void;
+  showError: (title: string, message: string) => void;
+  uxp: any;
 }
 
 // Image generation specific props
