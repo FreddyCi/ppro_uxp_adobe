@@ -304,6 +304,7 @@ export const LumaImageForm: React.FC<LumaImageFormProps> = ({
                 {!file ? (
                   <sp-button
                     variant="accent"
+                    size="s"
                     onClick={async () => {
                       try {
                         const fs = uxp.storage.localFileSystem;
@@ -376,7 +377,7 @@ export const LumaImageForm: React.FC<LumaImageFormProps> = ({
               {!lumaModifyImage.file ? (
                 <sp-button
                   variant="accent"
-                  size="m"
+                  size="s"
                   style={{ width: '100%' }}
                   onClick={async () => {
                     try {

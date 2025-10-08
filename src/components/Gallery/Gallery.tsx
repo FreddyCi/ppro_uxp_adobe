@@ -2,11 +2,9 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useGenerationStore } from '../../store/generationStore';
 import { useGalleryStore, useGalleryDisplayItems } from '../../store/galleryStore';
-import { createIMSService } from '../../services/ims/IMSService';
-import type { IMSService as IMSServiceClass } from '../../services/ims/IMSService';
-import { GeminiService } from '../../services/gemini';
 import type { CorrectionParams } from '../../types/gemini';
 import { useToastHelpers } from '../../hooks/useToast';
+import { useGeminiCorrection } from '../../hooks/useGeminiCorrection';
 import type { ContentItem, VideoData } from '../../types/content';
 import { VideoWebView } from '../VideoPlayer/VideoWebView';
 import { Pagination } from './Pagination';
@@ -485,11 +483,6 @@ export const Gallery = () => {
   // Get generation store for legacy compatibility
   const { generationHistory } = useGenerationStore()
   const generationActions = useGenerationStore(state => state.actions)
-
-  const geminiService = useMemo(() => {
-    const imsService = createIMSService();
-    return new GeminiService(imsService as unknown as IMSServiceClass);
-  }, []);
   
   // Filter states (local UI state)
   const [localSearchQuery, setLocalSearchQuery] = useState('');
@@ -574,37 +567,55 @@ export const Gallery = () => {
 
   const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
-  const [selectedCorrections, setSelectedCorrections] = useState<string[]>([
-    'lineCleanup',
-    'enhanceDetails',
-    'noiseReduction',
-  ]);
   const [correctionPrompt, setCorrectionPrompt] = useState('');
   const [isCorrecting, setIsCorrecting] = useState(false);
 
   // Filter and sort images (using local state for UI filters)
   const filteredImages = useMemo(() => {
+    console.log('🔍 [Gallery Filter] Starting filter with:', {
+      totalImages: imagesToUse.length,
+      localContentType,
+      localSearchQuery,
+      imageTypes: imagesToUse.map(img => img.contentType)
+    });
+
     let filtered = imagesToUse.filter((image: ImageData) => {
       // Search filter
       if (localSearchQuery && !image.prompt.toLowerCase().includes(localSearchQuery.toLowerCase()) && 
           !image.tags.some((tag: string) => tag.toLowerCase().includes(localSearchQuery.toLowerCase()))) {
+        console.log('❌ [Gallery Filter] Filtered out by search:', image.prompt);
         return false;
       }
 
       // Content type filter
       if (localContentType !== 'All') {
+        console.log('🔍 [Gallery Filter] Checking content type filter:', {
+          filter: localContentType,
+          imageType: image.contentType,
+          imagePrompt: image.prompt
+        });
+
         if (localContentType === 'Corrected' && !image.contentType.includes('corrected')) {
+          console.log('❌ [Gallery Filter] Not corrected:', image.contentType);
           return false;
         }
         if (localContentType === 'Videos' && !image.contentType.includes('video')) {
+          console.log('❌ [Gallery Filter] Not video:', image.contentType);
           return false;
         }
-        if (localContentType === 'Art' && image.contentType !== 'generated-image') {
+        if (localContentType === 'Art' && image.contentType !== 'generated-image' && image.contentType !== 'corrected-image') {
+          console.log('❌ [Gallery Filter] Not art (generated or corrected):', image.contentType);
           return false;
         }
         if (localContentType === 'Photo' && image.contentType !== 'uploaded-image') {
+          console.log('❌ [Gallery Filter] Not photo:', image.contentType);
           return false;
         }
+
+        console.log('✅ [Gallery Filter] Passed content type filter:', {
+          filter: localContentType,
+          imageType: image.contentType
+        });
       }
 
       // Aspect ratio filter
@@ -628,6 +639,12 @@ export const Gallery = () => {
       }
 
       return true;
+    });
+
+    console.log('✅ [Gallery Filter] Filter complete:', {
+      filteredCount: filtered.length,
+      filteredTypes: filtered.map(img => img.contentType),
+      correctedImages: filtered.filter(img => img.contentType === 'corrected-image').length
     });
 
     // Sort images
@@ -681,29 +698,7 @@ export const Gallery = () => {
     }
   }, [generationActions, galleryActions, showSuccess, showError]);
 
-  const correctionOptions = useMemo<{ id: string; label: string }[]>(
-    () => [
-      { id: 'lineCleanup', label: 'Line cleanup' },
-      { id: 'colorCorrection', label: 'Color balance' },
-      { id: 'enhanceDetails', label: 'Enhance details' },
-      { id: 'noiseReduction', label: 'Noise reduction' },
-      { id: 'sharpenEdges', label: 'Sharpen edges' },
-      { id: 'artifactRemoval', label: 'Remove artifacts' },
-    ],
-    []
-  );
-
-  const toggleCorrectionOption = useCallback((optionId: string) => {
-    setSelectedCorrections((prev: string[]) => {
-      if (prev.includes(optionId)) {
-        return prev.filter((id: string) => id !== optionId);
-      }
-      return [...prev, optionId];
-    });
-  }, []);
-
   const resetCorrectionDialog = useCallback(() => {
-    setSelectedCorrections(['lineCleanup', 'enhanceDetails', 'noiseReduction']);
     setCorrectionPrompt('');
     setIsCorrectionDialogOpen(false);
     setSelectedImage(null);
@@ -745,208 +740,42 @@ export const Gallery = () => {
   const buildCorrectionParams = useCallback((): CorrectionParams => {
     const params: CorrectionParams = {};
 
-    if (selectedCorrections.includes('lineCleanup')) params.lineCleanup = true;
-    if (selectedCorrections.includes('colorCorrection')) params.colorCorrection = true;
-    if (selectedCorrections.includes('enhanceDetails')) params.enhanceDetails = true;
-    if (selectedCorrections.includes('noiseReduction')) params.noiseReduction = true;
-    if (selectedCorrections.includes('sharpenEdges')) params.sharpenEdges = true;
-    if (selectedCorrections.includes('artifactRemoval')) params.artifactRemoval = true;
-
     if (correctionPrompt.trim()) {
       params.customPrompt = correctionPrompt.trim();
     }
 
     return params;
-  }, [selectedCorrections, correctionPrompt]);
+  }, [correctionPrompt]);
 
   const handleOpenCorrectionDialog = useCallback((image: ImageData) => {
     setSelectedImage(image);
-    setSelectedCorrections(['lineCleanup', 'enhanceDetails', 'noiseReduction']);
     setCorrectionPrompt(image.prompt || '');
     setIsCorrectionDialogOpen(true);
     setIsCorrecting(false);
   }, []);
 
-  const handleRunCorrection = useCallback(async () => {
-    if (!selectedImage) {
-      return;
-    }
-
-    const params = buildCorrectionParams();
-    const hasCorrections =
-      Object.keys(params).some(key => key !== 'customPrompt' && Boolean(params[key as keyof CorrectionParams])) ||
-      Boolean(params.customPrompt);
-
-    if (!hasCorrections) {
-      showWarning('Add a correction', 'Select at least one correction or provide a prompt.');
-      return;
-    }
-
-    let correctionSucceeded = false;
-
-    try {
-      setIsCorrecting(true);
-      showInfo('Enhancing image', 'Gemini is applying your corrections...');
-
-      let imageBlob: Blob;
-
-      // Try to load from local file first if available
-      if (selectedImage.localFilePath) {
-        try {
-          console.warn('📁 Loading image from local file for Gemini correction:', selectedImage.localFilePath);
-          imageBlob = await loadLocalFileAsBlob(selectedImage.localFilePath);
-          console.warn('✅ Successfully loaded local image for correction');
-        } catch (localError) {
-          console.warn('⚠️ Failed to load local image, falling back to URL fetch:', localError);
-          // Fall back to URL fetch
-          const response = await fetch(selectedImage.url);
-          if (!response.ok) {
-            throw new Error('Unable to load the original image.');
-          }
-          imageBlob = await response.blob();
-        }
-      } else {
-        // Load from URL as before
-        const response = await fetch(selectedImage.url);
-        if (!response.ok) {
-          throw new Error('Unable to load the original image.');
-        }
-        imageBlob = await response.blob();
-      }
-
-      const sourcePath = selectedImage.localFilePath || selectedImage.url;
-      const inferredMime = inferMimeType(sourcePath);
-      const originalMime = imageBlob.type;
-      const resolvedMime =
-        originalMime && originalMime.startsWith('image/')
-          ? originalMime
-          : inferredMime && inferredMime.startsWith('image/')
-            ? inferredMime
-            : 'image/jpeg';
-
-      if (!originalMime || originalMime !== resolvedMime) {
-        const arrayBuffer = await imageBlob.arrayBuffer();
-        imageBlob = new Blob([arrayBuffer], { type: resolvedMime });
-        console.warn('ℹ️ Normalized image blob MIME type for Gemini correction', {
-          originalType: originalMime,
-          resolvedMime,
-          sourcePath,
-        });
-      }
-
-      const result = await geminiService.correctImage(imageBlob, params);
-
-      if (!result.success || !result.data) {
-        throw new Error(result.error?.message || 'Gemini did not return a corrected image.');
-      }
-
-      const correctedImage = result.data;
-      const previewUrl = correctedImage.blobUrl || correctedImage.correctedUrl;
-      const persistedUrl =
-        correctedImage.localFilePath || correctedImage.correctedUrl || previewUrl;
-      const originalSize = await getImageDimensions(selectedImage.url);
-      const correctedSize = await getImageDimensions(previewUrl || persistedUrl);
-
-      const enhancedImage = {
-        ...correctedImage,
-        originalUrl: selectedImage.url,
-        correctedUrl: persistedUrl,
-        thumbnailUrl:
-          correctedImage.thumbnailUrl || previewUrl || persistedUrl,
-        blobUrl: previewUrl || persistedUrl,
-        parentGenerationId:
-          selectedImage.source === 'generated'
-            ? selectedImage.id
-            : selectedImage.parentId || selectedImage.id,
-        metadata: {
-          ...correctedImage.metadata,
-          corrections: params,
-          originalSize: originalSize || correctedImage.metadata.originalSize,
-          correctedSize: correctedSize || correctedImage.metadata.correctedSize,
-          timestamp: new Date(),
-        },
-        timestamp: new Date(),
-      };
-
-      // Convert to unified ContentItem format
-      const contentItem: ContentItem = {
-        // Base metadata
-        id: enhancedImage.id,
-        filename: enhancedImage.filename || `correction_${enhancedImage.id}.jpg`,
-        originalName: enhancedImage.filename || `correction_${enhancedImage.id}.jpg`,
-        mimeType: 'image/jpeg',
-        size: enhancedImage.metadata?.correctedSize?.width * enhancedImage.metadata?.correctedSize?.height || 0,
-        tags: [],
-        timestamp: enhancedImage.timestamp,
-        userId: undefined,
-        sessionId: undefined,
-
-        // Type and display
-        contentType: 'corrected-image',
-        displayUrl: enhancedImage.correctedUrl,
-        thumbnailUrl: enhancedImage.thumbnailUrl,
-        blobUrl: enhancedImage.blobUrl,
-        localPath: enhancedImage.localFilePath,
-        localMetadataPath: enhancedImage.localMetadataPath,
-
-        // Content data for corrected image
-        content: {
-          type: 'corrected-image',
-          originalUrl: enhancedImage.originalUrl,
-          correctedUrl: enhancedImage.correctedUrl,
-          corrections: params,
-          correctionMetadata: enhancedImage.metadata,
-          parentGenerationId: enhancedImage.parentGenerationId,
-          azureMetadata: enhancedImage.azureMetadata
-        },
-
-        // Storage
-        storageMode: enhancedImage.storageMode || 'local',
-        persistenceMethod: enhancedImage.persistenceMethod || 'local',
-        folderToken: enhancedImage.folderToken,
-        relativePath: enhancedImage.relativePath,
-
-        // Status
-        status: 'ready'
-      };
-
-      galleryActions.addContentItem(contentItem);
-
-      console.warn('🖼️ Gemini: Added corrected image to gallery store', {
-        id: enhancedImage.id,
-        displayUrl: enhancedImage.correctedUrl,
-        previewUrl,
-        localFilePath: enhancedImage.localFilePath,
-      });
-
-      correctionSucceeded = true;
-
-      showSuccess('Correction complete', 'Gemini created a refined version in your gallery.');
-      
-      // Close dialog after successful correction
-      resetCorrectionDialog();
-    } catch (error: any) {
-      console.error('Gemini correction failed:', error);
-      showError('Correction failed', error?.message || 'Unable to correct the image right now.');
-      
-      // Close dialog after error (user has been notified)
-      resetCorrectionDialog();
-    } finally {
-      // Ensure we're never stuck in correcting state
-      setIsCorrecting(false);
-    }
-  }, [
+  // Gemini correction hook - must be called after all helper functions are defined
+  const geminiCorrectionParams = useMemo(() => ({
     selectedImage,
-    buildCorrectionParams,
-    showWarning,
-    geminiService,
+    corrections: buildCorrectionParams(),
+    loadLocalFileAsBlob,
     getImageDimensions,
-    galleryActions,
-    showSuccess,
-    showError,
-    showInfo,
-    resetCorrectionDialog,
-  ]);
+    addContentItem: galleryActions.addContentItem,
+    setIsCorrecting,
+    resetDialog: resetCorrectionDialog,
+    toastHelpers: { showSuccess, showError, showInfo, showWarning }
+  }), [selectedImage, correctionPrompt, galleryActions, showSuccess, showError, showInfo, showWarning]);
+
+  const { handleCorrectImage } = useGeminiCorrection(geminiCorrectionParams);
+
+  // Wrapper function to call the hook's correction method
+  const handleRunCorrection = useCallback(async () => {
+    // Close dialog immediately so user can continue working
+    resetCorrectionDialog();
+    
+    // Run correction in background - user will be notified via toast when complete
+    handleCorrectImage();
+  }, [handleCorrectImage, resetCorrectionDialog]);
 
   const handleCancelCorrection = useCallback(() => {
     if (isCorrecting) {
