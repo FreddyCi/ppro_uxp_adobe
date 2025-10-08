@@ -29,7 +29,7 @@ export const LumaVideoForm: React.FC<LumaVideoFormProps> = ({
   showInfo,
 }) => {
   return (
-    <>
+    <div className="generation-form">
       {/* Luma Prompt */}
       <div className="form-group">
         <sp-label className="form-label">Video Prompt *</sp-label>
@@ -75,24 +75,6 @@ export const LumaVideoForm: React.FC<LumaVideoFormProps> = ({
             <div className="radio-description text-detail">Change aspect ratio of existing video</div>
           </sp-radio>
         </sp-radio-group>
-      </div>
-
-      {/* Model Selection */}
-      <div className="form-group">
-        <sp-label className="form-label">Model</sp-label>
-        <div className="text-detail mb-sm">Choose the Dream Machine model</div>
-        <sp-picker 
-          placeholder="Select model"
-          className="style-dropdown"
-          onChange={(e: any) => setLumaModel(e.target.value)}
-        >
-          <sp-menu slot="options">
-            <sp-menu-item value="ray-3">Ray 3</sp-menu-item>
-            <sp-menu-item value="ray-2">Ray 2</sp-menu-item>
-            <sp-menu-item value="ray-flash-2">Ray Flash 2</sp-menu-item>
-            <sp-menu-item value="ray-1-6">Ray 1.6</sp-menu-item>
-          </sp-menu>
-        </sp-picker>
       </div>
 
       {/* Keyframes Mode */}
@@ -423,6 +405,6 @@ export const LumaVideoForm: React.FC<LumaVideoFormProps> = ({
           {isGeneratingLuma ? 'Generating...' : lumaMode === 'reframe' ? 'Reframe Video' : 'Generate Video'}
         </sp-button>
       </div>
-    </>
+    </div>
   );
 };

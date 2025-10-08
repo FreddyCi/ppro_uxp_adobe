@@ -848,6 +848,27 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
     width: 100%;
   }
 
+  /* Dropdown row - for side-by-side dropdowns */
+  .dropdown-row {
+    display: flex;
+    gap: $space-300;
+    
+    .dropdown-col {
+      flex: 1;
+      
+      .form-label {
+        display: block;
+        margin-bottom: $space-100;
+        font-weight: 600;
+        color: var(--theme-font);
+      }
+      
+      sp-picker {
+        width: 100%;
+      }
+    }
+  }
+
   /* Content type radio group */
   .content-type-group {
     display: flex;
@@ -1113,6 +1134,7 @@ sp-action-button sp-icon[name="ui:CheckmarkMedium"] {
     .content-type-group,
     .fps-group,
     .resolution-group,
+    .dropdown-row,
     .size-presets {
       flex-direction: column;
       

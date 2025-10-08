@@ -33,7 +33,7 @@ export const LumaImageForm: React.FC<LumaImageFormProps> = ({
   uxp,
 }) => {
   return (
-    <>
+    <div className="generation-form">
       {/* Luma Prompt */}
       <div className="form-group">
         <sp-label className="form-label">Image Prompt *</sp-label>
@@ -51,22 +51,6 @@ export const LumaImageForm: React.FC<LumaImageFormProps> = ({
         <div className="character-counter text-detail">
           {lumaPrompt.length}/1000 characters
         </div>
-      </div>
-
-      {/* Model Selection */}
-      <div className="form-group">
-        <sp-label className="form-label">Model</sp-label>
-        <div className="text-detail mb-sm">Choose the Dream Machine model</div>
-        <sp-picker 
-          placeholder="Select model"
-          className="style-dropdown"
-          onChange={(e: any) => setLumaModel(e.target.value)}
-        >
-          <sp-menu slot="options">
-            <sp-menu-item value="photon-1">Photon 1</sp-menu-item>
-            <sp-menu-item value="photon-flash-1">Photon Flash 1</sp-menu-item>
-          </sp-menu>
-        </sp-picker>
       </div>
 
       {/* Aspect Ratio for Images */}
@@ -454,6 +438,6 @@ export const LumaImageForm: React.FC<LumaImageFormProps> = ({
           {isGeneratingLuma ? 'Generating...' : 'Generate Image'}
         </sp-button>
       </div>
-    </>
+    </div>
   );
 };
