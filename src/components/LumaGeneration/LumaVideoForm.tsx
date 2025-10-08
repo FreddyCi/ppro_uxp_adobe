@@ -323,7 +323,30 @@ export const LumaVideoForm: React.FC<LumaVideoFormProps> = ({
                   onClick={async () => {
                     try {
                       const fs = uxp.storage.localFileSystem;
-                      const file = await fs.getFileForOpening({ types: ['mp4', 'mov', 'webm', 'avi'] });
+                      
+                      // Get the stored watch folder token
+                      const folderToken = localStorage.getItem('boltuxp.localFolderToken');
+                      let initialFolder = null;
+                      
+                      // Try to get the watch folder as initial location
+                      if (folderToken) {
+                        try {
+                          initialFolder = await fs.getEntryForPersistentToken(folderToken);
+                          console.log('🎥 Opening file picker in watch folder:', initialFolder?.nativePath);
+                        } catch (error) {
+                          console.warn('Could not resolve watch folder token:', error);
+                        }
+                      }
+                      
+                      // Open file picker with initial location if available
+                      const filePickerOptions: any = { 
+                        types: ['mp4', 'mov', 'webm', 'avi'] 
+                      };
+                      if (initialFolder) {
+                        filePickerOptions.initialLocation = initialFolder;
+                      }
+                      
+                      const file = await fs.getFileForOpening(filePickerOptions);
                       if (file) {
                         // Create a ContentItem from the local file
                         const contentItem = {
