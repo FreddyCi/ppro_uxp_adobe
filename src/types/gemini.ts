@@ -118,7 +118,7 @@ export interface CorrectedImage {
   corrections: CorrectionParams
   metadata: CorrectionMetadata
   timestamp: Date
-  blobUrl?: string // Azure Blob storage URL
+  dataUrl?: string // Base64 data URL for persistent display (survives page reloads)
   parentGenerationId?: string // Link to original Firefly generation
   filename?: string
   storageLocation?: 'memory' | 'azure' | 'local'

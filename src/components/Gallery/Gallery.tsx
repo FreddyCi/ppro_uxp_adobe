@@ -533,13 +533,25 @@ export const Gallery = () => {
         // videoUrl should be the video blob URL
       }
       
+      // For corrected images, the correctedUrl is already a data URL (persistent)
+      if (item.contentType === 'corrected-image') {
+        console.log('🖼️ [Gallery] Corrected image with data URL:', {
+          id: item.id,
+          filename: item.filename,
+          hasDisplayUrl: !!item.displayUrl,
+          displayUrlPrefix: item.displayUrl?.substring(0, 30)
+        });
+      }
+      
       return {
         id: item.id,
         url: thumbnailUrl,
         prompt: item.contentType === 'generated-image' 
           ? (item.content as any).prompt || item.filename || 'Generated image'
           : item.contentType === 'corrected-image'
-          ? (item.content as any).correctionMetadata?.operationsApplied?.join(', ') || item.filename || 'Corrected image'
+          ? (item.content as any).corrections?.customPrompt || 
+            (item.content as any).correctionMetadata?.operationsApplied?.join(', ') || 
+            'Gemini enhanced image'
           : (item.contentType === 'video' || item.contentType === 'uploaded-video')
           ? item.filename || (item as any).metadata?.prompt || 'Video'
           : item.filename || 'Content',
@@ -1081,7 +1093,8 @@ export const Gallery = () => {
                     <span className="item-duration">{image.duration}s</span>
                   )}
                 </div>
-                {image.source === 'generated' && image.contentType === 'generated-image' && (
+                {(image.source === 'generated' && image.contentType === 'generated-image') || 
+                 (image.source === 'corrected' && image.contentType === 'corrected-image') ? (
                   <div className="item-actions">
                     {/* @ts-ignore */}
                     <sp-button
@@ -1089,11 +1102,11 @@ export const Gallery = () => {
                       size="s"
                       onClick={() => handleOpenCorrectionDialog(image)}
                     >
-                      Enhance with Gemini
+                      {image.contentType === 'corrected-image' ? 'Enhance further' : 'Enhance with Gemini'}
                     {/* @ts-ignore */}
                     </sp-button>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           ))

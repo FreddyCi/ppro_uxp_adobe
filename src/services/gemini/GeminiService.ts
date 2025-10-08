@@ -485,8 +485,8 @@ export class GeminiService {
     const byteArray = new Uint8Array(byteNumbers)
     const blob = new Blob([byteArray], { type: mimeType })
 
-    // Create memory-based blob URL for immediate display
-    const blobUrl = URL.createObjectURL(blob)
+    // Convert blob to data URL for persistence (best practice - survives page reloads)
+    const dataUrl = `data:${mimeType};base64,${base64Data}`
     const imageId = crypto.randomUUID()
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const filename = `gemini-corrected-${timestamp}.png`
@@ -494,8 +494,8 @@ export class GeminiService {
     let localFilePath: string | undefined
     let localMetadataPath: string | undefined
     let storageMode: 'local' | 'azure' = 'azure'
-    let persistenceMethod: 'blob' | 'dataUrl' | 'presigned' | 'local' = 'blob'
-    let correctedUrl = blobUrl // Default to blob URL for immediate display
+    let persistenceMethod: 'blob' | 'dataUrl' | 'presigned' | 'local' = 'dataUrl' // Use dataUrl for persistence
+    let correctedUrl = dataUrl // Use data URL for persistent display
 
     // Try to save locally if local storage is enabled
     let saveResult: any = null
@@ -574,7 +574,7 @@ export class GeminiService {
         filename: filename,
         size: blob.size,
         correctedUrl: correctedUrl,
-        blobUrl: blobUrl,
+        dataUrl: dataUrl,
         localFilePath: localFilePath,
         storageMode: storageMode,
         persistenceMethod: persistenceMethod,
@@ -604,7 +604,7 @@ export class GeminiService {
         },
       },
       timestamp: new Date(),
-      blobUrl: blobUrl, // Keep blob URL for fallback and download
+      dataUrl: dataUrl, // Store data URL for persistent display across reloads
       filename,
       storageLocation: storageMode === 'local' ? 'local' : 'memory',
       localFilePath: localFilePath,
