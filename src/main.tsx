@@ -571,7 +571,33 @@ const AppContent = () => {
             )}
 
             {activeTab === 'ingest' && (
-              <LocalIngestPanel />
+              imsToken ? (
+                <LocalIngestPanel />
+              ) : (
+                <article className="card">
+                  <header className="card-header">
+                    <h2 className="card-title">Sign in to use Local Ingest</h2>
+                    <div className="text-detail">Authenticate to import MP4s into Premiere Pro.</div>
+                  </header>
+                  <div className="card-body">
+                    <div className="auth-required" style={{ margin: 0 }}>
+                      <div className="text-detail" style={{ color: 'var(--theme-warning)' }}>
+                        Please authenticate to access local ingest
+                      </div>
+
+                      {/* @ts-ignore */}
+                      <sp-button
+                        variant="accent"
+                        onClick={testIMSAuthentication}
+                        style={{ marginLeft: '12px' }}
+                      >
+                        Login
+                      {/* @ts-ignore */}
+                      </sp-button>
+                    </div>
+                  </div>
+                </article>
+              )
             )}
           </div>
         </section>
