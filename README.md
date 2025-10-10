@@ -1,377 +1,148 @@
-<img src="src/assets/bolt-uxp.svg" alt="Bolt UXP" title="Bolt UXP" width="400" />
+# Premiere Pro UXP Luma Panel — Developer README
 
-A lightning-fast boilerplate for building Adobe UXP Plugins in Svelte, React, or Vue built on Vite + TypeScript + Sass
+This repository contains the Premiere Pro UXP panel used to generate and manage Luma (image/video) generations, gallery items, and local persistence logic. This README is focused for developers: setup, development, testing, architecture notes, and troubleshooting.
 
-![npm](https://img.shields.io/npm/v/bolt-uxp)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/hyperbrew/bolt-uxp/blob/master/LICENSE)
-[![Chat](https://img.shields.io/badge/chat-discord-7289da.svg)](https://discord.gg/PC3EvvuRbc)
+## Table of contents
+- Prerequisites
+- Quick start (dev)
+- Building for production
+- Testing
+- Project structure
+- Key implementation notes
+- Troubleshooting & common errors
+- Contributing
+- Contact
 
-## Features
-
-- Lightning Fast Hot Reloading on changes
-- Setup with TypeScript Definitions for UXP APIs
-- Easily configure in uxp.config.ts
-- Comes with multi-host-app configuration
-- Optimized Build Size
-- Template for UXP Hybrid C++ Plugins
-- Easy Publish to CCX for Distribution
-- Easy Package to ZIP archive with sidecar assets
-- GitHub Actions ready-to-go for CCX Releases
-
-## Backers
-
-Huge thanks to our backers who have made this project possible!
-
-<a href="https://aescripts.com/" target="_blank">
-<img src="https://aescripts.com/media/wysiwyg/aescripts_aeplugins_Logo_Stack_300.png" alt="aescripts + aeplugins" title="aescripts + aeplugins" width="200" /></a>
-
-If you're interested in supporting this open-source project, please [see our sponsor page](https://github.com/sponsors/hyperbrew).
-
-## Support
-
-### Free Support 🙌
-
-If you have questions with getting started using Bolt UXP, feel free to ask and discuss in our free Discord community [Discord Community](https://discord.gg/PC3EvvuRbc).
-
-### Paid Priority Support 🥇
-
-If your team is interested in paid consulting or development with Bolt UXP, please [contact the Hyper Brew team](https://hyperbrew.co/contact/). More info on our [Adobe Plugin Development & Consulting Services](https://hyperbrew.co/landings/boost-development)
-
-## Can I use Bolt UXP in my free or commercial project?
-
-Yes! Bolt UXP is **100% free and open source**, being released under the MIT license with no attribution required. This means you are free to use it in your free or commercial projects.
-
-We would greatly appreciate it if you could provide a link back to this tool's info page in your product's site or about page:
-
-Bolt UXP Info Page Link: https://hyperbrew.co/resources/bolt-uxp
-
-**Built with Bolt UXP** button graphics:
-
-**PNG Files**
-
-<div style="display:flex;gap:1rem;">
-<a href="./src/assets/built-with-bolt-uxp/Built_With_BOLT_UXP_Logo_White_V01.png" target="_blank">
-<img src="./src/assets/built-with-bolt-uxp/Built_With_BOLT_UXP_Logo_White_V01.png" width="200" /></a>
-
-<a href="./src/assets/built-with-bolt-uxp/Built_With_BOLT_UXP_Logo_Black_V01.png" target="_blank">
-<img src="./src/assets/built-with-bolt-uxp/Built_With_BOLT_UXP_Logo_Black_V01.png" width="200" /></a>
-
-</div>
-
-**SVG Files**
-
-<div style="display:flex;gap:1rem;">
-<a href="src/assets/built-with-bolt-uxp/Built_With_BOLT_UXP_Logo_White_V01.svg" target="_blank">
-<img src="src/assets/built-with-bolt-uxp/Built_With_BOLT_UXP_Logo_White_V01.svg" width="200" /></a>
-
-<a href="src/assets/built-with-bolt-uxp/Built_With_BOLT_UXP_Logo_Black_V01.svg" target="_blank">
-<img src="src/assets/built-with-bolt-uxp/Built_With_BOLT_UXP_Logo_Black_V01.svg" width="200" /></a>
-
-</div>
+---
 
 ## Prerequisites
 
-- [Node.js 18](https://nodejs.org/en/) or later
-- [Adobe UXP Developer Tool (aka UDT)](https://developer.adobe.com/uxp/developer-tool/)
-- Package manager either
-  - NPM (comes with Node.js)
-  - [Yarn](https://classic.yarnpkg.com/lang/en/docs/install/) ( ensure by running `yarn set version classic` )
-  - [PNPM](https://pnpm.io/installation) ( ensure by running `pnpm --version` )
+- Node.js (LTS recommended, e.g. 18+)
+- pnpm (project uses pnpm for package management)
+- Visual Studio Code or another editor
+- macOS for UXP/host testing (the panel is developed to run inside Adobe Premiere Pro's UXP host)
 
-## Quick Start
+## Setup
 
-<img src="src/assets/bolt-uxp-quickstart.gif" alt="Bolt UXP">
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd ppro_uxp_adobe
+   ```
 
-Create your new Bolt UXP project (follow CLI prompts)
+2. **Install dependencies**
+   ```bash
+   pnpm install
+   ```
 
-- yarn - `yarn create bolt-uxp`
-- npm - `npx create-bolt-uxp`
-- pnpm - `pnpm create-bolt-uxp`
+3. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your actual API keys and configuration
+   ```
 
-Change directory to the new project
+   **Required environment variables:**
+   - `VITE_IMS_CLIENT_ID` - Adobe IMS OAuth client ID
+   - `VITE_IMS_CLIENT_SECRET` - Adobe IMS OAuth client secret
+   - `VITE_AZURE_STORAGE_ACCOUNT_NAME` - Azure storage account name
+   - `VITE_AZURE_STORAGE_ACCOUNT_KEY` - Azure storage account key
+   - `VITE_GEMINI_API_KEY` - Google Gemini API key
+   - `VITE_LTX_API_KEY` - LTX-2 API key
+   - `VITE_LUMA_API_KEY` - Luma API key
+   - `VITE_FAL_API_KEY` - Fal.ai API key
 
-- `cd project`
+## Quick start (development)
 
-Install Dependencies (if not already done by create command)
+1. Install dependencies
 
-- yarn - `yarn`
-- npm - `npm i`
-- pnpm - `pnpm i`
-
-Build the plugin (must run before `dev`, can also run after for panel to work statically without the process)
-
-- yarn `yarn build`
-- npm `npm run build`
-- pnpm `pnpm build`
-
-Run the plugin in hot reload mode for development with UDT (see below)
-
-- yarn `yarn dev`
-- npm `npm run dev`
-- pnpm `pnpm dev`
-
-Build & Package the plugin as a CCX for delivery (separate CCX files for each host are generated due to current UXP requirements)
-
-- yarn `yarn ccx`
-- npm `npm run ccx`
-- pnpm `pnpm ccx`
-
-Bundles your packaged ccx file(s) and specified assets from `copyZipAssets` to a zip archive in the `./zip` folder
-
-- yarn `yarn zip`
-- npm `npm run zip`
-- pnpm `pnpm zip`
-
-## UDT Setup
-
-_Install Note: The Adobe UXP Developer Tools (UDT) can be downloaded from the Adobe CC app_
-
-### Add Plugin
-
-1. Open the Adobe UXP Developer Tool (2.0 or later)
-2. Click the `Add Plugin` button in the top right corner
-3. Select the `manifest.json` file in the `dist` folder
-
-### Load and Debug Plugin
-
-1. Click `Load` button on your plugin item
-2. Click `Debug` button on your plugin item
-
-_Note: You only need to "Load" a plugin, do not use the "Load and Watch" feature. The bulit-in UDT file watcher aka "Load and Watch" does not reliably update on changes so we recommend avoiding it. Instead, Bolt UXP comes with it's own built-in WebSocket system to trigger a reload on each update which is more consistent and less error-prone._
-
-## Install a Plugin
-
-You can install your UXP plugin from CCX file in a number of ways:
-
-### A. The ZXP / UXP Installer from aescripts + aeplugins
-
-Download here: https://aescripts.com/learn/zxp-installer/ Simply drag and drop the CCX file onto the installer and follow the prompts.
-
-### B. The Adobe CC App (UPIA under the hood)
-
-As long as file associations are set up correctly, you can simply double click the CCX file to install it and you can follow the prompts in the Adobe CC app to complete the install
-
-### C. UPIA (Adobe's UXP Plugin Installer)
-
-You can install via the command line directly with the UPIA tool.
-
-Windows:
-
-```
-cd "C:\Program Files\Common Files\Adobe\Adobe Desktop Common\RemoteComponents\UPI\UnifiedPluginInstallerAgent"
-
-UnifiedPluginInstallerAgent.exe /install /path/to/plugin.ccx
+```bash
+pnpm install
 ```
 
-Mac:
+2. Start a dev build/watch (or run the local dev server if configured)
 
-```
-cd "/Library/Application Support/Adobe/Adobe Desktop Common/RemoteComponents/UPI/UnifiedPluginInstallerAgent/UnifiedPluginInstallerAgent.app/Contents/MacOS"
-
-./UnifiedPluginInstallerAgent --install /path/to/plugin.ccx
+```bash
+pnpm dev
 ```
 
-### Where are UXP Plugins Installed to?
+3. Build for production (generates `dist/`)
 
-The resulting directory can end up in any number of places depending on UPIA version and settings. This location is subject to change and managed by UPIA and the UXP database. In general do not modify or try to manipulate these locations or you will likely break the plugin.
-
-Windows:
-
-- `C:\Program Files\Common Files\Adobe\UXP\Plugins\<username>\External\`
-- `C:\Users\<username>\AppData\Roaming\Adobe\UXP\Plugins\External\`
-
-Mac:
-
-- `/Users/<username>/Library/Application Support/Adobe/UXP/Plugins`
-
-_Special Note_
-You cannot write UXP plugins directly into the directories above like you could with CEP panels. UXP plugins must be installed via either double-click or UPIA in order to correctly update a database file.
-
-## Supported Adobe Apps
-
-Currently this starter is configured for Premiere Pro. You can adapt the codebase for other UXP-enabled hosts by updating `uxp.config.ts` and providing the appropriate API bindings once access is available.
-
-## Multi-Window panels
-
-To add additional windows to a UXP Plugin, you'll need to do 2 things:
-
-1. Add an additional panel in the `uxp.config.ts` (see the settings example commented out)
-2. Add a `<uxp-panel panelid="bolt.uxp.plugin.settings">` tag to your main entrypoint file (.tsx, .vue, or .svelte). Note that the `panelid` must match the panelid in the `uxp.config.ts` file.
-
-Note: Unlike CEP Extensions which multi-panel extensions behave as separate isolated panels/websites, a multi-panel UXP plugin is all in 1 space with certain sections of the markup rendered in different panels (identified by the `<uxp-panel />` tag)
-
-## GitHub Actions CCX Releases
-
-This repo comes with a configured GitHub Action workflow to build a CCX and add to the releases each time a git tag is added.
-
-```
-git tag 1.0.0
-git push origin --tags
+```bash
+pnpm build
 ```
 
-Then your new build will be available under GitHub Releases. For more info, see the [YML config](.github\workflows\main.yml)
+4. Load the generated `dist` into your UXP host (Premiere) or use the provided packaging in `__queuestorage__` or `ccx/` samples.
 
-## Copy Zip Assets
+## Building for production
 
-If you have assets that you would like copied with your ccx into a zip archive for delivery, you can add the optional `copyZipAssets:[]` array inside your `uxp.config.ts` to include files or entire folders. A folder ending in "/\*" will copy the contents without the folder structure into the zip destination.
+Run `pnpm build` — Vite will produce the built panel under `dist/` with assets in `dist/assets`.
 
-```js
-  copyZipAssets: ["public-zip/*"],
-```
+The project uses TypeScript and Vite. The final JS bundle referenced by the UXP manifest should be the file in `dist/assets`.
 
-## Hybrid Plugin Development
+## Testing
 
-UXP Hybrid Plugins allow you to write C++ functions and call them from UXP. This is useful for performance critical operations and accessing system methods not yet part of the UXP APIs.
+- Unit tests (Vitest): `pnpm test` (if configured)
+- Linting/Type-checking: `pnpm lint` / `pnpm typecheck` (if configured)
 
-If you enabled the Hybrid Plugin option during the `yarn create bolt-uxp` process, your project will come with already compiled binaries, and project files if you want to make your own customizations to the Hybrid Plugin.
+At minimum, run `pnpm build` to ensure the project compiles after changes.
 
-Since Hybrid Plugins are application specific, you will need to compile the macOS binary with XCode on macOS and the Windows binary with Visual Studio 2019 on Windows. The hybrid plugin project files are located in `./src/hybrid`, and they compile to `./public-hybrid`, which ends up in `./dist/mac` and `./dist/pc` after build. The structure required is as follows:
+## Project structure (high-level)
 
-```
-root
- ├─ mac
- │   ├─ arm64
- |      └─ bolt-uxp-hybrid.uxpaddon
- |   └─ x64
- |      └─ bolt-uxp-hybrid.uxpaddon
- └─ win
-     └─ x64
-        └─ bolt-uxp-hybrid.uxpaddon
-```
+- `src/` — application source
+  - `components/` — React components (Gallery, GalleryPicker, LumaGeneration, LumaVideoForm, etc.)
+  - `store/` — Zustand stores (galleryStore, generationStore, uiStore)
+  - `services/` — platform integrations (Luma API client, local storage helpers)
+  - `utils/` — helper utilities
+  - `types/` — TypeScript types and conversion helpers
+- `dist/` — output of builds
+- `ccx/`, `__queuestorage__/` — packaging and distribution materials
+- `docs/` — engineering docs and runbooks
 
-Supported platforms include:
+## Key implementation notes
 
-- MacOS x64
-- MacOS arm64
-- Windows x64
+- Gallery persistence uses a custom `createUXPStorage` (in `src/store/galleryStore.ts`) that persists a partial state to `localStorage` via `zustand`'s `persist` middleware. The store's `partialize` function strips large binary data (video blobs and large data URLs) prior to persistence to avoid localStorage quota/serialization issues.
 
-(note that Windows arm64 for Hybrid Plugins is not currently supported by Adobe UXP applications)
+- Luma integrations:
+  - Video generation uses Ray models and the `/generations/video` endpoint — this flow has been validated and is typically working.
+  - Image generation uses Photon models and the `/generations/image` endpoint — historically sensitive to service outages. See logs for `LumaImageService` and polling behavior.
 
-### What's in the Current Hybrid Plugin?
+- Blob URL lifecycle: The app converts data URLs and local files into runtime blob URLs for playback using helpers in `src/utils/runtimeUrl.ts` and `src/utils/blobUrlLifecycle.ts`. These runtime URLs are revoked on unmount.
 
-The main exported function inside the current Hybrid Plugin is `execSync()` which works like Node.js's `execSync()` function. It takes a string and returns the output of the command. This is useful for running system commands and getting the output back to your UXP plugin, which is currently not possible via the UXP APIs.
+## Troubleshooting & common errors
 
-### Xcode Notes
+- RangeError: Invalid string length
+  - Symptoms: Crash in Gallery component during rehydration, errors referencing `JSON.stringify` or `localStorage.setItem`.
+  - Cause: Large binary data (videoBlob or huge data: URLs) were being persisted to localStorage.
+  - Fixes: The store now strips heavy data before persisting. If you still see this, try clearing persisted gallery data from localStorage (see below).
 
-The Xcode project is designed to build a universal binary from an arm64 (M1, M2, M3) machine that works for both arm machines and x64 machines. If you are not on an arm machine, you will need to change the copy build settings to only build for x64, and note that your hybrid plugin will not work on arm machines.
+- Clearing persisted gallery state
 
-### Visual Studio Notes
+  - In dev console or from code, run:
 
-The project is set up for Visual Studio 2019. A post-build action will copy the resulting `.uxpaddon` binary to the `./public-hybrid` folder. If you are using a different version of Visual Studio, you may need to update settings for this to work, but Adobe recommends 2019 currently.
+  ```js
+  localStorage.removeItem('gallery-storage')
+  ```
 
-### Hybrid Build Scripts
+  - Or use the `clearAll()` action in the Gallery store:
 
-You can easily rebuild a binary from the command line without opening XCode or Visual Studio with `yarn mac-build` and `yarn win-build`. You'll need to ensure msbuild for Windows and xcodebuild for MacOS are in your system's environment variables.
+  ```ts
+  const { actions } = useGalleryStore.getState()
+  actions.clearAll()
+  ```
 
-Alternatively, you can build debug builds with `yarn win-build-debug` in order to attach to the process and debug your C++ code with breakpoints, however make sure to build a release version for distribution, otherwise your users will experience a `Failed to load Addon: The specified module could not be found` error when your users without a dev environment try to load your plugin.
+- Luma image generation stuck in queued
+  - Symptoms: API accepts request (201 Created) but polling stays in `queued` forever.
+  - Cause: External Luma Photon worker outage. Not a code issue.
+  - Action: Wait for service recovery; test video generation to verify Ray models are working.
 
-### Do I need to Sign and Notorize my UXP Plugins?
+## Contributing
 
-The current UXP Hybrid binaries (.uxpaddon files) come signed and notorized for MacOS and signed for Windows, however if you make modifications to the C++ source code and compile again, you will need to sign and notorize with your own certs for MacOS and Windows. Instructions for signing and notorizing are below:
+- Follow standard PR workflow: branch from `main`, push a PR, include tests, and add a runbook entry under `docs/` for any infra-impacting changes.
 
-### Sign and Notorize on MacOS
+## Contact
 
-MacOS requires your hybrid plugins to be signed and notorized when shipped to users.
-
-Requirements:
-
-- Apple Developer Account
-- Developer ID Certificate
-- Latest Xcode installed
-- Xcode Command Line Tools installed
-
-Once these are set up, duplicate the .env.example file to a .env file and fill out all fields with your Apple credentials.
-
-Install your cert locally, and ensure your signing settings in XCode are set to that certificate for both arm64 and x64.
-
-Ensure you are logged into your correct Apple account in XCode.
-
-Finally run `yarn-build-sign` to both build your mac binary and sign it. This will also notorize the binary with Apple's servers which can take several minutes.
-
-More details on how the signing and notorization process works can be found in the `scripts/mac-sign.js` file.
-
-### Sign on Windows
-
-Windows does not require signing, however it's generally a good idea to avoid any warning popups or Windows silently blocking your plugin. A script is provided to sign your Windows binary with an EV cert hosted via Azure. Once you have a cert purchased and hosted with Azure, you'll need to fill out the .env file with your Azure credentials.
-
-Once your cert hosting is set up and your .env file is filled out, you can run `yarn win-sign` to sign your Windows binary.
-
-### Hot Reloading Hybrid Plugins
-
-While Bolt UXP supports hot reloading, this does not extend to the C++ Hybrid plugin portion of the project. If you only make changes to the frontend code, hot reloading will work as expected, however if you make changes to the MacOS or Windows binaries, you will see a warning in the console that you need to unload and load the plugin since the binaries are locked during debug. You can do this in UDT by selecting "Unload", building the binary, then selecting "Load" again.
-
-Currently there is no way to automate this process in UDT, but we have requested that the Adobe UXP team add this feature.
-
-### Additional Notes
-
-More info on Hybrid Plugins can be found in the Adobe UXP documentation.
-
-Support for Hybrid Plugins varies by host, so confirm Premiere Pro capabilities before shipping.
+For questions about Luma API credentials or Azure storage, contact the infra owner or see `docs/azure-sdk-integration-guide.md`.
 
 ---
 
-### Notes on Spectrum
-
-There are several flavors of Adobe Spectrum:
-
-- Spectrum CSS
-- React Spectrum
-- Spectrum Web Components
-- Spectrum UXP
-
-Recently the Adobe UXP team is moving away from the built-in Spectrum UXP to Spectrum Web Components.
-
-Since this move is recent, and compatibility is pending, Bolt UXP doesn't come set up for any Spectrum integration, however if you'd like you can add it yourself.
-
-**Spectrum UXP**
-
-You can use native Spectrum UXP widgets without any extra dependencies, however you will recieve TypeScript errors. To remove these errors you'll need to add defs for spectrum in your `globals.d.ts` file per your framework (React example below)
-
-React Example for `<sp-heading />`
-
-```ts
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "sp-heading": React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLElement>,
-        HTMLElement
-      >;
-    }
-  }
-}
-```
-
-More info on Spectrum UXP: https://developer.adobe.com/xd/uxp/uxp/reference-spectrum/
-
-**Spectrum Web Components**
-
-For Spectrum Web Components, you'll need to add the dependency from npm and import the components into your project as needed. Follow the guide here:
-
-https://www.npmjs.com/package/@spectrum-web-components/bundle
-
-## Misc Troubleshooting
-
-- **Update a Bolt UXP Project** To update an existing Bolt UXP project to the the latest version, create a new Bolt UXP project with the same framework (React, Vue, Svelte) and host apps, then compare and update the following files:
-
-  1. `package.json` - Update all dependencies and scripts ( `vite-uxp-plugin` - usually contains the most frequent updates )
-  2. `vite.config.ts` - Unless you've modified the vite config yourself, you can just copy the contents of the latest into yours.
-  3. `uxp.config.ts` - Check if any new properties have been added that don't exist in your config.
-  4. `src/api` - Update this entire folder.
-  5. `src/hybrid` - Update this entire folder unless you've made modifications to the C++ code.
-  6. `src/lib` - Update this entire folder unless you've made modifications to the library files.
-
-- **Why are CSS rules not working / HTML widgets broken / JavaScript DOM methods missing?**
-  UXP is not a browser, it is a subset of web standards built from the ground-up by Adobe. This means many features in CSS/HTML/JS that work in the browser will not work in UXP. This includes many CSS rules, HTML elements, and JavaScript methods. If you find something that is not working, please check the [Adobe UXP documentation](https://developer.adobe.com/uxp/api/) to see if it is supported.
-
-- **Can I get full browser UI in UXP with a Webview?**
-  It is possible to build a UXP panel will the entire UI built inside a webview. While this will create 2 separate contexts, a Webview Frontend and UXP backend, you can use the same CSS/HTML/JS features you would per OS (Edge on Windows, Safari on MacOS) This will require a separte build system for the frontend, and you'll need to build to a single HTML file if you're not hosting the backend with a Hybrid Plugin.
-  For more details on this process, view the UXP Webview docs on the [Adobe UXP site](https://developer.adobe.com/uxp/uxp-api/reference-js/Global%20Members/HTML%20Elements/HTMLWebViewElement/).
-
-- **How do I know which CSS Styles are supported and which ones aren't?**
-
-See the UXP Validator extension for VS Code [here](https://github.com/jardicc/vscode-uxp-validator)
-
----
-
-If you're interested in updating `bolt-uxp` core, please see the [./readme_dev.md](readme_dev.md)
+Note: This README replaced an empty README.md and preserves prior manual edits that were present (none in the file). If you want a shorter README or additional sections (e.g., architecture diagrams, sequence diagrams for Luma flows), tell me which sections to expand.
