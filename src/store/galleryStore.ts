@@ -15,7 +15,8 @@ import type { ContentItem, ContentType, VideoData } from '../types/content'
 import {
   convertGenerationResultToContentItem,
   convertCorrectedImageToContentItem,
-  convertVideoMetadataToContentItem
+  convertVideoMetadataToContentItem,
+  isVideo
 } from '../types/content'
 import { uxp } from '../globals'
 import { refreshContentItemUrls } from '../utils/blobUrlLifecycle'
@@ -213,7 +214,67 @@ const createUXPStorage = () => {
     console.log('[Gallery] createUXPStorage called - checking localStorage availability');
     if (typeof window !== 'undefined' && window.localStorage) {
       console.log('[Gallery] localStorage is available');
-      return localStorage;
+      return {
+        getItem: (key: string) => {
+          try {
+            return localStorage.getItem(key);
+          } catch (error) {
+            console.error('[Gallery] localStorage.getItem error:', error);
+            return null;
+          }
+        },
+        setItem: (key: string, value: string) => {
+          try {
+            // Check if the value is too large before attempting to save
+            const sizeInBytes = new Blob([value]).size;
+            const sizeInMB = (sizeInBytes / (1024 * 1024)).toFixed(2);
+            console.log(`[Gallery] Attempting to save ${sizeInMB}MB to localStorage (key: ${key})`);
+            
+            // Warn if approaching localStorage limits (typically 5-10MB in browsers, may be different in UXP)
+            if (sizeInBytes > 5 * 1024 * 1024) {
+              console.warn(`[Gallery] ⚠️ Large data being saved: ${sizeInMB}MB. This may fail in some environments.`);
+            }
+            
+            localStorage.setItem(key, value);
+            console.log(`[Gallery] ✅ Successfully saved ${sizeInMB}MB to localStorage`);
+          } catch (error) {
+            // Handle quota exceeded or invalid string length errors
+            if (error instanceof DOMException && 
+                (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+              console.error('[Gallery] ❌ localStorage quota exceeded. Cannot save gallery state.', {
+                error: error.message,
+                key,
+                attemptedSize: `${(new Blob([value]).size / (1024 * 1024)).toFixed(2)}MB`
+              });
+              
+              // Attempt to clear old data and retry once
+              try {
+                console.warn('[Gallery] 🔄 Attempting to clear old localStorage data and retry...');
+                localStorage.removeItem(key);
+                localStorage.setItem(key, value);
+                console.log('[Gallery] ✅ Retry successful after clearing old data');
+              } catch (retryError) {
+                console.error('[Gallery] ❌ Retry failed. Gallery state will not be persisted.', retryError);
+              }
+            } else if (error instanceof RangeError && error.message.includes('Invalid string length')) {
+              console.error('[Gallery] ❌ String too large to stringify. Cannot save gallery state.', {
+                error: error.message,
+                key,
+                attemptedSize: `${(new Blob([value]).size / (1024 * 1024)).toFixed(2)}MB`
+              });
+            } else {
+              console.error('[Gallery] ❌ localStorage.setItem error:', error);
+            }
+          }
+        },
+        removeItem: (key: string) => {
+          try {
+            localStorage.removeItem(key);
+          } catch (error) {
+            console.error('[Gallery] localStorage.removeItem error:', error);
+          }
+        }
+      };
     } else {
       console.warn('[Gallery] localStorage not available, using in-memory storage');
       return {
@@ -1249,7 +1310,41 @@ export const useGalleryStore = create<GalleryStore>()(
 
       // Persist essential data with quota management for content items
       partialize: state => ({
-        contentItems: state.contentItems,
+        // Strip out large binary data (videoBlob, displayUrl with data: URLs, thumbnailUrl with data: URLs)
+        // to prevent "Invalid string length" error when saving to localStorage
+        contentItems: state.contentItems.map(item => {
+          const cleanedItem = { ...item }
+          
+          // Remove runtime URLs that will be regenerated on load
+          if (cleanedItem.displayUrl?.startsWith('blob:')) {
+            cleanedItem.displayUrl = cleanedItem.localPath || ''
+          }
+          if (cleanedItem.thumbnailUrl?.startsWith('blob:')) {
+            cleanedItem.thumbnailUrl = undefined
+          }
+          
+          // Remove large data: URLs (keep only small ones for thumbnails < 100KB)
+          if (cleanedItem.displayUrl?.startsWith('data:')) {
+            if (cleanedItem.displayUrl.length > 100000) {
+              cleanedItem.displayUrl = cleanedItem.localPath || ''
+            }
+          }
+          if (cleanedItem.thumbnailUrl?.startsWith('data:')) {
+            if (cleanedItem.thumbnailUrl.length > 100000) {
+              cleanedItem.thumbnailUrl = undefined
+            }
+          }
+          
+          // Clean video content: remove videoBlob which can be huge
+          if (isVideo(cleanedItem)) {
+            cleanedItem.content = {
+              ...cleanedItem.content,
+              videoBlob: undefined,
+            } as VideoData
+          }
+          
+          return cleanedItem
+        }),
         viewMode: state.viewMode,
         sortBy: state.sortBy,
         sortOrder: state.sortOrder,

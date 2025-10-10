@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useGalleryStore } from '../../store/galleryStore';
 import type { ContentItem } from '../../types/content';
 import { GalleryPickerProps } from './types';
 
 export const GalleryPicker: React.FC<GalleryPickerProps> = ({ target, onSelect, onCancel }) => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 25;
+
   // Use useShallow to prevent infinite re-renders by doing shallow comparison of the result
   const galleryImages = useGalleryStore(
     useShallow((state) => {
@@ -39,6 +42,12 @@ export const GalleryPicker: React.FC<GalleryPickerProps> = ({ target, onSelect, 
     })
   );
 
+  // Calculate pagination
+  const totalPages = Math.ceil(galleryImages.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentItems = galleryImages.slice(startIndex, endIndex);
+
   return (
     <div className="gallery-picker">
       {galleryImages.length === 0 ? (
@@ -54,8 +63,22 @@ export const GalleryPicker: React.FC<GalleryPickerProps> = ({ target, onSelect, 
         </div>
       ) : (
         <>
+          {/* Pagination Info */}
+          <div className="gallery-pagination-info" style={{ 
+            padding: '8px 16px', 
+            textAlign: 'center',
+            borderBottom: '1px solid var(--theme-border)'
+          }}>
+            <div className="text-detail">
+              Showing {startIndex + 1} - {Math.min(endIndex, galleryImages.length)} of {galleryImages.length} {target === 'reframe-video' ? 'videos' : 'images'}
+            </div>
+            <div className="text-detail" style={{ fontSize: '10px', color: 'var(--theme-text-secondary)', marginTop: '4px' }}>
+              Page {currentPage} of {totalPages}
+            </div>
+          </div>
+
           <div className="gallery-grid">
-            {galleryImages.slice(0, 20).map((item: ContentItem) => (
+            {currentItems.map((item: ContentItem) => (
               <div
                 key={item.id}
                 className="gallery-item"
@@ -86,6 +109,64 @@ export const GalleryPicker: React.FC<GalleryPickerProps> = ({ target, onSelect, 
               </div>
             ))}
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="gallery-pagination" style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '8px',
+              padding: '12px 16px',
+              borderTop: '1px solid var(--theme-border)',
+              borderBottom: '1px solid var(--theme-border)'
+            }}>
+              {/* @ts-ignore */}
+              <sp-button
+                variant="secondary"
+                size="s"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+              >
+                «
+              {/* @ts-ignore */}
+              </sp-button>
+              {/* @ts-ignore */}
+              <sp-button
+                variant="secondary"
+                size="s"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                ‹ Previous
+              {/* @ts-ignore */}
+              </sp-button>
+              <span className="text-detail" style={{ minWidth: '120px', textAlign: 'center' }}>
+                Page {currentPage} of {totalPages}
+              </span>
+              {/* @ts-ignore */}
+              <sp-button
+                variant="secondary"
+                size="s"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next ›
+              {/* @ts-ignore */}
+              </sp-button>
+              {/* @ts-ignore */}
+              <sp-button
+                variant="secondary"
+                size="s"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+              >
+                »
+              {/* @ts-ignore */}
+              </sp-button>
+            </div>
+          )}
+
           <div className="gallery-actions">
             {/* @ts-ignore */}
             <sp-button variant="secondary" onClick={onCancel}>

@@ -590,6 +590,7 @@
   border-top: 1px solid var(--theme-border);
   background: var(--theme-bg-layer-1);
   margin-top: auto; // Push to bottom of gallery
+  width: 100%;
 
   .pagination-info {
     color: var(--theme-font-muted);
