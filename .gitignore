@@ -32,5 +32,6 @@ zip
 src/hybrid/win/.vs
 
 .env
+local.settings.json
 scripts/mac-sign.sh
 tsconfig.tsbuildinfo

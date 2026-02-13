@@ -15,6 +15,7 @@ import "./layout.scss";
 
 // Import components
 import { MoonIcon, SunIcon, ToastProvider, useToastHelpers, Gallery, LocalIngestPanel, LumaGeneration, FireflyGenerationForm, LtxGenerationForm, GalleryPicker } from "./components";
+import { GraphGenerationsPanel } from "./components/Generations/GraphGenerationsPanel";
 
 // Import custom hooks
 import { useFireflyGeneration } from './hooks/useFireflyGeneration';
@@ -25,7 +26,7 @@ const AppContent = () => {
   const [imsToken, setImsToken] = useState<string | null>(null);
   const [imsStatus, setImsStatus] = useState<string>('Not authenticated');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [activeTab, setActiveTab] = useState<'generate' | 'gallery' | 'ingest'>('generate');
+  const [activeTab, setActiveTab] = useState<'generate' | 'gallery' | 'ingest' | 'graph'>('generate');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true); // Default to dark mode for UXP
   
   // Image generation form state
@@ -380,6 +381,14 @@ const AppContent = () => {
           >
             Premiere Ingest
           </div>
+          {import.meta.env.DEV && (
+            <div 
+              className={`uxp-tab ${activeTab === 'graph' ? 'active' : ''}`}
+              onClick={() => setActiveTab('graph')}
+            >
+              Graph Generations
+            </div>
+          )}
         </div>
 
         {/* Primary Content */}
@@ -598,6 +607,10 @@ const AppContent = () => {
                   </div>
                 </article>
               )
+            )}
+
+            {activeTab === 'graph' && import.meta.env.DEV && (
+              <GraphGenerationsPanel />
             )}
           </div>
         </section>
